@@ -16,6 +16,10 @@ public enum RateFormat {
     }
 
     public static func bytes(_ count: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: max(count, 0), countStyle: .binary)
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .binary
+        // Without this the formatter writes "Zero KB" for 0.
+        formatter.allowsNonnumericFormatting = false
+        return formatter.string(fromByteCount: max(count, 0))
     }
 }

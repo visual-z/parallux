@@ -76,9 +76,13 @@ final class TunnelController {
         }
     }
 
-    func connect(_ options: TunnelStartOptions) async {
+    func connect(_ options: TunnelStartOptions, onDemand: (enabled: Bool, rules: [OnDemandRuleModel])? = nil) async {
         guard let manager else { return }
         do {
+            if let onDemand {
+                manager.onDemandRules = onDemand.rules.filter { $0.problem == nil }.map(Self.rule)
+                manager.isOnDemandEnabled = onDemand.enabled && !onDemand.rules.isEmpty
+            }
             if !manager.isEnabled {
                 manager.isEnabled = true
                 try await manager.saveToPreferences()
@@ -97,8 +101,45 @@ final class TunnelController {
         }
     }
 
-    func disconnect() {
+    /// Turns on-demand off first, or the system would reconnect at once.
+    func disconnect() async {
+        if let manager, manager.isOnDemandEnabled {
+            manager.isOnDemandEnabled = false
+            try? await manager.saveToPreferences()
+        }
         manager?.connection.stopVPNTunnel()
+    }
+
+    /// Removes the VPN configuration and the system extension.
+    func uninstall() async {
+        await disconnect()
+        try? await manager?.removeFromPreferences()
+        manager = nil
+        observer.map(NotificationCenter.default.removeObserver)
+        observer = nil
+        do {
+            try await installer.deactivate()
+            phase = .needsExtension
+        } catch {
+            phase = .failed(error.localizedDescription)
+        }
+    }
+
+    func installedExtensionVersion() async -> String? { await installer.installedVersion() }
+
+    static func rule(_ model: OnDemandRuleModel) -> NEOnDemandRule {
+        let rule: NEOnDemandRule = model.action == .connect ? NEOnDemandRuleConnect() : NEOnDemandRuleDisconnect()
+        switch model.match {
+        case .anyNetwork:
+            rule.interfaceTypeMatch = .any
+        case let .wifi(ssid):
+            rule.interfaceTypeMatch = .wiFi
+            rule.ssidMatch = [ssid]
+        case let .probe(url):
+            rule.interfaceTypeMatch = .any
+            rule.probeURL = URL(string: url)
+        }
+        return rule
     }
 
     private func observe() {

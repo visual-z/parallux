@@ -212,7 +212,10 @@ final class CoreSession {
             uplinkTotal: connection.uplinkTotal,
             downlinkTotal: connection.downlinkTotal,
             createdAt: Date(timeIntervalSince1970: TimeInterval(connection.createdAt) / 1000),
-            isClosed: connection.closedAt > 0
+            isClosed: connection.closedAt > 0,
+            uplink: connection.uplink,
+            downlink: connection.downlink,
+            outboundType: connection.outboundType
         )
     }
 

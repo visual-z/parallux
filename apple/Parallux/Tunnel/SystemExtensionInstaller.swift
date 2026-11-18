@@ -29,6 +29,38 @@ final class SystemExtensionInstaller: NSObject, OSSystemExtensionRequestDelegate
         }
     }
 
+    func deactivate() async throws {
+        precondition(continuation == nil, "one request at a time")
+        _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Outcome, Error>) in
+            self.continuation = continuation
+            let request = OSSystemExtensionRequest.deactivationRequest(forExtensionWithIdentifier: Self.extensionBundleID, queue: .main)
+            request.delegate = self
+            OSSystemExtensionManager.shared.submitRequest(request)
+        }
+    }
+
+    /// Installed version as macOS reports it, for the Core settings tab.
+    func installedVersion() async -> String? {
+        guard continuationForProperties == nil else { return nil }
+        return await withCheckedContinuation { continuation in
+            continuationForProperties = continuation
+            let request = OSSystemExtensionRequest.propertiesRequest(forExtensionWithIdentifier: Self.extensionBundleID, queue: .main)
+            request.delegate = self
+            OSSystemExtensionManager.shared.submitRequest(request)
+        }
+    }
+
+    private var continuationForProperties: CheckedContinuation<String?, Never>?
+
+    nonisolated func request(_: OSSystemExtensionRequest, foundProperties properties: [OSSystemExtensionProperties]) {
+        let enabled = properties.first { $0.isEnabled && !$0.isUninstalling }
+        let version = enabled.map { "\($0.bundleShortVersion) (\($0.bundleVersion))" }
+        Task { @MainActor in
+            self.continuationForProperties?.resume(returning: version)
+            self.continuationForProperties = nil
+        }
+    }
+
     private func resume(_ result: Result<Outcome, Error>) {
         continuation?.resume(with: result)
         continuation = nil
@@ -58,6 +90,11 @@ final class SystemExtensionInstaller: NSObject, OSSystemExtensionRequestDelegate
         // error but means it is already installed.
         let code = (error as NSError).code
         Task { @MainActor in
+            if let pending = self.continuationForProperties {
+                pending.resume(returning: nil)
+                self.continuationForProperties = nil
+                return
+            }
             if code == OSSystemExtensionError.requestCanceled.rawValue {
                 self.resume(.success(.activated))
             } else {

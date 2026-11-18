@@ -59,4 +59,10 @@ import Testing
         #expect(RateFormat.bitsPerSecond(-5) == "0 bps")
         #expect(RateFormat.bitsPerSecond(Int64.max).hasSuffix("Gbps"))
     }
+
+    @Test func byteTotalsAreAlwaysNumeric() {
+        #expect(RateFormat.bytes(0).first?.isNumber == true)
+        #expect(RateFormat.bytes(-1).first?.isNumber == true)
+        #expect(RateFormat.bytes(1).first?.isNumber == true)
+    }
 }

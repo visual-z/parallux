@@ -17,5 +17,18 @@ public enum FlowSummary {
     public static let directName = "直连"
     public static let otherName = "其他"
 
-    public static func exits(_ connections: [ConnectionRow]) -> [Exit] { [] }
+    public static func exits(_ connections: [ConnectionRow]) -> [Exit] {
+        var rates: [String: Int64] = [:]
+        for connection in connections {
+            let rate = max(0, connection.uplink) &+ max(0, connection.downlink)
+            guard rate > 0 else { continue }
+            let name = connection.outboundType == "direct" ? directName : connection.outbound
+            rates[name, default: 0] &+= rate
+        }
+        let sorted = rates.map { Exit(name: $0.key, rate: $0.value) }
+            .sorted { $0.rate != $1.rate ? $0.rate > $1.rate : $0.name < $1.name }
+        guard sorted.count > maxExits else { return sorted }
+        let rest = sorted[maxExits...].map(\.rate).reduce(0, &+)
+        return Array(sorted.prefix(maxExits)) + [Exit(name: otherName, rate: rest)]
+    }
 }

@@ -1,4 +1,6 @@
 import AppKit
+import Observation
+import ParalluxKit
 import SwiftUI
 
 /// Owns the menu bar status item.
@@ -14,41 +16,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// They stay valid after that window closes, so AppKit code (the status
     /// item and its menu) can reopen the main and settings windows.
     var sceneActions: SceneActions?
-    let tunnel = TunnelController()
-    let profiles = ProfileService()
+    let app = AppModel()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         popover.behavior = .transient
-        Task { await tunnel.load() }
-        profiles.startAutoUpdate()
+        app.start()
         popover.contentViewController = NSHostingController(rootView: PanelView(
-            tunnel: tunnel,
-            profiles: profiles,
+            app: app,
             openMainWindow: { [weak self] in self?.showMainWindow() },
             openSettings: { [weak self] in self?.showSettings() }
         ))
 
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            // Template image: the system tints it for light, dark and tinted
-            // menu bars. Placeholder until the custom 18 pt glyph exists.
-            let image = NSImage(systemSymbolName: "point.3.connected.trianglepath.dotted", accessibilityDescription: "Parallux")
-            image?.isTemplate = true
-            button.image = image
             button.target = self
             button.action = #selector(statusItemClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            button.imagePosition = .imageLeading
+            button.font = .monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
         }
         statusItem = item
+        renderStatusItem()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        false // Parallux keeps running in the menu bar.
+        !app.settings.value.keepInMenuBarAfterClose
+    }
+
+    /// Redraws the icon (and the optional rate) whenever what it shows changes.
+    /// The status stream updates at most once per second, which bounds the
+    /// rate text's refresh as the design asks.
+    private func renderStatusItem() {
+        withObservationTracking {
+            guard let button = statusItem?.button else { return }
+            let state = app.menuBarState
+            button.image = MenuBarIcon.image(for: state)
+            if app.settings.value.showRateInMenuBar, let status = app.session.status {
+                button.title = " " + RateFormat.bitsPerSecond(status.downlink + status.uplink)
+            } else {
+                button.title = ""
+            }
+            button.toolTip = app.statusLine
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.renderStatusItem() }
+        }
     }
 
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
         let event = NSApp.currentEvent
-        let wantsMenu = event?.type == .rightMouseUp || event?.modifierFlags.contains(.option) == true
+        let wantsMenu = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true
         if wantsMenu {
             showMenu()
         } else if popover.isShown {
@@ -59,21 +75,93 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: right-click menu (design v0.2: everything the panel does, by keyboard)
+
     private func showMenu() {
         let menu = NSMenu()
-        menu.addItem(withTitle: "打开主窗口", action: #selector(menuOpenMainWindow), keyEquivalent: "o").target = self
-        menu.addItem(withTitle: "设置…", action: #selector(menuOpenSettings), keyEquivalent: ",").target = self
+        let session = app.session
+        menu.addItem(ActionItem(app.isOn ? "关闭 Parallux" : "开启 Parallux") { [app] in
+            Task { await app.setOn(!app.isOn) }
+        })
+        menu.addItem(.separator())
+
+        let aggregation = NSMenu()
+        for mode in AggregationMode.allCases {
+            let item = ActionItem(mode.title) {}
+            item.state = mode == app.settings.value.defaultAggregationMode ? .on : .off
+            item.isEnabled = false
+            aggregation.addItem(item)
+        }
+        aggregation.addItem(.separator())
+        aggregation.addItem(disabled("需要两条以上线路（M3）"))
+        menu.addItem(submenu("聚合方式", aggregation))
+
+        let links = NSMenu()
+        if let link = app.defaultLink.link {
+            links.addItem(disabled("\(link.kind) · \(link.name)"))
+        } else {
+            links.addItem(disabled("没有可用的网络"))
+        }
+        menu.addItem(submenu("线路", links))
+
+        let modes = NSMenu()
+        for mode in session.routeModes {
+            let item = ActionItem(RouteMode.title(mode)) { session.setRouteMode(mode) }
+            item.state = mode == session.routeMode ? .on : .off
+            modes.addItem(item)
+        }
+        if session.routeModes.isEmpty { modes.addItem(disabled("连接后可选")) }
+        menu.addItem(submenu("路由模式", modes))
+
+        let nodes = NSMenu()
+        for group in session.groups where group.selectable {
+            let items = NSMenu()
+            for node in group.items {
+                let title = node.delay > 0 ? "\(node.tag)  \(node.delay) ms" : node.tag
+                let item = ActionItem(title) { session.select(group: group.tag, outbound: node.tag) }
+                item.state = node.tag == group.selected ? .on : .off
+                items.addItem(item)
+            }
+            items.addItem(.separator())
+            items.addItem(ActionItem("测速") { session.urlTest(group: group.tag) })
+            nodes.addItem(submenu("\(group.tag)：\(group.selected)", items))
+        }
+        if nodes.items.isEmpty { nodes.addItem(disabled("连接后可选")) }
+        menu.addItem(submenu("节点", nodes))
+
+        let profiles = NSMenu()
+        for profile in app.profiles.store.profiles {
+            let item = ActionItem(profile.name) { [app] in Task { await app.select(profile: profile.id) } }
+            item.state = profile.id == app.profiles.store.selectedID ? .on : .off
+            profiles.addItem(item)
+        }
+        if profiles.items.isEmpty { profiles.addItem(disabled("还没有配置")) }
+        menu.addItem(submenu("配置", profiles))
+
+        menu.addItem(.separator())
+        menu.addItem(ActionItem("打开主窗口", key: "o") { [weak self] in self?.showMainWindow() })
+        menu.addItem(ActionItem("设置…", key: ",") { [weak self] in self?.showSettings() })
         menu.addItem(.separator())
         menu.addItem(withTitle: "退出 Parallux", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+
         statusItem?.menu = menu
         statusItem?.button?.performClick(nil)
         statusItem?.menu = nil // so the next left click opens the panel again
     }
 
-    @objc private func menuOpenMainWindow() { showMainWindow() }
-    @objc private func menuOpenSettings() { showSettings() }
+    private func submenu(_ title: String, _ menu: NSMenu) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.submenu = menu
+        return item
+    }
 
-    private func showMainWindow() {
+    private func disabled(_ title: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        return item
+    }
+
+    func showMainWindow() {
         popover.performClose(nil)
         NSApp.activate()
         if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == MainWindow.id }) {
@@ -87,9 +175,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// unless the app is activated first (steipete.me/posts/2025/showing-
     /// settings-from-macos-menu-bar-items); SettingsLink inside a popover
     /// does not do that, so both entry points come through here.
-    private func showSettings() {
+    func showSettings() {
         popover.performClose(nil)
         NSApp.activate()
         sceneActions?.openSettings()
     }
+}
+
+/// An NSMenuItem that runs a closure.
+@MainActor
+private final class ActionItem: NSMenuItem {
+    private let handler: @MainActor () -> Void
+
+    init(_ title: String, key: String = "", handler: @escaping @MainActor () -> Void) {
+        self.handler = handler
+        super.init(title: title, action: #selector(run), keyEquivalent: key)
+        target = self
+    }
+
+    @available(*, unavailable)
+    required init(coder: NSCoder) { fatalError("not used") }
+
+    @objc private func run() { handler() }
 }

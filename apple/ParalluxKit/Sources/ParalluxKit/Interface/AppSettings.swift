@@ -29,12 +29,40 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     public static let defaultsKey = "parallux.settings"
 
-    public static func load(from defaults: UserDefaults) -> AppSettings { AppSettings() }
-    public func save(to defaults: UserDefaults) {}
+    public static func load(from defaults: UserDefaults) -> AppSettings {
+        guard let data = defaults.data(forKey: defaultsKey),
+              let settings = try? JSONDecoder().decode(AppSettings.self, from: data) else { return AppSettings() }
+        return settings
+    }
+
+    public func save(to defaults: UserDefaults) {
+        if let data = try? JSONEncoder().encode(self) { defaults.set(data, forKey: Self.defaultsKey) }
+    }
 
     /// The start options for `content` under these settings.
     public func startOptions(content: String) -> TunnelStartOptions {
-        TunnelStartOptions(configContent: content)
+        var options = TunnelStartOptions(configContent: content)
+        options.includeAllNetworks = tunnel.includeAllNetworks
+        options.excludeLocalNetworks = tunnel.excludeLocalNetworks
+        options.excludeAPNs = tunnel.excludeAPNs
+        options.excludeDeviceCommunication = tunnel.excludeDeviceCommunication
+        options.enforceRoutes = tunnel.enforceRoutes
+        options.systemProxyEnabled = tunnel.systemProxyEnabled
+        options.excludeDefaultRoute = tunnel.excludeDefaultRoute
+        options.autoRouteUseSubRangesByDefault = tunnel.autoRouteUseSubRangesByDefault
+        return options
+    }
+
+    // Missing keys decode to defaults, so older stored settings keep working.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = AppSettings()
+        showRateInMenuBar = try container.decodeIfPresent(Bool.self, forKey: .showRateInMenuBar) ?? defaults.showRateInMenuBar
+        keepInMenuBarAfterClose = try container.decodeIfPresent(Bool.self, forKey: .keepInMenuBarAfterClose) ?? defaults.keepInMenuBarAfterClose
+        defaultAggregationMode = try container.decodeIfPresent(AggregationMode.self, forKey: .defaultAggregationMode) ?? defaults.defaultAggregationMode
+        tunnel = try container.decodeIfPresent(TunnelSettings.self, forKey: .tunnel) ?? defaults.tunnel
+        onDemandEnabled = try container.decodeIfPresent(Bool.self, forKey: .onDemandEnabled) ?? defaults.onDemandEnabled
+        onDemandRules = try container.decodeIfPresent([OnDemandRuleModel].self, forKey: .onDemandRules) ?? defaults.onDemandRules
     }
 }
 
@@ -60,7 +88,18 @@ public struct OnDemandRuleModel: Codable, Equatable, Identifiable, Sendable {
     }
 
     /// nil when valid; otherwise what to fix.
-    public var problem: String? { nil }
+    public var problem: String? {
+        switch match {
+        case .anyNetwork:
+            return nil
+        case let .wifi(ssid):
+            return ssid.trimmingCharacters(in: .whitespaces).isEmpty ? "请填写 Wi‑Fi 名称" : nil
+        case let .probe(url):
+            guard let parsed = URL(string: url), let scheme = parsed.scheme?.lowercased(),
+                  ["http", "https"].contains(scheme), parsed.host() != nil else { return "探测地址要以 http:// 或 https:// 开头" }
+            return nil
+        }
+    }
 
     public var summary: String {
         let condition: String

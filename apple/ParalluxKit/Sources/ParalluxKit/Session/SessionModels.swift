@@ -69,7 +69,8 @@ public struct ConnectionRow: Identifiable, Equatable, Sendable {
     public var outboundType: String = ""
 
     public init(id: String, process: String, destination: String, rule: String, outbound: String, chain: [String] = [],
-                network: String = "tcp", uplinkTotal: Int64 = 0, downlinkTotal: Int64 = 0, createdAt: Date = Date(), isClosed: Bool = false) {
+                network: String = "tcp", uplinkTotal: Int64 = 0, downlinkTotal: Int64 = 0, createdAt: Date = Date(), isClosed: Bool = false,
+                uplink: Int64 = 0, downlink: Int64 = 0, outboundType: String = "") {
         self.id = id
         self.process = process
         self.destination = destination
@@ -81,6 +82,9 @@ public struct ConnectionRow: Identifiable, Equatable, Sendable {
         self.downlinkTotal = downlinkTotal
         self.createdAt = createdAt
         self.isClosed = isClosed
+        self.uplink = uplink
+        self.downlink = downlink
+        self.outboundType = outboundType
     }
 }
 

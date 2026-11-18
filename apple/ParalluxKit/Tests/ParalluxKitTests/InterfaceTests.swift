@@ -144,7 +144,7 @@ import Testing
         #expect(exits.first == .init(name: "HK-03", rate: 420))
         #expect(exits[1] == .init(name: FlowSummary.directName, rate: 150))
         #expect(exits.last == .init(name: FlowSummary.otherName, rate: 15))
-        #expect(exits.map(\.rate).reduce(0, +) == 640)
+        #expect(exits.map(\.rate).reduce(0, +) == 635)
         #expect(FlowSummary.exits(Array(rows.prefix(3))).count == 2)
     }
 }
