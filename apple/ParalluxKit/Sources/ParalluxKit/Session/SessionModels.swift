@@ -148,9 +148,14 @@ public struct RuleSummary: Identifiable, Equatable, Sendable {
         }
     }
 
+    /// The only items sing-box truncates past three values when printing a
+    /// rule (rule_item_domain.go, rule_item_domain_keyword.go, rule_item_cidr.go);
+    /// every other item prints its whole list.
+    static let truncatedKeys: Set<String> = ["domain", "domain_suffix", "domain_keyword", "ip_cidr", "source_ip_cidr"]
+
     /// Formats one condition the way sing-box's rule items print themselves
-    /// (route/rule/rule_item_*.go): one value bare, up to three in brackets,
-    /// more truncated to the first three plus "...".
+    /// (route/rule/rule_item_*.go): one value bare, a list in brackets, and
+    /// for `truncatedKeys` more than three cut to the first three plus "...".
     static func formatItem(_ key: String, _ value: Any?) -> String? {
         let values: [String]
         switch value {
@@ -160,7 +165,7 @@ public struct RuleSummary: Identifiable, Equatable, Sendable {
         }
         guard !values.isEmpty else { return nil }
         if values.count == 1 { return "\(key)=\(values[0])" }
-        if values.count > 3 { return "\(key)=[\(values[..<3].joined(separator: " "))...]" }
+        if values.count > 3, truncatedKeys.contains(key) { return "\(key)=[\(values[..<3].joined(separator: " "))...]" }
         return "\(key)=[\(values.joined(separator: " "))]"
     }
 
