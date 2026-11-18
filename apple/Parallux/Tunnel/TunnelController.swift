@@ -21,7 +21,7 @@ final class TunnelController {
     private(set) var phase: Phase = .unknown
     private(set) var vpnStatus: NEVPNStatus = .invalid
     private(set) var connectedDate: Date?
-    let status = StatusClient()
+    let session = CoreSession()
 
     @ObservationIgnored private var manager: NETunnelProviderManager?
     @ObservationIgnored private var observer: (any NSObjectProtocol)?
@@ -117,9 +117,9 @@ final class TunnelController {
         vpnStatus = connection.status
         connectedDate = connection.connectedDate
         if connection.status == .connected, !wasConnected {
-            status.connect()
+            session.start()
         } else if connection.status != .connected, wasConnected {
-            status.disconnect()
+            session.stop()
         }
     }
 }

@@ -10,6 +10,7 @@ struct ParalluxApp: App {
             MainWindow { appDelegate.sceneActions = $0 }
                 .environment(appDelegate.profiles)
                 .environment(appDelegate.tunnel)
+                .environment(appDelegate.tunnel.session)
         }
         .defaultSize(width: 1040, height: 680)
 

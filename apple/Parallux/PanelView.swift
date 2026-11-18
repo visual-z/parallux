@@ -55,7 +55,7 @@ struct PanelView: View {
         }
         switch tunnel.vpnStatus {
         case .connected:
-            if let status = tunnel.status.status {
+            if let status = tunnel.session.status {
                 return "已连接 · ↓ \(RateFormat.bitsPerSecond(status.downlink)) ↑ \(RateFormat.bitsPerSecond(status.uplink))"
             }
             return "已连接"

@@ -31,6 +31,10 @@ struct MainWindow: View {
                 switch item {
                 case .diagnostics: DiagnosticsView()
                 case .profiles: ProfilesView()
+                case .outbounds: OutboundsView()
+                case .connections: ConnectionsView()
+                case .logs: LogsView()
+                case .rules: RulesView()
                 default: ContentUnavailableView(item.title, systemImage: item.symbol, description: Text("尚未实现"))
                 }
             }

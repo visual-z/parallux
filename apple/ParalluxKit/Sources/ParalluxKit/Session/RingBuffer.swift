@@ -11,7 +11,16 @@ public struct RingBuffer<Element>: Sequence {
     public var count: Int { storage.count }
     public var isEmpty: Bool { storage.isEmpty }
 
-    public mutating func append(_ element: Element) {}
+    public mutating func append(_ element: Element) {
+        guard capacity > 0 else { return }
+        if storage.count < capacity {
+            storage.append(element)
+        } else {
+            storage[head] = element
+            head = (head + 1) % capacity
+        }
+        assert(storage.count <= capacity, "INV-2: ring buffer over capacity")
+    }
     public mutating func append(contentsOf elements: some Sequence<Element>) {
         for element in elements { append(element) }
     }
@@ -21,6 +30,8 @@ public struct RingBuffer<Element>: Sequence {
     }
 
     /// Oldest first.
-    public var elements: [Element] { storage }
+    public var elements: [Element] {
+        head == 0 ? storage : Array(storage[head...] + storage[..<head])
+    }
     public func makeIterator() -> IndexingIterator<[Element]> { elements.makeIterator() }
 }
