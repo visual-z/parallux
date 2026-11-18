@@ -4,6 +4,8 @@ go 1.25.5
 
 require (
 	github.com/sagernet/gomobile v0.1.12
+	github.com/sagernet/quic-go v0.61.0-sing-box-mod.12
+	github.com/sagernet/sing v0.9.7-0.20261023115459-5dc452e537bf
 	github.com/sagernet/sing-box v1.14.4
 )
 
@@ -125,8 +127,6 @@ require (
 	github.com/sagernet/gvisor v0.0.0-20260727.0-sing-box-mod.1 // indirect
 	github.com/sagernet/netlink v0.0.0-20260814022025-64455d367bbf // indirect
 	github.com/sagernet/nftables v0.3.0-mod.4 // indirect
-	github.com/sagernet/quic-go v0.61.0-sing-box-mod.12 // indirect
-	github.com/sagernet/sing v0.9.7-0.20261023115459-5dc452e537bf // indirect
 	github.com/sagernet/sing-cloudflared v0.1.4-0.20261021152903-2d40d788fcf6 // indirect
 	github.com/sagernet/sing-mux v0.3.10-0.20260929204512-caf09fe32475 // indirect
 	github.com/sagernet/sing-openconnect v0.1.1-0.20260929151225-cbd68c45de58 // indirect

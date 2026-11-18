@@ -20,3 +20,4 @@
 | 路由模式 | sing-box 的 clash mode：规则、全局、直连。 | — |
 | 内核（core） | 网络扩展里运行的 Go 代码：sing-box 加 Parallux 的聚合模块。 | `后端` |
 | 网络扩展 | 承载内核的 NEPacketTunnelProvider 系统扩展（`apple/PacketTunnel`）。 | 把它和辅助服务混称 |
+| 线路段（leg） | 叠加时一条连接在某一条线路出站上的那一段；multipath 协议按 leg 收发并在聚合服务器重组。代码与注释里写 leg，中文写线路段。 | 叫它 `通道` |
