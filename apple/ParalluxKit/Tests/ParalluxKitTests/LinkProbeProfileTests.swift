@@ -23,3 +23,18 @@ import Testing
         #expect(one.contains("\"probe-en0\""))
     }
 }
+
+extension LinkProbeProfileTests {
+    /// core/pxbridge checks this fixture with libbox.CheckConfig; the
+    /// generator must keep producing exactly it.
+    @Test func theGeneratorMatchesTheFixtureLibboxChecks() throws {
+        let fixture = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("core/pxbridge/testdata/probe-profile.json")
+        let expected = try JSONSerialization.jsonObject(with: Data(contentsOf: fixture)) as? NSDictionary
+        let generated = try JSONSerialization.jsonObject(with: Data(#require(LinkProbeProfile.make(interfaces: ["en0", "en7"])).utf8)) as? NSDictionary
+        #expect(expected != nil)
+        #expect(generated == expected)
+    }
+}

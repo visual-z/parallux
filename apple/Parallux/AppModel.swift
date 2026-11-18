@@ -26,12 +26,20 @@ final class AppModel {
     }
 
     /// Uses the selected profile; before any profile exists, the bundled sample.
-    func connect() async {
+    /// `overrideContent` (diagnostics' probe profile) replaces both and
+    /// restarts a running tunnel.
+    func connect(overrideContent: String? = nil) async {
         lastError = nil
+        if overrideContent != nil, tunnel.vpnStatus != .disconnected, tunnel.vpnStatus != .invalid {
+            await tunnel.disconnect()
+            await waitUntilStopped()
+        }
         if tunnel.phase != .ready { await tunnel.install() }
         guard tunnel.phase == .ready else { return }
         var content = SampleProfile.content
-        if let profile = profiles.store.selected {
+        if let overrideContent {
+            content = overrideContent
+        } else if let profile = profiles.store.selected {
             do { content = try await profiles.content(of: profile) } catch {
                 lastError = error.localizedDescription
                 return
@@ -47,17 +55,17 @@ final class AppModel {
         try? profiles.store.select(id)
         if tunnel.isConnected {
             await tunnel.disconnect()
-            await connectWhenStopped()
+            await waitUntilStopped()
+            await connect()
         }
     }
 
-    private func connectWhenStopped() async {
+    private func waitUntilStopped() async {
         // Why 5 s: stopping a tunnel takes well under a second; the bound
         // only keeps a stuck stop from looping forever.
         for _ in 0..<50 where tunnel.vpnStatus != .disconnected && tunnel.vpnStatus != .invalid {
             try? await Task.sleep(for: .milliseconds(100))
         }
-        await connect()
     }
 
     var statusLine: String {

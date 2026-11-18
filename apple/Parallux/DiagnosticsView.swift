@@ -1,68 +1,172 @@
 import AppKit
+import Libbox
 import ParalluxKit
 import SwiftUI
 
-/// Diagnostics page. For now only the per-link bind probe
-/// (research-sysext-bind-interface); speed tests and DNS/MTU checks come later.
+/// Diagnostics page: the per-link bind probe in three arms
+/// (research-sysext-bind-interface, feat-probe-arms). Speed tests and
+/// DNS/MTU checks come with M3.
+///
+/// - App 内：the same LinkProbe in the app process. Run it with the tunnel
+///   off; that is the control showing each link works at all.
+/// - 扩展内：raw IP_BOUND_IF inside the system extension, tunnel up.
+/// - sing-box：a throwaway profile with one `direct` + `bind_interface`
+///   outbound per link, URL-tested by the core (Decision 13's real path).
 struct DiagnosticsView: View {
-    @State private var results: [LinkProbeResult] = []
-    @State private var error: String?
-    @State private var running = false
+    @Environment(AppModel.self) private var app
+    @State private var local: Arm<[LinkProbeResult]> = .idle
+    @State private var tunnel: Arm<[LinkProbeResult]> = .idle
+    @State private var probeProfileError: String?
+    @State private var usingProbeProfile = false
+
+    enum Arm<Value> {
+        case idle, running, done(Value, tunnelWasOn: Bool), failed(String)
+    }
 
     var body: some View {
         Form {
             Section {
-                HStack {
-                    Text("在网络扩展里对每个物理网口单独建连，检查能否绑定非默认网口，以及各自的出口地址。需要隧道已连接。")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button(running ? "检测中…" : "检测线路", action: run).disabled(running)
-                }
-                if let error {
-                    Text(error).foregroundStyle(.red)
-                }
+                Text("三组结果一起看：App 内检测在隧道关着时跑，作为对照；扩展内与 sing-box 两组在隧道开着时跑。拷贝全部结果贴回研究卡。")
+                    .font(.callout).foregroundStyle(.secondary)
+                Button("拷贝全部结果", action: copyAll)
             }
-            if !results.isEmpty {
-                Section("结果") {
-                    Table(results) {
-                        TableColumn("网口") { Text("\($0.interface) #\($0.index)").monospaced() }
-                        TableColumn("建连") { Text($0.connected ? "成功" : "失败").foregroundStyle($0.connected ? .green : .red) }
-                        TableColumn("errno") { r in Text(r.errno.map { "\($0) (\(r.failedCall ?? ""))" } ?? "—").monospaced() }
-                        TableColumn("耗时") { Text("\($0.millis) ms").monospacedDigit() }
-                        TableColumn("出口 IP") { Text($0.egressIP ?? "—").monospaced().textSelection(.enabled) }
+            Section("1 · App 内（对照）") {
+                HStack {
+                    Text("候选网口：\(LinkProbe.candidateInterfaces().joined(separator: "、"))").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("App 内检测", action: runLocal).disabled(isRunning(local))
+                }
+                if app.tunnel.isConnected {
+                    Label("隧道开着：App 自己的连接也走隧道，这一组不再是对照。", systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                results(local)
+            }
+            Section("2 · 扩展内原始绑定") {
+                HStack {
+                    Spacer()
+                    Button("扩展内检测", action: runTunnel).disabled(!app.tunnel.isConnected || isRunning(tunnel))
+                }
+                results(tunnel)
+            }
+            Section("3 · sing-box direct + bind_interface") {
+                HStack {
+                    Text(usingProbeProfile ? "正在使用探测配置" : "会断开当前连接，换成探测配置重连")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("探测配置连接", action: connectProbeProfile).disabled(app.tunnel.isBusy)
+                    Button("测速") { app.session.urlTest(group: LinkProbeProfile.groupTag) }
+                        .disabled(probeGroup == nil || app.session.testing.contains(LinkProbeProfile.groupTag))
+                }
+                if let probeProfileError { Text(probeProfileError).foregroundStyle(.red).font(.caption) }
+                if let group = probeGroup {
+                    ForEach(group.items) { item in
+                        let grade = DelayGrade(milliseconds: item.delay)
+                        LabeledContent(item.tag) {
+                            Text(grade == .untested ? "未测或失败" : "\(item.delay) ms").foregroundStyle(grade.color).monospacedDigit()
+                        }
                     }
-                    .frame(minHeight: 160)
-                    Button("拷贝结果", action: copy)
+                    Text("失败原因见「日志」页（探测配置的日志级别为 debug）。").font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
         .formStyle(.grouped)
     }
 
-    private func run() {
-        running = true
-        error = nil
+    private var probeGroup: OutboundGroupModel? {
+        app.session.groups.first { $0.tag == LinkProbeProfile.groupTag }
+    }
+
+    private func isRunning<T>(_ arm: Arm<T>) -> Bool {
+        if case .running = arm { return true }
+        return false
+    }
+
+    @ViewBuilder private func results(_ arm: Arm<[LinkProbeResult]>) -> some View {
+        switch arm {
+        case .idle:
+            EmptyView()
+        case .running:
+            ProgressView().controlSize(.small)
+        case let .failed(message):
+            Text(message).foregroundStyle(.red).font(.caption)
+        case let .done(rows, tunnelWasOn):
+            Text(tunnelWasOn ? "跑的时候隧道开着" : "跑的时候隧道关着").font(.caption).foregroundStyle(.secondary)
+            ForEach(rows, id: \.interface) { row in
+                HStack {
+                    Text("\(row.interface) #\(row.index)").monospaced()
+                    Spacer()
+                    Text(row.connected ? "成功" : "失败").foregroundStyle(row.connected ? .green : .red)
+                    Text(row.errno.map { "errno \($0) (\(row.failedCall ?? ""))" } ?? "").monospaced().foregroundStyle(.secondary)
+                    Text("\(row.millis) ms").monospacedDigit().foregroundStyle(.secondary)
+                    Text(row.egressIP ?? "—").monospaced().textSelection(.enabled)
+                }
+                .font(.callout)
+            }
+        }
+    }
+
+    private func runLocal() {
+        local = .running
+        let tunnelOn = app.tunnel.isConnected
+        Task.detached {
+            let rows = TunnelXPC.runProbes()
+            await MainActor.run { local = .done(rows, tunnelWasOn: tunnelOn) }
+        }
+    }
+
+    private func runTunnel() {
+        tunnel = .running
         Task.detached {
             let outcome = Result { try CommandXPCDialer.probeLinks() }
             await MainActor.run {
-                running = false
                 switch outcome {
-                case let .success(value): results = value
-                case let .failure(failure): error = failure.localizedDescription
+                case let .success(rows): tunnel = .done(rows, tunnelWasOn: true)
+                case let .failure(error): tunnel = .failed(error.localizedDescription)
                 }
             }
         }
     }
 
-    private func copy() {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(results) else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(String(decoding: data, as: UTF8.self), forType: .string)
+    private func connectProbeProfile() {
+        probeProfileError = nil
+        guard let content = LinkProbeProfile.make(interfaces: LinkProbe.candidateInterfaces()) else {
+            probeProfileError = "没有可探测的网口"
+            return
+        }
+        var error: NSError?
+        LibboxCheckConfig(content, &error)
+        if let error {
+            probeProfileError = "探测配置未通过 libbox 校验：\(error.localizedDescription)"
+            return
+        }
+        Task {
+            await app.connect(overrideContent: content)
+            usingProbeProfile = true
+        }
     }
-}
 
-extension LinkProbeResult: @retroactive Identifiable {
-    public var id: String { interface }
+    private func copyAll() {
+        var text = "Parallux 线路探针 \(Date().formatted(.iso8601))\n"
+        func dump(_ name: String, _ arm: Arm<[LinkProbeResult]>) {
+            text += "\n[\(name)]\n"
+            if case let .done(rows, on) = arm {
+                text += "tunnel=\(on ? "on" : "off")\n"
+                for row in rows {
+                    text += "\(row.interface)#\(row.index) connected=\(row.connected) errno=\(row.errno.map(String.init) ?? "-") call=\(row.failedCall ?? "-") ms=\(row.millis) egress=\(row.egressIP ?? "-")\n"
+                }
+            } else if case let .failed(message) = arm {
+                text += "failed: \(message)\n"
+            } else {
+                text += "not run\n"
+            }
+        }
+        dump("app", local)
+        dump("extension", tunnel)
+        text += "\n[sing-box]\n"
+        for item in probeGroup?.items ?? [] { text += "\(item.tag) delay=\(item.delay)\n" }
+        if probeGroup == nil { text += "not run\n" }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
 }
