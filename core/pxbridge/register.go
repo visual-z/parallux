@@ -5,4 +5,5 @@ package pxbridge
 // and libbox in the same binary then accepts them in every configuration.
 import (
 	_ "github.com/visual-z/parallux/core/aggregate"
+	_ "github.com/visual-z/parallux/core/bond"
 )
