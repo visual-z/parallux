@@ -187,6 +187,7 @@ private struct CoreSettings: View {
                 LabeledContent("内核版本", value: PxbridgeVersion())
                 LabeledContent("App Group", value: AppGroup.identifier() ?? "未签名构建，没有 App Group")
             }
+            HelperSettingsSection()
             Text("工作目录、缓存与服务日志在辅助服务就位后提供（M2 辅助服务卡）。").font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)

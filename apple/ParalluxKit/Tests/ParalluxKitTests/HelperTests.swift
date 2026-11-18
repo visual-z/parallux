@@ -254,3 +254,15 @@ private final class FakeHelper: NSObject, NSXPCListenerDelegate, HelperXPCProtoc
             == "/var/root/Library/Containers/io.github.visual-z.parallux.tunnel/Data")
     }
 }
+
+@Suite struct HelperMachServiceTests {
+    @Test func theHelperServiceMustSitInsideTheAppGroup() {
+        let group = "ABCDE12345.io.github.visual-z.parallux"
+        #expect(HelperMachService.resolve("\(group).helper.0.0.1.20261119", appGroup: group) == "\(group).helper.0.0.1.20261119")
+        #expect(HelperMachService.resolve("\(group).helper.", appGroup: group) == nil)
+        #expect(HelperMachService.resolve("\(group).tunnel.0.0.1", appGroup: group) == nil)
+        #expect(HelperMachService.resolve("OTHERTEAM1.io.github.visual-z.parallux.helper.0.0.1", appGroup: group) == nil)
+        #expect(HelperMachService.resolve("io.github.visual-z.parallux.helper.0.0.1.1", appGroup: nil) == nil)
+        #expect(HelperMachService.resolve(nil, appGroup: group) == nil)
+    }
+}

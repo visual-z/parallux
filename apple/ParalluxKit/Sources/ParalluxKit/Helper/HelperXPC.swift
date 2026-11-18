@@ -88,28 +88,96 @@ public final class HelperXPCClient: @unchecked Sendable {
     }
 
     public func version(timeout: TimeInterval = HelperXPC.defaultTimeout) throws -> String {
-        throw HelperXPC.CallError.timedOut
+        try call(timeout) { proxy, finish in
+            proxy.version { finish(.success($0)) }
+        }
     }
 
     public func findConnectionOwner(proto: Int32, sourceAddress: String, sourcePort: Int32,
                                     destinationAddress: String, destinationPort: Int32,
                                     timeout: TimeInterval = HelperXPC.ownerLookupTimeout) throws -> HelperConnectionOwner {
-        throw HelperXPC.CallError.timedOut
+        try decode(try call(timeout) { proxy, finish in
+            proxy.findConnectionOwner(proto: proto, sourceAddress: sourceAddress, sourcePort: sourcePort,
+                                      destinationAddress: destinationAddress, destinationPort: destinationPort) {
+                finish(Self.result($0, $1))
+            }
+        })
     }
 
     public func workingDirectoryInfo(timeout: TimeInterval = HelperXPC.defaultTimeout) throws -> HelperWorkingDirectory.Info {
-        throw HelperXPC.CallError.timedOut
+        try decode(try call(timeout) { proxy, finish in
+            proxy.workingDirectoryInfo { finish(Self.result($0, $1)) }
+        })
     }
 
     public func destroyWorkingDirectory(token: String, timeout: TimeInterval = HelperXPC.defaultTimeout) throws {
-        throw HelperXPC.CallError.timedOut
+        let _: Bool = try call(timeout) { proxy, finish in
+            proxy.destroyWorkingDirectory(token: token) { error in
+                finish(error.map { .failure(.remote($0.localizedDescription)) } ?? .success(true))
+            }
+        }
     }
 
     public func listCrashReports(timeout: TimeInterval = HelperXPC.defaultTimeout) throws -> [CrashReportCatalog.Entry] {
-        throw HelperXPC.CallError.timedOut
+        try decode(try call(timeout) { proxy, finish in
+            proxy.listCrashReports { finish(Self.result($0, $1)) }
+        })
     }
 
     public func readCrashReport(name: String, timeout: TimeInterval = HelperXPC.defaultTimeout) throws -> CrashReportCatalog.Report {
-        throw HelperXPC.CallError.timedOut
+        try decode(try call(timeout) { proxy, finish in
+            proxy.readCrashReport(name: name) { finish(Self.result($0, $1)) }
+        })
+    }
+
+    // MARK: plumbing
+
+    private static func result(_ data: Data?, _ error: NSError?) -> Result<Data, HelperXPC.CallError> {
+        if let error { return .failure(.remote(error.localizedDescription)) }
+        guard let data else { return .failure(.badReply) }
+        return .success(data)
+    }
+
+    private func decode<T: Decodable>(_ data: Data) throws -> T {
+        do { return try JSONDecoder().decode(T.self, from: data) } catch { throw HelperXPC.CallError.badReply }
+    }
+
+    /// Runs one request on a fresh connection and waits at most `timeout`.
+    private func call<T>(_ timeout: TimeInterval,
+                         _ body: (HelperXPCProtocol, @escaping @Sendable (Result<T, HelperXPC.CallError>) -> Void) -> Void) throws -> T {
+        let connection = makeConnection()
+        connection.remoteObjectInterface = HelperXPC.makeInterface()
+        connection.resume()
+        defer { connection.invalidate() }
+        let outcome = Outcome<T>()
+        let proxy = connection.remoteObjectProxyWithErrorHandler { error in
+            outcome.finish(.failure(.remote(error.localizedDescription)))
+        } as? HelperXPCProtocol
+        guard let proxy else { throw HelperXPC.CallError.remote("the connection does not export HelperXPCProtocol") }
+        body(proxy) { outcome.finish($0) }
+        guard let result = outcome.wait(timeout) else { throw HelperXPC.CallError.timedOut }
+        return try result.get()
+    }
+
+    /// First answer wins; later ones (after a timeout) are dropped.
+    private final class Outcome<T>: @unchecked Sendable {
+        private let lock = NSLock()
+        private let done = DispatchSemaphore(value: 0)
+        private var value: Result<T, HelperXPC.CallError>?
+
+        func finish(_ new: Result<T, HelperXPC.CallError>) {
+            lock.lock()
+            defer { lock.unlock() }
+            guard value == nil else { return }
+            value = new
+            done.signal()
+        }
+
+        func wait(_ timeout: TimeInterval) -> Result<T, HelperXPC.CallError>? {
+            _ = done.wait(timeout: .now() + timeout)
+            lock.lock()
+            defer { lock.unlock() }
+            return value
+        }
     }
 }

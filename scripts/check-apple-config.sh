@@ -44,6 +44,27 @@ case "$mach" in
   *) fail "Config/Base.xcconfig: PARALLUX_TUNNEL_MACH_SERVICE '$mach' must start with \$(PARALLUX_APP_GROUP). and contain \$(MARKETING_VERSION) and \$(CURRENT_PROJECT_VERSION)" ;;
 esac
 
+# Root helper (docs/tasks/feat-helper-service.md). Its Info.plist is linked
+# into the tool and names the service it listens on; the launchd plist
+# template is expanded at build time with the same variables.
+helper=ParalluxHelper/Info.plist
+has "$helper" ParalluxHelperMachService '$(PARALLUX_HELPER_MACH_SERVICE)'
+has "$helper" ParalluxAppGroup '$(PARALLUX_APP_GROUP)'
+has "$helper" ParalluxAppBundleID '$(BUNDLE_ID)'
+has Parallux/Info.plist ParalluxHelperMachService '$(PARALLUX_HELPER_MACH_SERVICE)'
+has Parallux/Info.plist ParalluxHelperLabel '$(PARALLUX_HELPER_LABEL)'
+has PacketTunnel/Info.plist ParalluxHelperMachService '$(PARALLUX_HELPER_MACH_SERVICE)'
+daemon=Config/helper-launchd.plist
+has "$daemon" Label '$(PARALLUX_HELPER_LABEL)'
+has "$daemon" BundleProgram 'Contents/Library/HelperTools/$(PARALLUX_HELPER_LABEL)'
+has "$daemon" "MachServices.\$(PARALLUX_HELPER_MACH_SERVICE)" true
+has "$daemon" AssociatedBundleIdentifiers.0 '$(BUNDLE_ID)'
+helper_mach="$(sed -n 's/^PARALLUX_HELPER_MACH_SERVICE *= *//p' Config/Base.xcconfig)"
+case "$helper_mach" in
+  '$(PARALLUX_APP_GROUP).helper.'*'$(MARKETING_VERSION)'*'$(CURRENT_PROJECT_VERSION)'*) ;;
+  *) fail "Config/Base.xcconfig: PARALLUX_HELPER_MACH_SERVICE '$helper_mach' must start with \$(PARALLUX_APP_GROUP).helper. and contain \$(MARKETING_VERSION) and \$(CURRENT_PROJECT_VERSION)" ;;
+esac
+
 if [ "$failures" -gt 0 ]; then
   echo "check-apple-config: $failures problem(s)" >&2
   exit 1

@@ -37,6 +37,8 @@ targets:
         LSApplicationCategoryType: public.app-category.utilities
         ParalluxAppGroup: $(PARALLUX_APP_GROUP)
         ParalluxTunnelMachService: $(PARALLUX_TUNNEL_MACH_SERVICE)
+        ParalluxHelperMachService: $(PARALLUX_HELPER_MACH_SERVICE)
+        ParalluxHelperLabel: $(PARALLUX_HELPER_LABEL)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID)
@@ -55,6 +57,58 @@ targets:
       - sdk: SystemConfiguration.framework
       - target: PacketTunnel
         embed: true
+      # The root helper (PLAN decision 12): SMAppService.daemon runs the tool
+      # named by the plist's BundleProgram, a path inside this bundle.
+      - target: ParalluxHelper
+        embed: true
+        codeSign: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Library/HelperTools
+    postBuildScripts:
+      # Expands the launchd plist template with this build's settings into
+      # Contents/Library/LaunchDaemons/<label>.plist, where
+      # SMAppService.daemon(plistName:) looks. Runs before signing (Xcode signs
+      # the bundle last), so the plist is covered by the app's signature.
+      - name: Embed helper launchd plist
+        basedOnDependencyAnalysis: false
+        inputFiles: [$(SRCROOT)/Config/helper-launchd.plist]
+        outputFiles: [$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchDaemons/$(PARALLUX_HELPER_LABEL).plist]
+        script: |
+          set -euo pipefail
+          dir="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LaunchDaemons"
+          mkdir -p "$dir"
+          sed -e "s|\$(PARALLUX_HELPER_LABEL)|$PARALLUX_HELPER_LABEL|g" \
+              -e "s|\$(PARALLUX_HELPER_MACH_SERVICE)|$PARALLUX_HELPER_MACH_SERVICE|g" \
+              -e "s|\$(BUNDLE_ID)|$BUNDLE_ID|g" \
+              "$SRCROOT/Config/helper-launchd.plist" > "$dir/$PARALLUX_HELPER_LABEL.plist"
+          plutil -lint "$dir/$PARALLUX_HELPER_LABEL.plist" >/dev/null
+  ParalluxHelper:
+    type: tool
+    platform: macOS
+    sources: [ParalluxHelper]
+    info:
+      path: ParalluxHelper/Info.plist
+      properties:
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleName: Parallux Helper
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ParalluxAppGroup: $(PARALLUX_APP_GROUP)
+        ParalluxAppBundleID: $(BUNDLE_ID)
+        ParalluxHelperMachService: $(PARALLUX_HELPER_MACH_SERVICE)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(PARALLUX_HELPER_LABEL)
+        PRODUCT_NAME: $(PARALLUX_HELPER_LABEL)
+        PRODUCT_MODULE_NAME: ParalluxHelper
+        ENABLE_HARDENED_RUNTIME: YES
+        # A command-line tool has no bundle; its Info.plist is linked into the
+        # binary's __TEXT,__info_plist so Bundle.main can read it.
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+        SKIP_INSTALL: YES
+    dependencies:
+      - package: ParalluxKit
   PacketTunnel:
     type: system-extension
     platform: macOS
@@ -74,6 +128,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ParalluxAppGroup: $(PARALLUX_APP_GROUP)
         ParalluxTunnelMachService: $(PARALLUX_TUNNEL_MACH_SERVICE)
+        ParalluxHelperMachService: $(PARALLUX_HELPER_MACH_SERVICE)
         NetworkExtension:
           NEMachServiceName: $(PARALLUX_TUNNEL_MACH_SERVICE)
           NEProviderClasses:
