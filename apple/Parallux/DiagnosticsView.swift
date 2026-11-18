@@ -19,6 +19,8 @@ struct DiagnosticsView: View {
     @State private var probeProfileError: String?
     @State private var usingProbeProfile = false
     @State private var speed = SpeedTestRunner()
+    @State private var tools = NetworkToolsRunner()
+    @State private var toolOutbound = ""
 
     enum Arm<Value> {
         case idle, running, done(Value, tunnelWasOn: Bool), failed(String)
@@ -27,6 +29,7 @@ struct DiagnosticsView: View {
     var body: some View {
         Form {
             speedSection
+            toolsSection
             Section {
                 Text("三组结果一起看：App 内检测在隧道关着时跑，作为对照；扩展内与 sing-box 两组在隧道开着时跑。拷贝全部结果贴回研究卡。")
                     .font(.callout).foregroundStyle(.secondary)
@@ -96,6 +99,41 @@ struct DiagnosticsView: View {
                 Text(summary).font(.callout.weight(.medium))
             }
         }
+    }
+
+    /// SFM #97/#98, through any outbound of the running core.
+    @ViewBuilder private var toolsSection: some View {
+        Section("网络质量与 NAT") {
+            Picker("经由出站", selection: $toolOutbound) {
+                Text("默认路由").tag("")
+                ForEach(toolOutbounds, id: \.self) { Text($0).tag($0) }
+            }
+            HStack {
+                if let running = tools.running { ProgressView().controlSize(.small); Text("正在测 \(running)…").font(.caption) }
+                Spacer()
+                Button("网络质量") { tools.runQuality(outbound: toolOutbound) }
+                Button("STUN") { tools.runSTUN(outbound: toolOutbound) }
+            }
+            .disabled(!app.tunnel.isConnected || tools.running != nil)
+            if let error = tools.error { Text(error).font(.caption).foregroundStyle(.red) }
+            if let q = tools.quality {
+                LabeledContent("下行 / 上行", value: "\(RateFormat.bitsPerSecond(q.download / 8)) / \(RateFormat.bitsPerSecond(q.upload / 8))")
+                LabeledContent("响应（RPM）", value: "↓ \(q.downloadRPM) · ↑ \(q.uploadRPM)")
+                LabeledContent("空闲延迟", value: "\(q.idleLatencyMs) ms")
+            }
+            if let s = tools.stun {
+                LabeledContent("外部地址", value: s.externalAddress)
+                LabeledContent("延迟", value: "\(s.latencyMs) ms")
+                LabeledContent("NAT 映射 / 过滤", value: "\(s.mapping) / \(s.filtering)")
+            }
+        }
+    }
+
+    private var toolOutbounds: [String] {
+        var tags = app.enabledLinks.map { ProfileComposer.linkTag($0.name) }
+        if app.effectiveMode == .bond { tags.append(AggregationServer.bondTag) }
+        for group in app.session.groups { tags.append(group.tag) }
+        return tags
     }
 
     private var speedPaths: [(label: String, outbound: String, isBond: Bool)] {
