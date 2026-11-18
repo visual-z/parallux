@@ -58,9 +58,9 @@ App 与扩展之间照 SFM：扩展在版本化的 `NEMachServiceName` 上开 XP
 
 | 里程碑 | 退出条件（可检查） | 状态 |
 |---|---|---|
-| M0 骨架 | gate 全绿：Go 内核与 Swift 包有测试；Libbox.xcframework 可构建；App 与系统扩展不签名可编译并链接内核；边界规则至少一条并演示过会红 | doing |
-| M1 扩展通路 | 签名构建能从 /Applications 安装系统扩展、启动 sing-box；App 经 XPC 拿到 command server 的连接，读到运行状态与流量；`research-sysext-bind-interface` 证实扩展内能绑定非默认网口 | todo |
-| M2 SFM 基线 | 配置（本地 / iCloud / 远程订阅）、节点与测速、路由模式、连接、日志、隧道设置可用；辅助服务（SMAppService.daemon）就位；`sfm-parity.md` 重判完成 | todo |
+| M0 骨架 | gate 全绿：Go 内核与 Swift 包有测试；Libbox.xcframework 可构建；App 与系统扩展不签名可编译并链接内核；边界规则至少一条并演示过会红 | 等作者手测 |
+| M1 扩展通路 | 签名构建能从 /Applications 安装系统扩展、启动 sing-box；App 经 XPC 拿到 command server 的连接，读到运行状态与流量；`research-sysext-bind-interface` 证实扩展内能绑定非默认网口 | 代码就绪，等作者手测 |
+| M2 SFM 基线 | 配置（本地 / iCloud / 远程订阅）、节点与测速、路由模式、连接、日志、隧道设置可用；辅助服务（SMAppService.daemon）就位；`sfm-parity.md` 重判完成 | doing（决策 14 并行）：配置、节点、连接、日志、路由模式、隧道设置、界面已写完待手测；sfm-parity 已重判；辅助服务未开始（需签名） |
 | M3 分流与主备 | 线路发现与开关、按网口绑定出站、每线路速率统计、面板与主窗口流向图接真实数据 | todo |
 | M4 叠加 | 叠加出站 + 聚合服务器一键部署；两条真实线路上单连接吞吐达到目标 | todo |
 | M5 全量与打磨 | SFM 对照全部有结论；小组件、控制中心、快捷指令；菜单栏模板图标 | todo |

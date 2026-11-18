@@ -1,148 +1,153 @@
-> 搬自 `sing-box-mygo` `docs/tasks/parity.md`，2026-11-18。113 条定义保留；标题里的「M6 退出门」是旧项目的里程碑，本项目按 PLAN：M2 重判、M5 全部有结论；**状态列全部作废，待重判**：旧项目没有网络扩展，#2、#24–25、#70、#77–91 等在新架构下变为必做（Fable 审计结论）。
+# SFM 功能对照
 
-# SFM 功能对照（M6 退出门）
+基线：`docs/research/sfm-feature-matrix.md` #1–#113（定义搬自 `sing-box-mygo`，2026-11-18）。旧文件的状态列描述的是旧架构（没有网络扩展），2026-11-19 按本仓库的代码全部重判。PLAN M2 要求重判完成，M5 要求每条都有结论。
 
-基线：`docs/research/sfm-feature-matrix.md` #1–#113。状态只有四种：
+状态：
 
-- **做** — 已实现，写明在哪（卡号 / 文件）。
-- **等价** — 用我们架构下的等价机制实现，写明差异。
-- **不适用** — SFM 的这一项依赖我们刻意不用的东西（NetworkExtension、App Store、Apple 账号容器），写明为什么，且**不在 UI 上放空开关**（原则 5）。
-- **待做** — 有卡、未完成。M6 退出时不允许存在「未判定」。
+- **待手测**：代码已在本仓库，gate 绿，但还没有在签名构建里跑过。作者手测通过后改成「做」。在 feat-sysext-xpc D8 之前，所有依赖隧道的项都在这一档。
+- **做**：已实现并经作者手测。
+- **等价**：用不同机制达到同样效果，写明差异。
+- **不适用**：依赖我们刻意不做的东西，写明理由；界面上不放空开关。
+- **待做**：写明里程碑。
 
-## 1. Profile
-
-| # | 功能 | 状态 | 说明 |
-|---|---|---|---|
-| 1 | Local profile | 做 | M2-1 `profile.Store.CreateLocal`；M3-3 |
-| 2 | iCloud profile | 不适用 | 需要 Apple 开发者账号绑定的 iCloud 容器。Local + 用户自己的同步目录可替代，但不伪装成 iCloud |
-| 3 | Remote profile | 做 | M2-1 |
-| 4 | Create Manually | 做 | M3-3 |
-| 5 | Import from File（.json / .bpf） | 做 | M3-3；.bpf 经 worker `DecodeProfile`（`app/bpf.go`） |
-| 6 | Scan QR Code | 等价 | M6-1：新建菜单「从二维码图片导入…」（截图/照片）：导入链接 → 远程配置；单帧 QRS → 配置。多帧 QRS 需要连续摄像头帧，图片做不到，提示改用 .bpf（#5/#10）。桌面上不做摄像头扫码 |
-| 7 | Share as QRS Code | 做 | M6-1：卡片菜单「以 QRS 动态码分享…」，`internal/qrs` 与 SFM 线格式逐字节兼容（SFM 自测向量通过；真内核 .bpf → QRS → 解码字节一致），帧率 1–30、分片 300–1500 |
-| 8 | Share URL as QR Code | 做 | M6-1：远程配置卡片菜单「以二维码分享链接…」，内容与 libbox `GenerateRemoteProfileImportLink` 一致（测试对比真 libbox 输出）；可复制链接 |
-| 9 | `sing-box://import-remote-profile` | 做 | `profile.ParseImportLink` + `mygo.json` urlSchemes；也认 `parallux://` |
-| 10 | 打开 .bpf 文件 | 做 | `app.ImportBPF`；文件关联见 M6-2 |
-| 11 | Edit Profile 元数据 | 做 | M3-3 |
-| 12 | Edit Content（校验 + 格式化） | 做 | M3-3；校验/格式化经内核 worker |
-| 13 | View Content（Remote 只读） | 做 | M2-1 + M3-3 |
-| 14 | Auto Update | 做 | M2-1 调度 |
-| 15 | Auto Update Interval（下限 15 / 0→60） | 做 | M2-1，单测锁住 |
-| 16 | 立即更新 | 做 | M3-3 |
-| 17 | Last Updated | 做 | M3-3 |
-| 18 | HTTP Basic auth | 做 | M2-1（userinfo → Basic，错误信息里 redact） |
-| 19 | 切换 profile（运行中热加载） | 做 | `Controller.SelectProfile` |
-| 20 | 删除 / 排序 | 做 | M3-3 |
-| 21 | Save / Share File（.bpf） | 做 | `app.ExportBPF` |
-| 22 | Save / Share JSON | 做 | M3-3 |
-| 23 | 拉取 UA | 做 | `cmd/parallux` 注入 `Parallux/<ver> (sing-box; darwin)` |
-
-## 2. Dashboard 与核心控制
+## 1. 配置
 
 | # | 功能 | 状态 | 说明 |
 |---|---|---|---|
-| 24 | Install Network Extension | 等价 | 「安装特权助手」（SMAppService daemon，ADR 0003） |
-| 25 | Install System Extension | 等价 | 同上 |
-| 26 | Start / Stop | 做 | Activity 页头、概览、菜单栏 |
-| 27 | 运行时长 | 做 | Activity 页头 h:mm:ss |
-| 28 | Status 卡（内存、协程） | 做 | Activity |
-| 29 | Connections 计数卡 | 做 | Activity |
-| 30 | Upload / Download 卡 + sparkline | 做 | Activity |
-| 31 | System HTTP Proxy 开关 | 做 | Activity + 概览；`ManagedService.SetSystemProxyEnabled`，宿主为 `platform_darwin.go` |
-| 32 | Mode | 做 | Activity 分段、菜单栏 |
-| 33 | Profile 卡 | 做 | Activity |
-| 34 | Dashboard Items（开关、排序、重置） | 做 | Activity「仪表盘卡片」 |
-| 35 | 切换即热加载 | 做 | 同 #19 |
-| 36 | 启动失败 / FDA 提示 | 等价 | 启动错误原样显示；TUN 权限错误给出「安装特权助手」的补救（`explainStartError`）；FDA 在权限面板 |
+| 1 | 本地配置 | 待手测 | `feat-profiles`；`ProfileStore` |
+| 2 | iCloud 配置 | 等价 | `feat-profiles`：直接读 iCloud 云盘里的文件（App 不在沙盒），经 `NSFileCoordinator` 触发下载；不用 ubiquity 容器 |
+| 3 | 远程订阅 | 待手测 | `feat-profiles`；下载有 16 MiB 上限，libbox 校验后才替换 |
+| 4 | 手动新建 | 待手测 | 「新建本地配置」用空白模板 |
+| 5 | 从文件导入（.json / .bpf） | 待做 | .json 已有（待手测）；.bpf（libbox 二进制配置）M5 |
+| 6 | 扫码导入 | 待做 | M5；Mac 上需要摄像头权限，收益低 |
+| 7 | QRS 动态码分享 | 待做 | M5 |
+| 8 | 链接二维码分享 | 待手测 | 远程配置「分享…」：导入链接 + CoreImage 二维码 |
+| 9 | `sing-box://import-remote-profile` 链接 | 待手测 | 「从链接导入…」用 libbox `ParseRemoteProfileImportLink`；URL scheme 注册 M5 |
+| 10 | 打开 .bpf 文件 | 待做 | 同 #5，M5 |
+| 11 | 编辑元数据 | 待做 | 名称、更新间隔的编辑表单 M5；目前只能新建时设置 |
+| 12 | 编辑内容（校验 + 格式化） | 待手测 | JSON 编辑器，`LibboxCheckConfig` / `LibboxFormatConfig` |
+| 13 | 查看内容（远程只读） | 待做 | 目前远程配置也能编辑，下次更新会覆盖；只读模式 M5 |
+| 14 | 自动更新 | 待手测 | App 打开时每 10 分钟查一次是否到期 |
+| 15 | 更新间隔（下限 15 分钟） | 待手测 | `RemoteUpdate.clamp`，下限 15 分钟、上限 7 天，测试锁住 |
+| 16 | 立即更新 | 待手测 | 右键菜单 |
+| 17 | 上次更新时间 | 待手测 | 列表副标题 |
+| 18 | HTTP Basic 认证 | 待做 | M5 |
+| 19 | 运行中切换配置 | 待手测 | `AppModel.select(profile:)` 断开后用新配置重连 |
+| 20 | 删除、排序 | 待手测 | 测试锁住删除后选中邻居（D2）与移动不打乱其余顺序（D4） |
+| 21 | 存为 .bpf | 待做 | M5 |
+| 22 | 存为 JSON | 待做 | M5 |
+| 23 | 订阅请求的 UA | 待手测 | `Parallux (sing-box)` |
 
-## 3. 组与节点
+## 2. 概览与核心控制
 
 | # | 功能 | 状态 | 说明 |
 |---|---|---|---|
-| 37 | Groups | 做 | M3-4 |
-| 38 | 展开 / 折叠 | 做 | M3-4 `SetGroupExpand` |
-| 39 | 选择节点 | 做 | M3-4、菜单栏 |
-| 40 | 组 URLTest | 做 | M3-4、菜单栏 |
-| 41 | 节点 URLTest | 做 | M3-4 右键菜单 |
-| 42 | 延迟着色 / 色点网格 | 做 | M3-4 `Palette.Delay` |
-| 43 | 菜单栏切组 | 做 | M5-1 |
+| 24 | 安装网络扩展 | 不适用 | Mac 上只用系统扩展（决策 4） |
+| 25 | 安装系统扩展 | 待手测 | `SystemExtensionInstaller`；每次签名构建打唯一构建号，保证替换（`fix-signed-run-hazards`） |
+| 26 | 启动 / 停止 | 待手测 | 面板开关、右键菜单、主窗口工具栏，统一走 `AppModel` |
+| 27 | 运行时长 | 待手测 | 侧栏底部 |
+| 28 | 状态（内存、协程） | 待手测 | 概览配置卡显示内存与连接数；协程数不显示 |
+| 29 | 连接数 | 待手测 | 侧栏「连接」角标、概览 |
+| 30 | 上下行与曲线 | 待手测 | 概览流量卡，120 点环形缓冲 |
+| 31 | 系统 HTTP 代理开关 | 等价 | 设置里的开关在下次连接时生效；SFM 能运行中切换（`setSystemProxyEnabled`），我们的扩展目前返回「下次连接生效」 |
+| 32 | 路由模式 | 待手测 | 概览、面板、节点与规则页工具栏、右键菜单 |
+| 33 | 配置卡 | 待手测 | 概览 |
+| 34 | 概览卡片开关与排序 | 待做 | M5 |
+| 35 | 切换即生效 | 待手测 | 同 #19 |
+| 36 | 启动失败提示 | 待手测 | 状态行显示扩展返回的错误；内核流失败也显示（`StatusLine`） |
+
+## 3. 分组与节点
+
+| # | 功能 | 状态 | 说明 |
+|---|---|---|---|
+| 37 | 分组 | 待手测 | 节点页 |
+| 38 | 展开 / 折叠 | 待做 | M5；目前全部展开 |
+| 39 | 选择节点 | 待手测 | 节点页、面板下钻、右键菜单 |
+| 40 | 分组测速 | 待手测 | 同上 |
+| 41 | 单节点测速 | 待做 | M5；libbox 1.14.4 只按分组测 |
+| 42 | 延迟着色 | 待手测 | `DelayGrade`：150 ms 分界，测试锁住边界 |
+| 43 | 菜单栏切换节点 | 待手测 | 右键菜单「节点」 |
 
 ## 4. 连接与日志
 
 | # | 功能 | 状态 | 说明 |
 |---|---|---|---|
-| 44 | Connections | 做 | M3-5 |
-| 45 | State 过滤 | 做 | `Runtime.Connections` + M3-5 |
-| 46 | Sort | 做 | 同上 |
-| 47 | 搜索（含 `network:` 等） | 做 | `matchConnection` 单测 |
-| 48 | 连接详情 | 做 | M3-5（另加进程路径——SFM 没有） |
-| 49 | 关闭单条 | 做 | M3-5 |
-| 50 | 关闭全部 | 做 | M3-5、菜单栏 |
-| 51 | 隐藏 dns 连接 | 做 | 单测锁住 |
-| 52 | Logs | 做 | M3-6（上限 3000，与内核环一致） |
-| 53 | 日志级别 | 做 | M3-6 |
-| 54 | 暂停 / 继续 | 做 | M3-6 |
-| 55 | 搜索 | 做 | M3-6 |
-| 56 | 导出（剪贴板 / 文件） | 做 | M3-6，导出前 redact |
-| 57 | 清空 | 做 | M3-6 `ClearLogs` |
-| 58 | 服务崩溃日志 | 做 | M3-7 崩溃报告（`DesktopService.ListCrashReports`） |
+| 44 | 连接列表 | 待手测 | 页面可见时才订阅 |
+| 45 | 按状态过滤 | 待做 | 目前只显示活跃连接；已关闭连接 M5 |
+| 46 | 排序 | 待做 | 按时间；按流量排序 M5 |
+| 47 | 搜索 | 待手测 | 进程、目标、规则、出站，测试锁住 |
+| 48 | 连接详情 | 待手测 | 检查器 |
+| 49 | 关闭单条 | 待手测 | 检查器 |
+| 50 | 关闭全部 | 待手测 | 工具栏 |
+| 51 | 隐藏 DNS 连接 | 待做 | M5 |
+| 52 | 日志 | 待手测 | 3000 行环形缓冲（INV-2） |
+| 53 | 日志级别 | 待手测 | 只在界面筛选；改内核日志级别 M5 |
+| 54 | 暂停 / 继续 | 待手测 | |
+| 55 | 搜索 | 待手测 | |
+| 56 | 导出（脱敏） | 待做 | M5，经 `core/internal/redact` |
+| 57 | 清空 | 待手测 | |
+| 58 | 服务崩溃日志 | 待做 | 辅助服务（决策 12） |
 
 ## 5. 设置与系统集成
 
 | # | 功能 | 状态 | 说明 |
 |---|---|---|---|
-| 59 | Language | 做 | M3-2（en / zh-Hans） |
-| 60 | Start At Login | 做 | M3-2 `mygo.App.SetOpenAtLogin`（SMAppService.mainApp） |
-| 61 | 登录后自动启动 VPN | 做 | 「打开应用时启动」——SFM 现源码只读不写该偏好，我们是真开关 |
-| 62 | Show in Menu Bar | 做 | M5-1 |
-| 63 | Real-time Speed | 做 | M5-1 |
-| 64 | Keep in Background | 做 | M5-1 |
-| 65 | Cache Size / Clear Cache | 等价 | GUI 无独立缓存；内核工作目录的大小与销毁见 #73 #75 |
-| 66 | Ghostty Configuration | 做 | M6-3：设置 › 终端——浅/深色各选一个 Ghostty 主题（含 ~/.config/ghostty/themes）、字号、Option 作 Alt |
-| 67 | Update Track | 等价 | MyGo 的更新 feed 构建期写死、运行期不可切；Beta 构建另设 `tagPrefix: beta-v`，渠道即所装构建（`docs/RELEASE.md`）。不做假开关（原则 5） |
-| 68 | GitHub Token | 不适用 | Stable 检查读 `releases/latest/download/`，不经 API、无限流；Beta 每天一次 API 远低于 60/h（`docs/RELEASE.md`） |
-| 69 | Automatic Update Check | 做 | M6-4：设置 › 关于「自动检查更新」（默认开、每 24 h）+「检查更新」+ 安装进度 +「重新启动以完成更新」；`mygo.Updater` 验签；无公钥的构建明示不支持 |
-| 70 | System Extension 安装/更新/卸载 | 等价 | 特权助手 安装 / 卸载（权限面板） |
-| 71 | Helper Service | 等价 | 同一个特权助手同时承担 TUN 与进程查找（root 内核自带进程匹配） |
-| 72 | 内核版本 | 做 | M3-2 内核 |
-| 73 | Data Size | 做 | M3-2 `diag.WorkingDirectory` |
-| 74 | 打开工作目录 | 做 | M3-2 `Host.Reveal` |
-| 75 | Destroy | 做 | M3-2 `diag.DestroyWorkingDirectory` |
-| 76 | Disable Deprecated Warnings | 做 | M3-2（Settings 字段；弃用警告来自 `GetDeprecatedWarnings`） |
-| 77 | includeAllNetworks | 不适用 | NE 协议层旗标。我们的 TUN 由 root 内核建 utun，等价控制在配置的 `strict_route` |
-| 78 | excludeAPNs | 不适用 | NE 旗标；APNs 排除走 Profile Override #93 |
-| 79 | excludeCellularServices | 不适用 | NE 旗标，Mac 无蜂窝 |
-| 80 | excludeLocalNetworks | 不适用 | NE 旗标；等价写法是配置的 `route_exclude_address` |
-| 81 | enforceRoutes | 不适用 | NE 旗标；utun 由 `auto_route` 直接改路由表 |
-| 82 | excludeDeviceCommunication | 不适用 | NE 旗标 |
-| 83 | Reset Packet Tunnel | 不适用 | 无 NE 设置可重置 |
-| 84–90 | On Demand Rules | 不适用 | `NEOnDemandRule` 只存在于 NetworkExtension。v1 不发明替代（原则 5）；需求明确后另开卡 |
-| 91 | Hide VPN Icon | 不适用 | utun 不会让 macOS 显示 VPN 图标，开关将无事可做（`settings.go` 注释） |
-| 92 | No Default Route | 做 | `app.ApplyOverride`，子网段与 SFM 源码一致，单测锁住 |
-| 93 | Exclude APNs Route | 做 | 同上 |
-| 94 | Remote Control | 做 | `Controller.ConnectRemote` + M3-2 |
-| 95 | 探测可达 | 做 | `control.Client.Probe`（`GetStartedAt`） |
-| 96 | 远程模式下各页打远端 | 做 | 同一 Session；本机专属动作（Start/Stop、系统代理、工作目录）在远程时禁用并说明 |
-| — | 路由规则平台能力（process / wifi） | 等价 | 特权助手下内核自带进程匹配；wifi_ssid 需定位权限（权限面板） |
+| 59 | 语言 | 待做 | M6；目前只有中文 |
+| 60 | 登录时启动 | 待手测 | `SMAppService.mainApp` |
+| 61 | 登录后自动连接 | 待做 | M5；可用按需连接替代 |
+| 62 | 在菜单栏显示 | 不适用 | Parallux 只活在菜单栏，没有「不显示」的形态 |
+| 63 | 菜单栏实时速率 | 待手测 | 默认关，每秒最多一次 |
+| 64 | 关窗后保留在后台 | 待手测 | |
+| 65 | 缓存大小 / 清除 | 待做 | 辅助服务（工作目录在 root 家目录） |
+| 66 | Ghostty 配置 | 不适用 | 只服务 Tailscale SSH 终端（#100），该功能不做 |
+| 67 | 更新通道 | 待做 | M6 |
+| 68 | GitHub Token | 待做 | M6 判定 |
+| 69 | 自动检查更新 | 待做 | M6 |
+| 70 | 系统扩展安装 / 更新 / 卸载 | 待手测 | 设置 › 内核 |
+| 71 | 辅助服务 | 待做 | 决策 12；需要签名，等 M1 手测通过后开卡 |
+| 72 | 内核版本 | 待手测 | 设置 › 内核 |
+| 73 | 数据大小 | 待做 | 辅助服务 |
+| 74 | 打开工作目录 | 待做 | 辅助服务 |
+| 75 | 销毁工作目录 | 待做 | 辅助服务 |
+| 76 | 禁用弃用警告 | 待做 | M5 |
+| 77 | includeAllNetworks | 待手测 | 设置 › 隧道 |
+| 78 | excludeAPNs | 待手测 | 同上 |
+| 79 | excludeCellularServices | 不适用 | Mac 没有蜂窝服务 |
+| 80 | excludeLocalNetworks | 待手测 | 设置 › 隧道 |
+| 81 | enforceRoutes | 待手测 | 同上 |
+| 82 | excludeDeviceCommunication | 待手测 | 同上 |
+| 83 | 重置隧道配置 | 待做 | 「卸载」已移除 VPN 配置；单独重置 M5 |
+| 84–90 | 按需连接规则 | 待手测 | 设置 › 按需连接：任何网络、Wi‑Fi 名称、探测地址三类，连接时写进 `NETunnelProviderManager` |
+| 91 | 隐藏 VPN 图标 | 待做 | M5 判定 |
+| 92 | 不添加默认路由 | 待手测 | 设置 › 隧道 › 配置覆盖 |
+| 93 | 排除 APNs 路由 | 待手测 | 同 #78 |
+| 94 | 远程控制 | 待做 | M5；设置里有标签，内容写明尚未提供 |
+| 95 | 远程可达探测 | 待做 | 随 #94 |
+| 96 | 远程模式各页 | 待做 | 随 #94 |
+| — | 按进程分流 | 待做 | 辅助服务（`findConnectionOwner` 目前报不支持） |
 
-## 6. 其它
+## 6. 其他
 
 | # | 功能 | 状态 | 说明 |
 |---|---|---|---|
-| 97 | Network Quality | 做 | M3-7 |
-| 98 | STUN Test | 做 | M3-7 |
-| 99 | Tailscale 状态 / Exit Node | 做 | M3-7 |
-| 100 | Tailscale SSH 终端 | 做 | M6-3：工具 › Tailscale 的 peer「SSH…」→ 用户名（按 peer 记住）+ Forward Agent → MyGo terminal（libghostty-vt）窗口，走内核 `StartTailscaleSSHSession`；内核补了上游缺的 `PlatformHandler`，Forward Agent 只在用户态内核且有 SSH_AUTH_SOCK 时可开 |
-| 101 | Taildrop | 做 | M6-5：工具 › Tailscale 的 endpoint 卡内收件箱（保存到下载 / 删除 / 取消接收）+ 在线 peer「发送文件…」 |
-| 102 | Share Extension | 不适用 | 需 App Extension 打包与签名能力；Taildrop 发送走 #101 的文件选择 |
-| 103 | OpenConnect / OpenVPN 状态与认证挑战 | 做 | 工具 › VPN（`internal/ui/tools/vpn.go`）；浏览器登录挑战明示不支持（需要 web view） |
-| 104 | USB/IP | 不适用 | macOS 上需 cgo（官方注明），我们的内核 `CGO_ENABLED=0` |
-| 105 | OOM Report / 内存限制 | 做 | M3-7 报告 + M3-2 内存限制（`StartOptions`） |
-| 106 | Crash Report | 做 | M3-7 |
-| 107 | Taiwan Flag 检测 | 不适用 | 与代理无关的 Apple 字体探测 |
-| 108 | App Intents / Shortcuts | 等价 | `parallux://start|stop|toggle|restart|update-profiles`，快捷指令用「打开 URL」 |
-| 109 | Sponsors | 不适用 | SFM 自身的赞助入口 |
-| 110 | 文档 / 源码链接 | 做 | M3-2 关于 |
-| 111 | 内核通知（OpenURL） | 做 | `app/notify.go` + `cmd/parallux` |
-| 112 | 必须在 /Applications | 做 | M6-2-a：不在 /Applications 时 `RequestGrant` 拒装 helper 并说明；权限面板与概览增强模式卡不给安装、显示同一句说明 |
-| 113 | Include All Networks（文档名） | 不适用 | 同 #77 |
+| 97 | 网络质量测试 | 待做 | M3 诊断页 |
+| 98 | STUN 测试 | 待做 | M3 诊断页 |
+| 99 | Tailscale 状态 / 出口节点 | 待做 | M5 判定 |
+| 100 | Tailscale SSH 终端 | 不适用 | 设计稿注明实验功能，先不做 |
+| 101 | Taildrop | 待做 | M5 判定 |
+| 102 | 分享扩展 | 不适用 | 需要另一个 App 扩展；收益低 |
+| 103 | OpenConnect / OpenVPN 状态 | 待做 | M5 判定 |
+| 104 | USB/IP | 待做 | M5 判定（扩展里已链接 IOUSBHost） |
+| 105 | OOM 报告 / 内存上限 | 待做 | M5 |
+| 106 | 崩溃报告 | 待做 | 辅助服务 |
+| 107 | 台湾旗帜检测 | 不适用 | 与代理无关 |
+| 108 | 快捷指令 | 待做 | M5（PLAN） |
+| 109 | 赞助 | 不适用 | SFM 自身的入口 |
+| 110 | 文档 / 源码链接 | 待做 | M6 关于页 |
+| 111 | 内核通知 | 待做 | 扩展的 `send(_:)` 目前忽略；M5 |
+| 112 | 必须在 /Applications | 待做 | 不在 /Applications 时提示；M5 |
+| 113 | Include All Networks（文档名） | 待手测 | 同 #77 |
+
+## 计数（2026-11-19）
+
+108 行（#84–90 合一行，另有「按进程分流」一行）：待手测 52、待做 46、不适用 8、等价 2。没有「做」：在作者手测之前，任何一项都不算完成。
