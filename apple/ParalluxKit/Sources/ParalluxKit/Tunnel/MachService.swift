@@ -14,6 +14,9 @@ public enum MachService {
     /// system extension register Mach services inside its App Group, and the
     /// version suffix keeps the app off a replaced extension's stale endpoint.
     static func resolve(_ raw: String?, appGroup: String?) -> String? {
-        raw
+        guard let raw, let appGroup else { return nil }
+        let prefix = appGroup + ".tunnel."
+        guard raw.hasPrefix(prefix), raw.count > prefix.count else { return nil }
+        return raw
     }
 }

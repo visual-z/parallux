@@ -26,10 +26,19 @@ public struct TunnelStartOptions: Codable, Equatable, Sendable {
     public static let optionsKey = "parallux.startOptions"
 
     public func encoded() throws -> [String: NSObject] {
-        [:]
+        [Self.optionsKey: try JSONEncoder().encode(self) as NSData]
     }
 
+    /// nil when the dictionary carries no Parallux options (an on-demand start
+    /// by the system passes none; the extension then uses its persisted copy).
     public static func decode(_ options: [String: NSObject]?) throws -> TunnelStartOptions? {
-        nil
+        guard let data = options?[optionsKey] as? Data else { return nil }
+        return try JSONDecoder().decode(TunnelStartOptions.self, from: data)
+    }
+
+    /// The extension persists the last options as plain JSON.
+    public func json() throws -> Data { try JSONEncoder().encode(self) }
+    public static func fromJSON(_ data: Data) throws -> TunnelStartOptions {
+        try JSONDecoder().decode(TunnelStartOptions.self, from: data)
     }
 }

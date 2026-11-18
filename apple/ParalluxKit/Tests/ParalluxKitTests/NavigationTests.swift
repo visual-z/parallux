@@ -49,3 +49,14 @@ import Testing
         #expect(AppGroup.resolve("ABCDE12345.io.github.visual-z.parallux") == "ABCDE12345.io.github.visual-z.parallux")
     }
 }
+
+@Suite struct RateFormatTests {
+    @Test func ratesAreShownInBitsWithOneDecimalBelowTen() {
+        #expect(RateFormat.bitsPerSecond(0) == "0 bps")
+        #expect(RateFormat.bitsPerSecond(1) == "8 bps")
+        #expect(RateFormat.bitsPerSecond(125) == "1.0 Kbps")
+        #expect(RateFormat.bitsPerSecond(76_500_000) == "612 Mbps")
+        #expect(RateFormat.bitsPerSecond(-5) == "0 bps")
+        #expect(RateFormat.bitsPerSecond(Int64.max).hasSuffix("Gbps"))
+    }
+}

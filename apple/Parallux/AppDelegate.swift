@@ -14,10 +14,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// They stay valid after that window closes, so AppKit code (the status
     /// item and its menu) can reopen the main and settings windows.
     var sceneActions: SceneActions?
+    let tunnel = TunnelController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         popover.behavior = .transient
+        Task { await tunnel.load() }
         popover.contentViewController = NSHostingController(rootView: PanelView(
+            tunnel: tunnel,
             openMainWindow: { [weak self] in self?.showMainWindow() },
             openSettings: { [weak self] in self?.showSettings() }
         ))
