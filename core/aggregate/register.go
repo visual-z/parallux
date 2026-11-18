@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"slices"
+	"sync"
 	"sync/atomic"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -34,8 +35,17 @@ type Options struct {
 	// Mode is balance, bond or failover.
 	Mode string `json:"mode"`
 	// Links are the tags of the link outbounds, in priority order: failover
-	// uses the first one that dials, balance rotates over all of them.
+	// uses the first healthy one, balance rotates over the healthy ones.
 	Links []string `json:"links"`
+	// Backup lists links used only when no other link is healthy
+	// (design: 「仅备用」). Must be a subset of Links.
+	Backup []string `json:"backup,omitempty"`
+	// Bond is the tag of the outbound that splits one connection over the
+	// links (a multipath outbound, PLAN decision 17). Required in bond mode;
+	// when it fails, connections fall back to the links in failover order.
+	Bond string `json:"bond,omitempty"`
+	// ProbeTargets override the health-check destinations ("host:port").
+	ProbeTargets []string `json:"probe_targets,omitempty"`
 }
 
 func init() {
@@ -51,26 +61,37 @@ var (
 	_ adapter.Referrer      = (*Outbound)(nil)
 )
 
-// Outbound spreads connections over its link outbounds.
-//
-// This is the M1 foundation: options, validation, and plain per-connection
-// selection. Link health, per-link statistics and the bond mode arrive in M3/M4.
+// Outbound spreads connections over its link outbounds (PLAN decision 13).
 type Outbound struct {
 	outbound.Adapter
 	manager adapter.OutboundManager
 	logger  log.ContextLogger
 	mode    string
 	tags    []string
-	links   []adapter.Outbound
-	next    atomic.Uint64 // balance: index of the link that takes the next connection
-	// interrupts closes the connections attached through AttachConnection
-	// when the group changes its links (M3 health checks will use it).
+	backup  []bool
+	bondTag string
+	targets []M.Socksaddr
+
+	links    []adapter.Outbound
+	bond     adapter.Outbound
+	health   []*linkHealth
+	counters []*linkCounters
+	next     atomic.Uint64 // balance: rotation cursor
+	// interrupts closes the connections attached through AttachConnection.
 	interrupts *interrupt.Group
+	cancel     context.CancelFunc
+	probes     sync.WaitGroup
+	// disableProbes is for tests that drive health directly.
+	disableProbes bool
 }
 
 // New builds an aggregate outbound. Link tags are resolved in Start, because
 // sing-box creates outbounds before any of them can be looked up.
 func New(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options Options) (adapter.Outbound, error) {
+	return newOutbound(service.FromContext[adapter.OutboundManager](ctx), logger, tag, options)
+}
+
+func newOutbound(manager adapter.OutboundManager, logger log.ContextLogger, tag string, options Options) (*Outbound, error) {
 	switch options.Mode {
 	case ModeBalance, ModeFailover:
 	case ModeBond:
@@ -86,12 +107,34 @@ func New(ctx context.Context, router adapter.Router, logger log.ContextLogger, t
 			return nil, E.New("aggregate: duplicate link ", link)
 		}
 	}
+	backup := make([]bool, len(options.Links))
+	for i, link := range options.Links {
+		backup[i] = slices.Contains(options.Backup, link)
+	}
+	targets := defaultProbeTargets
+	if len(options.ProbeTargets) > 0 {
+		targets = nil
+		for _, target := range options.ProbeTargets {
+			address := M.ParseSocksaddr(target)
+			if !address.IsValid() || address.Port == 0 {
+				return nil, E.New("aggregate: probe target ", target, " is not host:port")
+			}
+			targets = append(targets, address)
+		}
+	}
+	dependencies := slices.Clone(options.Links)
+	if options.Bond != "" {
+		dependencies = append(dependencies, options.Bond)
+	}
 	return &Outbound{
-		Adapter:    outbound.NewAdapter(Type, tag, []string{N.NetworkTCP, N.NetworkUDP}, options.Links),
-		manager:    service.FromContext[adapter.OutboundManager](ctx),
+		Adapter:    outbound.NewAdapter(Type, tag, []string{N.NetworkTCP, N.NetworkUDP}, dependencies),
+		manager:    manager,
 		logger:     logger,
 		mode:       options.Mode,
 		tags:       options.Links,
+		backup:     backup,
+		bondTag:    options.Bond,
+		targets:    targets,
 		interrupts: interrupt.NewGroup(),
 	}, nil
 }
@@ -108,6 +151,42 @@ func (o *Outbound) Start(stage adapter.StartStage, _ *adapter.Scope) error {
 		}
 		o.links = append(o.links, link)
 	}
+	if o.bondTag != "" {
+		bond, loaded := o.manager.Outbound(o.bondTag)
+		if !loaded {
+			return E.New("aggregate: bond outbound not found: ", o.bondTag)
+		}
+		o.bond = bond
+	}
+	o.health = make([]*linkHealth, len(o.links))
+	o.counters = make([]*linkCounters, len(o.links))
+	ctx, cancel := context.WithCancel(context.Background())
+	o.cancel = cancel
+	for i, link := range o.links {
+		o.health[i] = &linkHealth{}
+		// Optimistic until the first probe says otherwise, so the first
+		// connections after start do not wait for a probe round.
+		o.health[i].healthy.Store(true)
+		o.counters[i] = &linkCounters{}
+		if o.disableProbes {
+			continue
+		}
+		o.probes.Add(1)
+		go func(link adapter.Outbound, health *linkHealth) {
+			defer o.probes.Done()
+			probeLoop(ctx, link, o.targets, health)
+		}(link, o.health[i])
+	}
+	registry.Store(o.Tag(), o)
+	return nil
+}
+
+func (o *Outbound) Close() error {
+	registry.Delete(o.Tag())
+	if o.cancel != nil {
+		o.cancel()
+		o.probes.Wait()
+	}
 	return nil
 }
 
@@ -116,10 +195,11 @@ func (o *Outbound) All() []string { return o.tags }
 
 // Selected reports the link the next connection would try first.
 func (o *Outbound) Selected(string) adapter.Outbound {
-	if len(o.links) == 0 {
+	order := o.order(false)
+	if len(order) == 0 {
 		return nil
 	}
-	return o.links[o.firstIndex(false)]
+	return o.links[order[0]]
 }
 
 // AttachConnection implements adapter.OutboundGroup.
@@ -128,52 +208,83 @@ func (o *Outbound) AttachConnection(closer io.Closer) func() {
 }
 
 // References implements adapter.Referrer.
-func (o *Outbound) References() []string { return o.tags }
+func (o *Outbound) References() []string {
+	if o.bondTag != "" {
+		return append(slices.Clone(o.tags), o.bondTag)
+	}
+	return o.tags
+}
 
 func (o *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	var lastErr error
-	for _, link := range o.order() {
-		conn, err := link.DialContext(ctx, network, destination)
+	if o.bond != nil && network == N.NetworkTCP {
+		conn, err := o.bond.DialContext(ctx, network, destination)
 		if err == nil {
 			return conn, nil
 		}
-		lastErr = err
-		o.logger.DebugContext(ctx, "link ", link.Tag(), " failed: ", err)
+		o.logger.DebugContext(ctx, "bond ", o.bondTag, " failed, falling back to the links: ", err)
 	}
-	return nil, E.Cause(lastErr, "aggregate: every link failed")
+	var lastErr error
+	for _, index := range o.order(true) {
+		conn, err := o.links[index].DialContext(ctx, network, destination)
+		if err == nil {
+			return newCountedConn(conn, o.counters[index]), nil
+		}
+		lastErr = err
+		o.markFailed(index)
+		o.logger.DebugContext(ctx, "link ", o.tags[index], " failed: ", err)
+	}
+	return nil, everyLinkFailed(lastErr)
+}
+
+// everyLinkFailed wraps the last link's error; with no link tried there is none.
+func everyLinkFailed(last error) error {
+	if last == nil {
+		return E.New("aggregate: no link to try")
+	}
+	return E.Cause(last, "aggregate: every link failed")
 }
 
 func (o *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	var lastErr error
-	for _, link := range o.order() {
-		conn, err := link.ListenPacket(ctx, destination)
+	for _, index := range o.order(true) {
+		conn, err := o.links[index].ListenPacket(ctx, destination)
 		if err == nil {
 			return conn, nil
 		}
 		lastErr = err
-		o.logger.DebugContext(ctx, "link ", link.Tag(), " failed: ", err)
+		o.markFailed(index)
+		o.logger.DebugContext(ctx, "link ", o.tags[index], " failed: ", err)
 	}
-	return nil, E.Cause(lastErr, "aggregate: every link failed")
+	return nil, everyLinkFailed(lastErr)
 }
 
-// order returns the links in the order one connection should try them: the
-// configured order for failover, and for balance the same ring started at the
-// next link in rotation, so a failing link only costs a retry.
-func (o *Outbound) order() []adapter.Outbound {
-	start := o.firstIndex(true)
-	ordered := make([]adapter.Outbound, 0, len(o.links))
-	for i := range o.links {
-		ordered = append(ordered, o.links[(start+i)%len(o.links)])
+// A failed dial is stronger evidence than a probe: mark it at once, and let
+// the prober bring it back after recoverAfter successes.
+func (o *Outbound) markFailed(index int) {
+	if index < len(o.health) && o.health[index] != nil {
+		o.health[index].healthy.Store(false)
 	}
-	return ordered
 }
 
-func (o *Outbound) firstIndex(advance bool) int {
-	if o.mode != ModeBalance || len(o.links) == 0 {
-		return 0
+func (o *Outbound) healthSnapshot() []bool {
+	healthy := make([]bool, len(o.links))
+	for i := range healthy {
+		healthy[i] = i >= len(o.health) || o.health[i] == nil || o.health[i].healthy.Load()
 	}
-	if advance {
-		return int((o.next.Add(1) - 1) % uint64(len(o.links)))
+	return healthy
+}
+
+func (o *Outbound) order(advance bool) []int {
+	if len(o.links) == 0 {
+		return nil
 	}
-	return int(o.next.Load() % uint64(len(o.links)))
+	var cursor uint64
+	if o.mode == ModeBalance {
+		if advance {
+			cursor = o.next.Add(1) - 1
+		} else {
+			cursor = o.next.Load()
+		}
+	}
+	return linkOrder(o.mode, o.healthSnapshot(), o.backup, cursor)
 }
