@@ -1,0 +1,109 @@
+{
+  "dns" : {
+    "servers" : [
+      {
+        "tag" : "local",
+        "type" : "local"
+      }
+    ]
+  },
+  "inbounds" : [
+    {
+      "auto_route" : true,
+      "tag" : "tun-in",
+      "type" : "tun"
+    }
+  ],
+  "outbounds" : [
+    {
+      "outbounds" : [
+        "HK-03",
+        "JP-01",
+        "direct"
+      ],
+      "tag" : "Proxy",
+      "type" : "selector"
+    },
+    {
+      "detour" : "parallux-links",
+      "server" : "hk.example.com",
+      "server_port" : 443,
+      "tag" : "HK-03",
+      "type" : "vmess",
+      "uuid" : "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "detour" : "relay",
+      "password" : "x",
+      "server" : "jp.example.com",
+      "server_port" : 443,
+      "tag" : "JP-01",
+      "type" : "trojan"
+    },
+    {
+      "detour" : "parallux-links",
+      "method" : "aes-128-gcm",
+      "password" : "x",
+      "server" : "relay.example.com",
+      "server_port" : 8388,
+      "tag" : "relay",
+      "type" : "shadowsocks"
+    },
+    {
+      "backup" : [
+        "link-en7"
+      ],
+      "bond" : "parallux-bond",
+      "links" : [
+        "link-en0",
+        "link-en7"
+      ],
+      "mode" : "bond",
+      "tag" : "direct",
+      "type" : "aggregate"
+    },
+    {
+      "tag" : "block",
+      "type" : "block"
+    },
+    {
+      "bind_interface" : "en0",
+      "domain_resolver" : "local",
+      "tag" : "link-en0",
+      "type" : "direct"
+    },
+    {
+      "bind_interface" : "en7",
+      "domain_resolver" : "local",
+      "tag" : "link-en7",
+      "type" : "direct"
+    },
+    {
+      "backup" : [
+        "link-en7"
+      ],
+      "bond" : "parallux-bond",
+      "links" : [
+        "link-en0",
+        "link-en7"
+      ],
+      "mode" : "bond",
+      "tag" : "parallux-links",
+      "type" : "aggregate"
+    },
+    {
+      "outbounds" : [
+        "link-en0",
+        "link-en7"
+      ],
+      "psk" : "change-me",
+      "server" : "203.0.113.10",
+      "server_port" : 39000,
+      "tag" : "parallux-bond",
+      "type" : "multipath"
+    }
+  ],
+  "route" : {
+    "final" : "Proxy"
+  }
+}

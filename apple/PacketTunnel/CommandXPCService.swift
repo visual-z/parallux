@@ -1,4 +1,5 @@
 import Foundation
+import Libbox
 import os
 import ParalluxKit
 
@@ -46,6 +47,10 @@ final class CommandXPCService: NSObject, NSXPCListenerDelegate, @unchecked Senda
                     NSLocalizedDescriptionKey: String(describing: error),
                 ]))
             }
+        }
+
+        func linkStats(reply: @escaping (String) -> Void) {
+            reply(PxbridgeLinkStatsJSON())
         }
 
         func probeLinks(reply: @escaping (Data?, NSError?) -> Void) {

@@ -95,7 +95,9 @@ func newOutbound(manager adapter.OutboundManager, logger log.ContextLogger, tag 
 	switch options.Mode {
 	case ModeBalance, ModeFailover:
 	case ModeBond:
-		return nil, E.New("aggregate: mode bond is not available yet (milestone M4)")
+		if options.Bond == "" {
+			return nil, E.New("aggregate: mode bond needs `bond`, the tag of a multipath outbound")
+		}
 	default:
 		return nil, E.New("aggregate: unknown mode ", options.Mode, ", want balance, bond or failover")
 	}
@@ -105,6 +107,11 @@ func newOutbound(manager adapter.OutboundManager, logger log.ContextLogger, tag 
 	for i, link := range options.Links {
 		if slices.Contains(options.Links[:i], link) {
 			return nil, E.New("aggregate: duplicate link ", link)
+		}
+	}
+	for _, link := range options.Backup {
+		if !slices.Contains(options.Links, link) {
+			return nil, E.New("aggregate: backup link ", link, " is not in links")
 		}
 	}
 	backup := make([]bool, len(options.Links))
@@ -286,5 +293,9 @@ func (o *Outbound) order(advance bool) []int {
 			cursor = o.next.Load()
 		}
 	}
-	return linkOrder(o.mode, o.healthSnapshot(), o.backup, cursor)
+	order := linkOrder(o.mode, o.healthSnapshot(), o.backup, cursor)
+	if len(order) != len(o.links) {
+		panic("aggregate: INV-4 violated, link order is not a permutation")
+	}
+	return order
 }

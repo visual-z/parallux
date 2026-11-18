@@ -60,5 +60,24 @@ public enum LinkInventory {
     }
 
     /// Candidate links in a stable order (Wi‑Fi first, then by name).
-    public static func classify(_ raws: [Raw]) -> [LinkInterface] { [] }
+    public static func classify(_ raws: [Raw]) -> [LinkInterface] {
+        let links: [LinkInterface] = raws.compactMap { raw in
+            guard LinkProbe.isCandidate(name: raw.name, flags: raw.flags, hasIPv4: raw.ipv4 != nil),
+                  raw.scType != "Bridge" else { return nil }
+            let display = raw.scDisplayName ?? raw.name
+            let kind: LinkKind
+            switch raw.scType {
+            case "IEEE80211": kind = .wifi
+            // iPhone USB tethering shows as Ethernet named "iPhone USB" (or
+            // localized "iPhone"); it is metered, so it gets its own kind.
+            case "Ethernet" where display.localizedCaseInsensitiveContains("iPhone"): kind = .iPhone
+            case "Ethernet": kind = .ethernet
+            default: kind = .other
+            }
+            return LinkInterface(name: raw.name, kind: kind, displayName: display, address: raw.ipv4)
+        }
+        return links.sorted { a, b in
+            (a.kind == .wifi ? 0 : 1, a.name.count, a.name) < (b.kind == .wifi ? 0 : 1, b.name.count, b.name)
+        }
+    }
 }

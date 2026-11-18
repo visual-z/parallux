@@ -38,13 +38,51 @@ type countedConn struct {
 }
 
 func newCountedConn(conn net.Conn, counters *linkCounters) net.Conn {
-	return conn
+	counters.active.Add(1)
+	return &countedConn{Conn: conn, counters: counters}
 }
+
+func (c *countedConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	c.counters.download.Add(int64(n))
+	return n, err
+}
+
+func (c *countedConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+	c.counters.upload.Add(int64(n))
+	return n, err
+}
+
+func (c *countedConn) Close() error {
+	c.once.Do(func() { c.counters.active.Add(-1) })
+	return c.Conn.Close()
+}
+
+// Upstream exposes the wrapped connection to sing's bufio fast paths.
+func (c *countedConn) Upstream() any { return c.Conn }
 
 // registry holds the running aggregate outbounds for Snapshot.
 var registry sync.Map // tag → *Outbound
 
 // Snapshot returns every running aggregate outbound's per-link statistics.
 func Snapshot() []GroupStat {
-	return nil
+	var groups []GroupStat
+	registry.Range(func(_, value any) bool {
+		o := value.(*Outbound)
+		healthy := o.healthSnapshot()
+		group := GroupStat{Tag: o.Tag(), Mode: o.mode}
+		for i, tag := range o.tags {
+			stat := LinkStat{Tag: tag, Healthy: healthy[i], Backup: o.backup[i]}
+			if i < len(o.counters) && o.counters[i] != nil {
+				stat.Upload = o.counters[i].upload.Load()
+				stat.Download = o.counters[i].download.Load()
+				stat.Active = o.counters[i].active.Load()
+			}
+			group.Links = append(group.Links, stat)
+		}
+		groups = append(groups, group)
+		return true
+	})
+	return groups
 }

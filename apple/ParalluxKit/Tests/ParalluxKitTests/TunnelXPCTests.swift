@@ -23,6 +23,10 @@ private final class SocketServer: NSObject, NSXPCListenerDelegate, TunnelXPCProt
         if replies { reply(served, nil) }
     }
 
+    func linkStats(reply: @escaping (String) -> Void) {
+        reply(#"[{"tag":"direct","mode":"balance","links":[]}]"#)
+    }
+
     func probeLinks(reply: @escaping (Data?, NSError?) -> Void) {
         let result = TunnelXPC.runProbes(interfaces: ["nope0"])
         reply(try? JSONEncoder().encode(result), nil)
@@ -83,6 +87,13 @@ private func connect(to server: SocketServer) -> (NSXPCListener, NSXPCConnection
         let results = try TunnelXPC.probeLinks(over: connection, timeout: 3)
         #expect(results.map(\.interface) == ["nope0"])
         #expect(results.first?.errno == ENXIO)
+    }
+
+    @Test func linkStatsComeBackOverXPC() {
+        let server = SocketServer(served: nil)
+        let (listener, connection) = connect(to: server)
+        defer { connection.invalidate(); listener.invalidate() }
+        #expect(LinkGroupStat.decode(TunnelXPC.linkStats(over: connection, timeout: 2)).map(\.tag) == ["direct"])
     }
 
     @Test func connectingToAMissingSocketReportsTheCall() {

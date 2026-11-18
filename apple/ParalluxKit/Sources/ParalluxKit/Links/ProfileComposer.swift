@@ -50,7 +50,67 @@ public enum ProfileComposer {
     /// nil links (fewer than two enabled) returns the profile unchanged.
     public static func compose(_ profile: String, links: [LinkInterface], backup: Set<String>, mode: AggregationMode,
                                bond: Bond? = nil) throws -> String {
-        profile
+        guard var root = (try? JSONSerialization.jsonObject(with: Data(profile.utf8))) as? [String: Any] else {
+            throw Failure.notJSON
+        }
+        guard links.count >= 2 else { return profile }
+        var outbounds = (root["outbounds"] as? [[String: Any]]) ?? []
+        let linkTags = links.map { linkTag($0.name) }
+        let taken = Set(outbounds.compactMap { $0["tag"] as? String })
+
+        // Dial options of the user's first direct outbound carry over to every
+        // link (domain_resolver, tcp_fast_open…); bind_interface is ours.
+        var linkBase = (outbounds.first { $0["type"] as? String == "direct" }) ?? [:]
+        for key in ["tag", "type", "bind_interface", "detour", "inet4_bind_address", "inet6_bind_address", "routing_mark"] {
+            linkBase.removeValue(forKey: key)
+        }
+        let linkOutbounds: [[String: Any]] = links.map { link in
+            var outbound = linkBase
+            outbound["type"] = "direct"
+            outbound["tag"] = linkTag(link.name)
+            outbound["bind_interface"] = link.name
+            return outbound
+        }
+
+        let useBond = mode == .bond && bond != nil
+        func aggregate(tag: String) -> [String: Any] {
+            var outbound: [String: Any] = [
+                "type": "aggregate", "tag": tag,
+                "mode": mode == .bond && !useBond ? AggregationMode.failover.rawValue : mode.rawValue,
+                "links": linkTags,
+            ]
+            let backupTags = links.filter { backup.contains($0.name) }.map { linkTag($0.name) }
+            if !backupTags.isEmpty { outbound["backup"] = backupTags }
+            if useBond, let bond { outbound["bond"] = bond.tag }
+            return outbound
+        }
+
+        // Replace each user direct with an aggregate of the same tag, so rules
+        // and selectors that say "direct" now use the links.
+        outbounds = outbounds.map { outbound in
+            guard outbound["type"] as? String == "direct", let tag = outbound["tag"] as? String,
+                  outbound["bind_interface"] == nil else { return outbound }
+            return aggregate(tag: tag)
+        }
+        // Nodes without a detour dial their server through the links.
+        outbounds = outbounds.map { outbound in
+            guard let type = outbound["type"] as? String, proxyTypes.contains(type), outbound["detour"] == nil else { return outbound }
+            var copy = outbound
+            copy["detour"] = aggregateTag
+            return copy
+        }
+        var added = linkOutbounds.filter { !taken.contains($0["tag"] as! String) }
+        if !taken.contains(aggregateTag) { added.append(aggregate(tag: aggregateTag)) }
+        if useBond, let bond, !taken.contains(bond.tag) {
+            var multipath = bond.outbound.mapValues(\.foundation)
+            multipath["tag"] = bond.tag
+            multipath["outbounds"] = linkTags
+            added.append(multipath)
+        }
+        outbounds.append(contentsOf: added)
+        root["outbounds"] = outbounds
+        let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+        return String(decoding: data, as: UTF8.self)
     }
 }
 

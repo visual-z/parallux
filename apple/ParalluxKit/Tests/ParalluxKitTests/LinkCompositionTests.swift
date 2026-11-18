@@ -9,6 +9,7 @@ private func outbounds(_ json: String) throws -> [[String: Any]] {
 
 private let userProfile = """
 {
+  "dns": {"servers": [{"type": "local", "tag": "local"}]},
   "inbounds": [{"type": "tun", "tag": "tun-in", "auto_route": true}],
   "outbounds": [
     {"type": "selector", "tag": "Proxy", "outbounds": ["HK-03", "JP-01", "direct"]},
@@ -122,5 +123,54 @@ private let twoLinks = [
         #expect(links.map(\.displayName) == ["Wi-Fi", "USB 10/100/1000 LAN", "iPhone USB", "en9"])
         #expect(links[1].address == "192.168.8.23")
         #expect(LinkInventory.classify([]).isEmpty)
+    }
+}
+
+extension LinkCompositionTests {
+    static let bondFixture = ProfileComposer.Bond(tag: "parallux-bond", outbound: [
+        "type": .string("multipath"), "server": .string("203.0.113.10"), "server_port": .number(39000), "psk": .string("change-me"),
+    ])
+
+    static func fixtureURL(_ mode: AggregationMode) -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("core/aggregate/testdata/composed-\(mode.rawValue).json")
+    }
+
+    static func composed(_ mode: AggregationMode) throws -> String {
+        try ProfileComposer.compose(userProfile, links: twoLinks, backup: ["en7"], mode: mode, bond: mode == .bond ? bondFixture : nil)
+    }
+
+    /// core/aggregate checks these fixtures with libbox.CheckConfig; the
+    /// composer must keep producing exactly them. PARALLUX_WRITE_FIXTURES=1
+    /// rewrites them (then read the diff).
+    @Test func composedFixturesMatchTheGenerator() throws {
+        for mode in AggregationMode.allCases {
+            let text = try Self.composed(mode)
+            if ProcessInfo.processInfo.environment["PARALLUX_WRITE_FIXTURES"] == "1" {
+                try Data((text + "\n").utf8).write(to: Self.fixtureURL(mode))
+            }
+            let expected = try JSONSerialization.jsonObject(with: Data(contentsOf: Self.fixtureURL(mode))) as? NSDictionary
+            let generated = try JSONSerialization.jsonObject(with: Data(text.utf8)) as? NSDictionary
+            #expect(expected != nil, "\(mode)")
+            #expect(generated == expected, "\(mode)")
+        }
+    }
+}
+
+@Suite struct LinkRateTests {
+    private func group(_ up: Int64, _ down: Int64) -> [LinkGroupStat] {
+        [LinkGroupStat(tag: "direct", mode: "balance", links: [.init(tag: "link-en0", healthy: true, backup: false, upload: up, download: down, active: 1)])]
+    }
+
+    @Test func linkRatesComeFromCounterDifferences() {
+        let rates = LinkRates.rates(previous: group(100, 1000), current: group(300, 5000), interval: 2)
+        #expect(rates["link-en0"] == .init(upload: 100, download: 2000))
+        #expect(LinkRates.rates(previous: group(500, 500), current: group(10, 10), interval: 1)["link-en0"] == .init(upload: 0, download: 0), "a reset is not negative")
+        #expect(LinkRates.rates(previous: [], current: group(10, 10), interval: 1)["link-en0"] == .init(upload: 0, download: 0), "first sample")
+        #expect(LinkRates.rates(previous: group(0, 0), current: group(1, 1), interval: 0).isEmpty)
+        #expect(LinkGroupStat.decode(#"[{"tag":"direct","mode":"failover","links":[{"tag":"link-en0","healthy":false,"backup":true,"upload":1,"download":2,"active":0}]}]"#).first?.links.first?.backup == true)
+        #expect(LinkGroupStat.decode("garbage").isEmpty)
     }
 }

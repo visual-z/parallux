@@ -36,4 +36,40 @@ type linkHealth struct {
 // probeLoop probes `dialer` until ctx ends. One probe at a time, so a slow
 // link never accumulates goroutines.
 func probeLoop(ctx context.Context, dialer N.Dialer, targets []M.Socksaddr, health *linkHealth) {
+	ticker := time.NewTicker(probeInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		if probeOnce(ctx, dialer, targets) {
+			health.successes++
+			if health.successes >= recoverAfter {
+				health.healthy.Store(true)
+			}
+		} else {
+			health.successes = 0
+			health.healthy.Store(false)
+		}
+	}
+}
+
+// probeOnce succeeds when any target accepts a TCP connection over the link.
+// The targets share one probeTimeout so a dead link costs at most one tick.
+func probeOnce(ctx context.Context, dialer N.Dialer, targets []M.Socksaddr) bool {
+	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	for _, target := range targets {
+		conn, err := dialer.DialContext(ctx, N.NetworkTCP, target)
+		if err == nil {
+			conn.Close()
+			return true
+		}
+		if ctx.Err() != nil {
+			return false
+		}
+	}
+	return false
 }

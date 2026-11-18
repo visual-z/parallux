@@ -9,5 +9,28 @@ package aggregate
 //     failover.
 //   - bond: the same as failover; the bond outbound is tried before all of them.
 func linkOrder(mode string, healthy, backup []bool, cursor uint64) []int {
-	return nil
+	n := len(healthy)
+	order := make([]int, 0, n)
+	var primaries []int
+	for i := range n {
+		if healthy[i] && !backup[i] {
+			primaries = append(primaries, i)
+		}
+	}
+	if mode == ModeBalance && len(primaries) > 1 {
+		start := int(cursor % uint64(len(primaries)))
+		primaries = append(primaries[start:], primaries[:start]...)
+	}
+	order = append(order, primaries...)
+	for i := range n {
+		if healthy[i] && backup[i] {
+			order = append(order, i)
+		}
+	}
+	for i := range n {
+		if !healthy[i] {
+			order = append(order, i)
+		}
+	}
+	return order
 }

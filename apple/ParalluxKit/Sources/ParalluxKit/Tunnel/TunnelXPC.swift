@@ -11,6 +11,9 @@ import Foundation
     /// Runs LinkProbe on every candidate interface from inside the extension
     /// and replies with a JSON array of LinkProbeResult.
     func probeLinks(reply: @escaping (Data?, NSError?) -> Void)
+    /// Replies with core/pxbridge LinkStatsJSON: per-link counters of every
+    /// running aggregate outbound.
+    func linkStats(reply: @escaping (String) -> Void)
 }
 
 public enum TunnelXPC {
@@ -55,6 +58,21 @@ public enum TunnelXPC {
             throw DialError.timedOut
         }
         return try JSONDecoder().decode([LinkProbeResult].self, from: result.get())
+    }
+
+    /// Reads per-link counters from the extension; "[]" when it does not answer in time.
+    public static func linkStats(over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout) -> String {
+        connection.remoteObjectInterface = makeInterface()
+        connection.resume()
+        let done = DispatchSemaphore(value: 0)
+        let box = ReplyBox()
+        let proxy = connection.remoteObjectProxyWithErrorHandler { _ in done.signal() } as? TunnelXPCProtocol
+        proxy?.linkStats { json in
+            box.set(.success(Data(json.utf8)))
+            done.signal()
+        }
+        guard proxy != nil, done.wait(timeout: .now() + timeout) == .success, case let .success(data)? = box.get() else { return "[]" }
+        return String(decoding: data, as: UTF8.self)
     }
 
     /// Runs the probes concurrently; used by the extension's XPC handler.
