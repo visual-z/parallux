@@ -1,0 +1,90 @@
+# XcodeGen spec. The .xcodeproj is generated (scripts/gen-xcodeproj.sh) and not
+# committed; edit this file, never the project.
+name: Parallux
+options:
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+packages:
+  ParalluxKit:
+    path: ParalluxKit
+targets:
+  Parallux:
+    type: application
+    platform: macOS
+    sources: [Parallux]
+    entitlements:
+      path: Parallux/Parallux.entitlements
+    info:
+      path: Parallux/Info.plist
+      properties:
+        CFBundleDisplayName: Parallux
+        CFBundleShortVersionString: "0.0.1"
+        CFBundleVersion: "1"
+        LSApplicationCategoryType: public.app-category.utilities
+        ParalluxAppGroup: $(PARALLUX_APP_GROUP)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID)
+        ENABLE_HARDENED_RUNTIME: YES
+    dependencies:
+      - package: ParalluxKit
+      - framework: Frameworks/Libbox.xcframework
+        embed: false
+      - sdk: libresolv.tbd
+      # Libbox's cronet (naive outbound) and usbip pull these in; found by
+      # linking, see scripts/build-core.sh for the tag list behind them.
+      - sdk: libbsm.tbd
+      - sdk: AppKit.framework
+      - sdk: ApplicationServices.framework
+      - sdk: CoreText.framework
+      - sdk: IOUSBHost.framework
+      - sdk: SystemConfiguration.framework
+      - sdk: Network.framework
+      - target: PacketTunnel
+        embed: true
+  PacketTunnel:
+    type: system-extension
+    platform: macOS
+    sources: [PacketTunnel]
+    entitlements:
+      path: PacketTunnel/PacketTunnel.entitlements
+    info:
+      path: PacketTunnel/Info.plist
+      properties:
+        CFBundleDisplayName: Parallux Tunnel
+        CFBundleShortVersionString: "0.0.1"
+        CFBundleVersion: "1"
+        ParalluxAppGroup: $(PARALLUX_APP_GROUP)
+        NetworkExtension:
+          NEMachServiceName: $(PARALLUX_APP_GROUP).tunnel
+          NEProviderClasses:
+            com.apple.networkextension.packet-tunnel: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID).tunnel
+        PRODUCT_NAME: $(BUNDLE_ID).tunnel
+        PRODUCT_MODULE_NAME: PacketTunnel
+        ENABLE_HARDENED_RUNTIME: YES
+    dependencies:
+      - package: ParalluxKit
+      - framework: Frameworks/Libbox.xcframework
+        embed: false
+      - sdk: libresolv.tbd
+      # Libbox's cronet (naive outbound) and usbip pull these in; found by
+      # linking, see scripts/build-core.sh for the tag list behind them.
+      - sdk: libbsm.tbd
+      - sdk: AppKit.framework
+      - sdk: ApplicationServices.framework
+      - sdk: CoreText.framework
+      - sdk: IOUSBHost.framework
+      - sdk: SystemConfiguration.framework
+      - sdk: Network.framework
+schemes:
+  Parallux:
+    build:
+      targets:
+        Parallux: all

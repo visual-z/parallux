@@ -1,0 +1,11 @@
+// Shared build settings. Signing identity and team live in Local.xcconfig,
+// which is not committed (copy Local.xcconfig.example). Without it the project
+// still builds with CODE_SIGNING_ALLOWED=NO, which is what the gate does.
+BUNDLE_ID = io.github.visual-z.parallux
+MACOSX_DEPLOYMENT_TARGET = 26.0
+SWIFT_VERSION = 6.0
+// App Group shared by the app and the system extension. On macOS it must carry
+// the team prefix; NEMachServiceName lives inside it.
+PARALLUX_APP_GROUP = $(TeamIdentifierPrefix)$(BUNDLE_ID)
+
+#include? "Local.xcconfig"

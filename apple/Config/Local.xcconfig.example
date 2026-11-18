@@ -1,0 +1,4 @@
+// Copy to Local.xcconfig (ignored by git) and fill in. Required for a signed
+// build that can install the system extension.
+DEVELOPMENT_TEAM = ABCDE12345
+CODE_SIGN_STYLE = Automatic
