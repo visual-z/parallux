@@ -39,6 +39,12 @@ import Testing
         #expect(AppGroup.resolve("$(TeamIdentifierPrefix)io.github.visual-z.parallux") == nil)
     }
 
+    @Test func aGroupWithoutATeamPrefixMeansNoGroup() {
+        // Unsigned builds expand $(TeamIdentifierPrefix) to "", leaving the
+        // bare bundle id, which is not a usable App Group on macOS.
+        #expect(AppGroup.resolve("io.github.visual-z.parallux") == nil)
+    }
+
     @Test func aResolvedGroupIsReturnedVerbatim() {
         #expect(AppGroup.resolve("ABCDE12345.io.github.visual-z.parallux") == "ABCDE12345.io.github.visual-z.parallux")
     }
