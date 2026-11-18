@@ -11,6 +11,8 @@
 | SFM 768b3de `Library/Network/ExtensionProvider.swift` | GPLv3（同上） | `apple/PacketTunnel/PacketTunnelProvider.swift` | 改写：启动顺序与参数持久化 |
 | SFM 768b3de `Library/Network/ExtensionPlatformInterface.swift` | GPLv3（同上） | `apple/PacketTunnel/ExtensionPlatform.swift` | 改写：openTun 路由换算、默认网口监视，按 libbox 1.14.4 的协议裁剪 |
 | SFM 768b3de `Library/Network/SystemExtension.swift`、`ExtensionProfile.swift` | GPLv3（同上） | `apple/Parallux/Tunnel/SystemExtensionInstaller.swift`、`TunnelController.swift` | 改写：回调转 async，不阻塞主线程 |
+| SFM 768b3de `WidgetExtension/ServiceToggleControl.swift`、`WidgetTunnelControl.swift` | GPLv3（同上） | `apple/ParalluxWidget/ParalluxWidgetBundle.swift` | 改写：控件结构与「在扩展里直接启停 NETunnelProviderManager」的做法；去掉 wasOnDemandEnabled 记账，加状态小组件 |
+| SFM 768b3de `Library/Network/ExtensionPlatformInterface.swift` `send` / `cancelNotification`、`UserServiceXPC.swift` | GPLv3（同上） | `apple/PacketTunnel/ExtensionPlatform.swift`、`apple/Parallux/CoreNotificationForwarder.swift` | 借鉴做法：系统扩展不直接发通知而交给用户会话；改为有上限的队列 + App 经 XPC 拉取，不建反向 endpoint |
 | sing-box v1.14.4 `cmd/internal/build_libbox` | GPLv3 | `scripts/build-core.sh` | 照搬构建标签与链接参数 |
 | `sagernet/gomobile` v0.1.12 | BSD-3-Clause | `scripts/build-core.sh` | 构建工具 |
 | `sing-box-mygo`（同一作者的旧 Parallux）`internal/redact` | GPLv3 | `core/internal/redact` | 原样拷贝（2026-11-18） |

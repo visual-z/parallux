@@ -53,6 +53,10 @@ final class CommandXPCService: NSObject, NSXPCListenerDelegate, @unchecked Senda
             reply(PxbridgeLinkStatsJSON())
         }
 
+        func drainNotifications(reply: @escaping (Data) -> Void) {
+            reply(NotificationQueue.encode(ExtensionPlatform.notifications.drain()))
+        }
+
         func probeLinks(reply: @escaping (Data?, NSError?) -> Void) {
             let results = TunnelXPC.runProbes()
             for result in results {

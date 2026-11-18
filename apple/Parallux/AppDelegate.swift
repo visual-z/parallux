@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         popover.behavior = .transient
         app.start()
+        SystemServices.start(app)
         popover.contentViewController = NSHostingController(rootView: PanelView(
             app: app,
             openMainWindow: { [weak self] in self?.showMainWindow() },
@@ -37,6 +38,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusItem = item
         renderStatusItem()
+    }
+
+    /// parallux:// and sing-box:// links (URLRoute).
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls { URLRouter.open(url, app: app) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

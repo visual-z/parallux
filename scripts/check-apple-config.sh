@@ -65,6 +65,21 @@ case "$helper_mach" in
   *) fail "Config/Base.xcconfig: PARALLUX_HELPER_MACH_SERVICE '$helper_mach' must start with \$(PARALLUX_APP_GROUP).helper. and contain \$(MARKETING_VERSION) and \$(CURRENT_PROJECT_VERSION)" ;;
 esac
 
+# Widget and Control Center toggle (docs/tasks/feat-system-integration.md).
+# Without the extension point the system never loads it; without the App
+# Group it shows no state; without the NE entitlement its toggle cannot
+# start the VPN configuration.
+widget=ParalluxWidget/Info.plist
+widget_ent=ParalluxWidget/ParalluxWidget.entitlements
+has "$widget" NSExtension.NSExtensionPointIdentifier com.apple.widgetkit-extension
+has "$widget" ParalluxAppGroup '$(PARALLUX_APP_GROUP)'
+has "$widget_ent" "com\.apple\.security\.app-sandbox" true
+has "$widget_ent" "com\.apple\.security\.application-groups.0" '$(PARALLUX_APP_GROUP)'
+has "$widget_ent" "com\.apple\.developer\.networking\.networkextension.0" '$(PARALLUX_NE_PROVIDER)'
+# parallux:// and SFM's sing-box:// import links.
+has Parallux/Info.plist CFBundleURLTypes.0.CFBundleURLSchemes.0 parallux
+has Parallux/Info.plist CFBundleURLTypes.1.CFBundleURLSchemes.0 sing-box
+
 if [ "$failures" -gt 0 ]; then
   echo "check-apple-config: $failures problem(s)" >&2
   exit 1

@@ -25,6 +25,7 @@ struct SettingsView: View {
         case .onDemand: OnDemandSettings()
         case .core: CoreSettings()
         case .remoteControl: RemoteControlSettings()
+        case .about: AboutSection()
         }
     }
 }

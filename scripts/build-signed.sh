@@ -35,6 +35,8 @@ sysext="$app/Contents/Library/SystemExtensions/io.github.visual-z.parallux.tunne
 helper_label="io.github.visual-z.parallux.helper"
 helper="$app/Contents/Library/HelperTools/$helper_label"
 helper_plist="$app/Contents/Library/LaunchDaemons/$helper_label.plist"
+widget="$app/Contents/PlugIns/ParalluxWidget.appex"
+[ -d "$widget" ] || { echo "FAIL missing $widget" >&2; exit 1; }
 # SMAppService.daemon needs the launchd plist and the program it names.
 for path in "$helper" "$helper_plist"; do
   [ -f "$path" ] || { echo "FAIL missing $path" >&2; exit 1; }
@@ -47,7 +49,7 @@ fi
 # signature would build fine and then fail to activate.
 # Capture first: with pipefail, `codesign | grep -q` fails at random when grep
 # exits on its match and codesign then dies of SIGPIPE.
-for bundle in "$app" "$sysext" "$helper"; do
+for bundle in "$app" "$sysext" "$helper" "$widget"; do
   details="$(codesign -dv "$bundle" 2>&1 || true)"
   if ! grep -q '^TeamIdentifier=[A-Z0-9]\{10\}$' <<<"$details"; then
     echo "FAIL $bundle is not signed with a team identity" >&2
@@ -56,7 +58,7 @@ for bundle in "$app" "$sysext" "$helper"; do
 done
 codesign --verify --deep --strict "$app"
 # Both bundles must carry the stamped number, and the Mach service with it.
-for plist in "$app/Contents/Info.plist" "$sysext/Contents/Info.plist"; do
+for plist in "$app/Contents/Info.plist" "$sysext/Contents/Info.plist" "$widget/Contents/Info.plist"; do
   if [ "$(plutil -extract CFBundleVersion raw -o - "$plist")" != "$build_number" ]; then
     echo "FAIL $plist does not carry build $build_number" >&2
     exit 1

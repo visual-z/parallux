@@ -27,6 +27,10 @@ private final class SocketServer: NSObject, NSXPCListenerDelegate, TunnelXPCProt
         reply(#"[{"tag":"direct","mode":"balance","links":[]}]"#)
     }
 
+    func drainNotifications(reply: @escaping (Data) -> Void) {
+        reply(NotificationQueue.encode([CoreNotification(identifier: "core-1", title: "t")]))
+    }
+
     func probeLinks(reply: @escaping (Data?, NSError?) -> Void) {
         let result = TunnelXPC.runProbes(interfaces: ["nope0"])
         reply(try? JSONEncoder().encode(result), nil)
@@ -87,6 +91,13 @@ private func connect(to server: SocketServer) -> (NSXPCListener, NSXPCConnection
         let results = try TunnelXPC.probeLinks(over: connection, timeout: 3)
         #expect(results.map(\.interface) == ["nope0"])
         #expect(results.first?.errno == ENXIO)
+    }
+
+    @Test func coreNotificationsComeBackOverXPC() {
+        let server = SocketServer(served: nil)
+        let (listener, connection) = connect(to: server)
+        defer { connection.invalidate(); listener.invalidate() }
+        #expect(TunnelXPC.drainNotifications(over: connection, timeout: 2).map(\.identifier) == ["core-1"])
     }
 
     @Test func linkStatsComeBackOverXPC() {
