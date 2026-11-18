@@ -19,3 +19,8 @@
 | `WuSiYu/singbox-multipath` | 待确认（GitHub 未识别许可证） | 计划用于 M4 叠加出站 | 尚未引用；引用前确认许可证 |
 | `WuSiYu/singbox-multipath` d99530a `protocol/multipath`（含 `stream/`，连同包内测试） | GPLv3，附加条款：衍生品不得使用其名称或暗示关联（上游 `LICENSE` 末段，2026-11-19 确认） | `core/bond/`、`core/bond/stream/` | 原样移植：只改包名（`multipath`→`bond`）、import 路径、把 `option.Multipath*Options` 改为包内类型、`C.TypeMultipath` 改为包内 `Type`，gofmt 调整 import 顺序；未移植上游 `test/` 集成测试目录（依赖其整套 sing-box 测试夹具） |
 | `WuSiYu/singbox-multipath` d99530a `option/multipath.go`、`option/multipath_test.go` | 同上 | `core/bond/options.go`、`core/bond/options_test.go` | 移植：包名改为 `bond`，`ListenOptions` 改引 sing-box `option.ListenOptions` |
+| SFM 768b3de `HelperService/RootHelperService.swift`、`HelperService/WorkingDirectoryManager.swift`、`HelperService/main.swift` | GPLv3（附加条款同 SFM 行） | `apple/ParalluxHelper/HelperService.swift`、`main.swift` | 改写：同团队签名要求、工作目录大小与清空、版本；只保留按进程查找、工作目录、崩溃报告三项，清空要求确认口令 |
+| SFM 768b3de `HelperService/LaunchDaemons/*.plist` | GPLv3（同上） | `apple/Config/helper-launchd.plist` | 改写：键相同（Label、BundleProgram、MachServices、AssociatedBundleIdentifiers、RunAtLoad、KeepAlive），值改为构建变量 |
+| SFM 768b3de `Library/Network/HelperServiceManager.swift` | GPLv3（同上） | `apple/Parallux/Helper/HelperServiceManager.swift` | 改写：注册、注销、状态与打开登录项设置；改为 @Observable |
+| SFM 768b3de `Library/Network/RootHelperXPC.swift` | GPLv3（同上） | `apple/ParalluxKit/Sources/ParalluxKit/Helper/HelperXPC.swift` | 改写：接口只保留本卡的方法，回复改为 JSON，每次调用有超时上限 |
+| sing-box v1.14.4 `common/process/searcher_darwin_shared.go` `matchDarwinConnectionEntry` | GPLv3 | `apple/ParalluxKit/Sources/ParalluxKit/Helper/SocketOwnerMatcher.swift` | 用 Swift 重写同一组匹配规则（精确、本地回退、通配回退、去掉 IPv4 映射） |

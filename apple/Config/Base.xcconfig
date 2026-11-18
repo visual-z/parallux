@@ -20,6 +20,13 @@ PARALLUX_APP_GROUP = $(TeamIdentifierPrefix)$(BUNDLE_ID)
 // (SystemExtensionInstaller), so without it a rebuilt extension never loads.
 PARALLUX_TUNNEL_MACH_SERVICE = $(PARALLUX_APP_GROUP).tunnel.$(MARKETING_VERSION).$(CURRENT_PROJECT_VERSION)
 
+// Root helper (PLAN decision 12). The label is also the launchd plist's file
+// name (SMAppService.daemon(plistName:)) and the tool's file name. Its Mach
+// service is versioned for the same reason as the tunnel's: a replaced
+// daemon's old job can keep the endpoint until launchd reaps it.
+PARALLUX_HELPER_LABEL = $(BUNDLE_ID).helper
+PARALLUX_HELPER_MACH_SERVICE = $(PARALLUX_APP_GROUP).helper.$(MARKETING_VERSION).$(CURRENT_PROJECT_VERSION)
+
 // Network Extension entitlement value. Developer ID builds (and SFM) use the
 // -systemextension form; Apple Development builds need plain
 // packet-tunnel-provider. Override in Local.xcconfig for development signing.

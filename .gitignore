@@ -18,3 +18,4 @@ apple/PacketTunnel/Info.plist
 apple/PacketTunnel/PacketTunnel.entitlements
 # agent worktrees (Claude Code isolation); each is its own checkout
 .claude/worktrees/
+apple/ParalluxHelper/Info.plist

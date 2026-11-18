@@ -234,8 +234,20 @@ final class ExtensionPlatform: NSObject, LibboxPlatformInterfaceProtocol, Libbox
 
     // MARK: not supported inside the extension (helper service, PLAN decision 12)
 
-    func findConnectionOwner(_: Int32, sourceAddress _: String?, sourcePort _: Int32, destinationAddress _: String?, destinationPort _: Int32) throws -> LibboxConnectionOwner {
-        throw ExtensionError("process lookup needs the helper service")
+    /// Asks the root helper (feat-helper-service); bounded by
+    /// HelperXPC.ownerLookupTimeout because sing-box waits on this while it
+    /// sets up the connection. Any failure reads as "process unknown".
+    func findConnectionOwner(_ ipProtocol: Int32, sourceAddress: String?, sourcePort: Int32, destinationAddress: String?, destinationPort: Int32) throws -> LibboxConnectionOwner {
+        guard let client = HelperMachService.client(), let sourceAddress else {
+            throw ExtensionError("process lookup needs the helper service")
+        }
+        let owner = try client.findConnectionOwner(proto: ipProtocol, sourceAddress: sourceAddress, sourcePort: sourcePort,
+                                                   destinationAddress: destinationAddress ?? "", destinationPort: destinationPort)
+        let result = LibboxConnectionOwner()
+        result.userId = Int32(bitPattern: owner.userID)
+        result.userName = owner.userName
+        result.processPath = owner.processPath
+        return result
     }
 
     func readWIFIState() -> LibboxWIFIState? { nil }

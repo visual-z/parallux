@@ -32,11 +32,22 @@ if ! xcodebuild -project apple/Parallux.xcodeproj -scheme Parallux -configuratio
 fi
 app=.build/xcode-signed/Build/Products/Debug/Parallux.app
 sysext="$app/Contents/Library/SystemExtensions/io.github.visual-z.parallux.tunnel.systemextension"
+helper_label="io.github.visual-z.parallux.helper"
+helper="$app/Contents/Library/HelperTools/$helper_label"
+helper_plist="$app/Contents/Library/LaunchDaemons/$helper_label.plist"
+# SMAppService.daemon needs the launchd plist and the program it names.
+for path in "$helper" "$helper_plist"; do
+  [ -f "$path" ] || { echo "FAIL missing $path" >&2; exit 1; }
+done
+if [ "$(plutil -extract BundleProgram raw -o - "$helper_plist")" != "Contents/Library/HelperTools/$helper_label" ]; then
+  echo "FAIL $helper_plist BundleProgram does not point at the embedded helper" >&2
+  exit 1
+fi
 # A signed build must carry the team's identity on both bundles; an ad-hoc
 # signature would build fine and then fail to activate.
 # Capture first: with pipefail, `codesign | grep -q` fails at random when grep
 # exits on its match and codesign then dies of SIGPIPE.
-for bundle in "$app" "$sysext"; do
+for bundle in "$app" "$sysext" "$helper"; do
   details="$(codesign -dv "$bundle" 2>&1 || true)"
   if ! grep -q '^TeamIdentifier=[A-Z0-9]\{10\}$' <<<"$details"; then
     echo "FAIL $bundle is not signed with a team identity" >&2
@@ -53,6 +64,23 @@ for plist in "$app/Contents/Info.plist" "$sysext/Contents/Info.plist"; do
 done
 mach="$(plutil -extract NetworkExtension.NEMachServiceName raw -o - "$sysext/Contents/Info.plist")"
 case "$mach" in *".$build_number") ;; *) echo "FAIL Mach service $mach does not end in .$build_number" >&2; exit 1 ;; esac
+# The helper's Info.plist is linked into its binary; read it back from there.
+helper_info="$(mktemp)"
+trap '/bin/rm -f "$helper_info"' EXIT
+segedit "$helper" -extract __TEXT __info_plist "$helper_info"
+if [ "$(plutil -extract CFBundleVersion raw -o - "$helper_info")" != "$build_number" ]; then
+  echo "FAIL $helper does not carry build $build_number" >&2
+  exit 1
+fi
+helper_mach="$(plutil -extract ParalluxHelperMachService raw -o - "$helper_info")"
+case "$helper_mach" in *".$build_number") ;; *) echo "FAIL helper Mach service $helper_mach does not end in .$build_number" >&2; exit 1 ;; esac
+# plutil key paths split on dots, and the service name is dotted; compare the
+# dictionary's keys instead.
+services="$(plutil -extract MachServices xml1 -o - "$helper_plist")"
+if ! grep -qxF "	<key>$helper_mach</key>" <<<"$services"; then
+  echo "FAIL $helper_plist does not declare $helper_mach" >&2
+  exit 1
+fi
 echo "signed $app (build $build_number, $mach)"
 if [ "${1:-}" = "--install" ]; then
   osascript -e 'tell application "Parallux" to quit' >/dev/null 2>&1 || true
