@@ -29,16 +29,44 @@ struct OverviewView: View {
                 .frame(maxWidth: .infinity)
 
                 HStack(alignment: .top, spacing: 12) {
-                    TrafficCard(session: session)
-                    RouteCard(app: app)
-                    ProfileCard(app: app)
+                    ForEach(app.settings.value.dashboard.visible) { card in
+                        switch card {
+                        case .traffic: TrafficCard(session: session)
+                        case .routeMode: RouteCard(app: app)
+                        case .profile: ProfileCard(app: app)
+                        }
+                    }
                 }
+                .contextMenu { DashboardMenu(app: app) }
             }
             .padding(20)
         }
         .navigationSubtitle(app.statusLine)
         .onAppear { session.retainConnections() }
         .onDisappear { session.releaseConnections() }
+    }
+}
+
+/// Right-click on the cards: show or hide each, move, reset (SFM #34).
+private struct DashboardMenu: View {
+    let app: AppModel
+    var body: some View {
+        ForEach(DashboardCard.allCases) { card in
+            Toggle(card.title, isOn: Binding(
+                get: { !app.settings.value.dashboard.hidden.contains(card) },
+                set: { show in
+                    if show { app.settings.value.dashboard.hidden.remove(card) } else { app.settings.value.dashboard.hidden.insert(card) }
+                }
+            ))
+        }
+        Divider()
+        ForEach(Array(app.settings.value.dashboard.order.enumerated()), id: \.element) { index, card in
+            if index > 0 {
+                Button("把「\(card.title)」左移") { app.settings.value.dashboard.move(fromOffsets: [index], toOffset: index - 1) }
+            }
+        }
+        Divider()
+        Button("恢复默认卡片") { app.settings.value.dashboard.reset() }
     }
 }
 

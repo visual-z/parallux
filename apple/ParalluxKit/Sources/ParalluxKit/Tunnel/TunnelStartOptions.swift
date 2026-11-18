@@ -36,7 +36,7 @@ public struct TunnelStartOptions: Codable, Equatable, Sendable {
         systemProxyEnabled = try c.decodeIfPresent(Bool.self, forKey: .systemProxyEnabled) ?? true
         excludeDefaultRoute = try c.decodeIfPresent(Bool.self, forKey: .excludeDefaultRoute) ?? false
         autoRouteUseSubRangesByDefault = try c.decodeIfPresent(Bool.self, forKey: .autoRouteUseSubRangesByDefault) ?? false
-        memoryLimitMB = 0
+        memoryLimitMB = try c.decodeIfPresent(Int.self, forKey: .memoryLimitMB) ?? 0
     }
 
     /// Key under which the encoded options sit in startVPNTunnel(options:).

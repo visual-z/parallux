@@ -28,6 +28,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var notifyLinkChanges = true
     /// SFM #76: stop showing the configuration's deprecation notes.
     public var hideDeprecatedNotes = false
+    public var dashboard = DashboardCards()
+    /// SFM #105; 0 = off.
+    public var memoryLimitMB = 0
 
     public init() {}
 
@@ -54,6 +57,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         options.systemProxyEnabled = tunnel.systemProxyEnabled
         options.excludeDefaultRoute = tunnel.excludeDefaultRoute
         options.autoRouteUseSubRangesByDefault = tunnel.autoRouteUseSubRangesByDefault
+        options.memoryLimitMB = max(0, memoryLimitMB)
         return options
     }
 
@@ -69,6 +73,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         onDemandRules = try container.decodeIfPresent([OnDemandRuleModel].self, forKey: .onDemandRules) ?? defaults.onDemandRules
         notifyLinkChanges = try container.decodeIfPresent(Bool.self, forKey: .notifyLinkChanges) ?? defaults.notifyLinkChanges
         hideDeprecatedNotes = try container.decodeIfPresent(Bool.self, forKey: .hideDeprecatedNotes) ?? defaults.hideDeprecatedNotes
+        dashboard = try container.decodeIfPresent(DashboardCards.self, forKey: .dashboard) ?? defaults.dashboard
+        memoryLimitMB = try container.decodeIfPresent(Int.self, forKey: .memoryLimitMB) ?? defaults.memoryLimitMB
     }
 }
 

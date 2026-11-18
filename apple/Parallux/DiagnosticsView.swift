@@ -30,6 +30,8 @@ struct DiagnosticsView: View {
         Form {
             speedSection
             toolsSection
+            EndpointsSection()
+            coreSection
             Section {
                 Text("三组结果一起看：App 内检测在隧道关着时跑，作为对照；扩展内与 sing-box 两组在隧道开着时跑。拷贝全部结果贴回研究卡。")
                     .font(.callout).foregroundStyle(.secondary)
@@ -126,6 +128,21 @@ struct DiagnosticsView: View {
                 LabeledContent("延迟", value: "\(s.latencyMs) ms")
                 LabeledContent("NAT 映射 / 过滤", value: "\(s.mapping) / \(s.filtering)")
             }
+        }
+    }
+
+    /// SFM #105: the extension's memory limit (next connection).
+    @ViewBuilder private var coreSection: some View {
+        @Bindable var settings = app.settings
+        Section("内核") {
+            Toggle("限制网络扩展内存", isOn: Binding(
+                get: { settings.value.memoryLimitMB > 0 },
+                set: { settings.value.memoryLimitMB = $0 ? 512 : 0 }
+            ))
+            if settings.value.memoryLimitMB > 0 {
+                Stepper("上限 \(settings.value.memoryLimitMB) MB", value: $settings.value.memoryLimitMB, in: 128...4096, step: 128)
+            }
+            Text("超过上限时内核会关闭部分连接以回收内存；下次连接生效。").font(.caption).foregroundStyle(.secondary)
         }
     }
 

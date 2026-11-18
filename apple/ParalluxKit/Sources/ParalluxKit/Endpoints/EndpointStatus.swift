@@ -33,5 +33,21 @@ public enum EndpointSummary {
         public var isError: Bool
     }
 
-    public static func line(_ status: EndpointStatus) -> Line { Line(text: "", needsUser: false, isError: false) }
+    public static func line(_ status: EndpointStatus) -> Line {
+        if !status.error.isEmpty { return Line(text: "错误：\(status.error)", needsUser: false, isError: true) }
+        if status.kind == .tailscale, !status.authURL.isEmpty {
+            return Line(text: "需要登录：\(status.authURL)", needsUser: true, isError: false)
+        }
+        if status.challengeID != nil { return Line(text: "需要认证", needsUser: true, isError: false) }
+        let state = status.state.lowercased()
+        let text: String
+        switch state {
+        case "running", "connected", "established": text = "已连接"
+        case "connecting", "starting", "reconnecting", "authenticating": text = "连接中"
+        case "stopped", "disconnected", "nostate": text = "未连接"
+        case "needslogin": text = "需要登录"
+        default: text = status.stateText.isEmpty ? status.state : status.stateText
+        }
+        return Line(text: text, needsUser: state == "needslogin", isError: false)
+    }
 }

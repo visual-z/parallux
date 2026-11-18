@@ -54,6 +54,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         // Why 3000: SFM's value; the log ring buffer is bounded by line count.
         setup.logMaxLines = 3000
         setup.crashReportSource = "NetworkExtension"
+        // SFM #105: off unless the user set a limit (SFM's macOS default).
+        if resolved.memoryLimitMB > 0 {
+            setup.oomKillerEnabled = true
+            setup.oomMemoryLimit = Int64(resolved.memoryLimitMB) * 1024 * 1024
+            setup.oomKillerDisabled = false
+            log.info("OOM limit \(resolved.memoryLimitMB) MB")
+        }
         setup.appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
         setup.appMarketingVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         var error: NSError?
