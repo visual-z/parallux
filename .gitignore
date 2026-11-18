@@ -1,0 +1,13 @@
+# keel: logs and private caches never enter the repository
+.keel/
+.DS_Store
+# build outputs (scripts/build-core.sh, scripts/build-apple.sh)
+.build/
+apple/Frameworks/
+apple/ParalluxKit/.build/
+apple/ParalluxKit/.swiftpm/
+# generated from apple/project.yml by scripts/gen-xcodeproj.sh
+apple/*.xcodeproj/
+# per-developer signing (copy apple/Config/Local.xcconfig.example)
+apple/Config/Local.xcconfig
+xcuserdata/

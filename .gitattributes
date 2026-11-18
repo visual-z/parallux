@@ -1,0 +1,3 @@
+# A progress log only ever gains entries at the top; when two branches both
+# add one, keep both instead of conflicting.
+docs/PROGRESS.md merge=union
