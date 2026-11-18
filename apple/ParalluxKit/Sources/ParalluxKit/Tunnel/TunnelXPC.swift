@@ -8,6 +8,9 @@ import Foundation
 @objc public protocol TunnelXPCProtocol {
     /// Replies with a FileHandle connected to libbox's command server.
     func connectToCommandServer(reply: @escaping (FileHandle?, NSError?) -> Void)
+    /// Runs LinkProbe on every candidate interface from inside the extension
+    /// and replies with a JSON array of LinkProbeResult.
+    func probeLinks(reply: @escaping (Data?, NSError?) -> Void)
 }
 
 public enum TunnelXPC {
@@ -23,6 +26,59 @@ public enum TunnelXPC {
         case timedOut
         case noHandle
         case remote(String)
+    }
+
+    /// Bound for a whole probeLinks round: probes run in parallel, each
+    /// capped at LinkProbe.timeout, plus slack for XPC. Derived, not measured.
+    public static let probeTimeout: TimeInterval = LinkProbe.timeout + 2
+
+    /// Asks the extension to probe every link; see TunnelXPCProtocol.probeLinks.
+    public static func probeLinks(over connection: NSXPCConnection, timeout: TimeInterval = probeTimeout) throws -> [LinkProbeResult] {
+        connection.remoteObjectInterface = makeInterface()
+        connection.resume()
+        let done = DispatchSemaphore(value: 0)
+        let box = ReplyBox()
+        let proxy = connection.remoteObjectProxyWithErrorHandler { error in
+            box.set(.failure(.remote(error.localizedDescription)))
+            done.signal()
+        } as? TunnelXPCProtocol
+        guard let proxy else { throw DialError.remote("the connection does not export TunnelXPCProtocol") }
+        proxy.probeLinks { data, error in
+            if let error {
+                box.set(.failure(.remote(error.localizedDescription)))
+            } else {
+                box.set(.success(data ?? Data()))
+            }
+            done.signal()
+        }
+        guard done.wait(timeout: .now() + timeout) == .success, let result = box.get() else {
+            throw DialError.timedOut
+        }
+        return try JSONDecoder().decode([LinkProbeResult].self, from: result.get())
+    }
+
+    /// Runs the probes concurrently; used by the extension's XPC handler.
+    public static func runProbes(interfaces: [String] = LinkProbe.candidateInterfaces()) -> [LinkProbeResult] {
+        let results = ResultsBox(count: interfaces.count)
+        DispatchQueue.concurrentPerform(iterations: interfaces.count) { index in
+            results.set(index, LinkProbe.probe(interface: interfaces[index]))
+        }
+        return results.values
+    }
+
+    private final class ReplyBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: Result<Data, DialError>?
+        func set(_ new: Result<Data, DialError>) { lock.withLock { if value == nil { value = new } } }
+        func get() -> Result<Data, DialError>? { lock.withLock { value } }
+    }
+
+    private final class ResultsBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var slots: [LinkProbeResult?]
+        init(count: Int) { slots = Array(repeating: nil, count: count) }
+        func set(_ index: Int, _ value: LinkProbeResult) { lock.withLock { slots[index] = value } }
+        var values: [LinkProbeResult] { lock.withLock { slots.compactMap { $0 } } }
     }
 
     /// Whitelists FileHandle in the reply; NSXPC refuses classes it was not told about.

@@ -47,5 +47,17 @@ final class CommandXPCService: NSObject, NSXPCListenerDelegate, @unchecked Senda
                 ]))
             }
         }
+
+        func probeLinks(reply: @escaping (Data?, NSError?) -> Void) {
+            let results = TunnelXPC.runProbes()
+            for result in results {
+                log.info("probe \(result.interface, privacy: .public)#\(result.index) connected=\(result.connected) errno=\(result.errno ?? 0) call=\(result.failedCall ?? "-", privacy: .public) ms=\(result.millis) egress=\(result.egressIP ?? "-", privacy: .public)")
+            }
+            do {
+                reply(try JSONEncoder().encode(results), nil)
+            } catch {
+                reply(nil, error as NSError)
+            }
+        }
     }
 }

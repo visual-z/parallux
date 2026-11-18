@@ -27,8 +27,13 @@ struct MainWindow: View {
             .navigationSplitViewColumnWidth(min: 200, ideal: 220)
         } detail: {
             let item = selection ?? .overview
-            ContentUnavailableView(item.title, systemImage: item.symbol, description: Text("尚未实现"))
-                .navigationTitle(item.title)
+            Group {
+                switch item {
+                case .diagnostics: DiagnosticsView()
+                default: ContentUnavailableView(item.title, systemImage: item.symbol, description: Text("尚未实现"))
+                }
+            }
+            .navigationTitle(item.title)
         }
         .onAppear { onSceneActionsAvailable(SceneActions(openWindow: openWindow, openSettings: openSettings)) }
     }

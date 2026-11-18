@@ -8,13 +8,24 @@ final class CommandXPCDialer: NSObject, LibboxXPCDialerProtocol, @unchecked Send
     static let shared = CommandXPCDialer()
 
     func dialXPC(_ ret0_: UnsafeMutablePointer<Int32>?) throws {
+        let connection = try Self.connection()
+        defer { connection.invalidate() }
+        ret0_?.pointee = try TunnelXPC.dialCommandSocket(over: connection)
+    }
+
+    /// Probes every link from inside the extension (research-sysext-bind-interface).
+    static func probeLinks() throws -> [LinkProbeResult] {
+        let connection = try connection()
+        defer { connection.invalidate() }
+        return try TunnelXPC.probeLinks(over: connection)
+    }
+
+    private static func connection() throws -> NSXPCConnection {
         guard let service = MachService.name(in: .main) else {
             throw NSError(domain: "Parallux.XPC", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "未签名的构建没有 App Group，无法连接网络扩展",
             ])
         }
-        let connection = NSXPCConnection(machServiceName: service)
-        defer { connection.invalidate() }
-        ret0_?.pointee = try TunnelXPC.dialCommandSocket(over: connection)
+        return NSXPCConnection(machServiceName: service)
     }
 }

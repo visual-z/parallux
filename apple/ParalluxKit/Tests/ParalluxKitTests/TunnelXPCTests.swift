@@ -22,6 +22,11 @@ private final class SocketServer: NSObject, NSXPCListenerDelegate, TunnelXPCProt
     func connectToCommandServer(reply: @escaping (FileHandle?, NSError?) -> Void) {
         if replies { reply(served, nil) }
     }
+
+    func probeLinks(reply: @escaping (Data?, NSError?) -> Void) {
+        let result = TunnelXPC.runProbes(interfaces: ["nope0"])
+        reply(try? JSONEncoder().encode(result), nil)
+    }
 }
 
 private func connect(to server: SocketServer) -> (NSXPCListener, NSXPCConnection) {
@@ -69,6 +74,15 @@ private func connect(to server: SocketServer) -> (NSXPCListener, NSXPCConnection
         #expect(throws: TunnelXPC.DialError.noHandle) {
             try TunnelXPC.dialCommandSocket(over: connection, timeout: 2)
         }
+    }
+
+    @Test func probeResultsComeBackOverXPCIntact() throws {
+        let server = SocketServer(served: nil)
+        let (listener, connection) = connect(to: server)
+        defer { connection.invalidate(); listener.invalidate() }
+        let results = try TunnelXPC.probeLinks(over: connection, timeout: 3)
+        #expect(results.map(\.interface) == ["nope0"])
+        #expect(results.first?.errno == ENXIO)
     }
 
     @Test func connectingToAMissingSocketReportsTheCall() {
