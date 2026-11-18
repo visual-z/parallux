@@ -58,10 +58,14 @@ private struct AggregationSettings: View {
     var body: some View {
         @Bindable var settings = app.settings
         Form {
-            Picker("默认聚合方式", selection: $settings.value.defaultAggregationMode) {
+            Picker("聚合方式", selection: Binding(get: { app.linkSettings.value.mode }, set: { mode in Task { await app.setMode(mode) } })) {
                 ForEach(AggregationMode.allCases) { Text($0.title).tag($0) }
             }
-            Text("聚合在 M3（分流、主备）与 M4（叠加）接入；这里的选择届时生效。线路通知、按流量启用叠加等也随之提供。")
+            Toggle(isOn: $settings.value.notifyLinkChanges) {
+                Text("线路掉线时通知")
+                Text("线路变为不可用或恢复时发通知")
+            }
+            Text("线路的启用、排序与「仅备用」在主窗口「线路」页设置；叠加的聚合服务器在「聚合服务器」页。")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)

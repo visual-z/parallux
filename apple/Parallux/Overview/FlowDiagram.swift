@@ -97,21 +97,26 @@ struct FlowDiagram: View {
     }
 }
 
-/// Builds the diagram's columns from the live session.
+/// Builds the diagram's columns from the live session and per-link stats.
 @MainActor
 enum FlowModel {
-    static let linkColors: [Color] = [.cyan, .orange, .pink, .green]
-
-    static func links(_ app: AppModel) -> [FlowNode] {
-        guard let status = app.session.status, let link = app.defaultLink.link else { return [] }
-        let rate = Double(status.uplink + status.downlink)
-        return [FlowNode(name: link.kind, detail: RateFormat.bitsPerSecond(Int64(rate)), rate: rate, color: linkColors[0])]
-    }
-
-    static func exits(_ app: AppModel) -> [FlowNode] {
-        FlowSummary.exits(app.session.connections).map { exit in
-            FlowNode(name: exit.name, detail: RateFormat.bitsPerSecond(exit.rate), rate: Double(exit.rate),
-                     color: exit.name == FlowSummary.directName ? .gray : exit.name == FlowSummary.otherName ? .secondary : .green)
+    static func columns(_ app: AppModel) -> (links: [FlowNode], exits: [FlowNode]) {
+        guard let status = app.session.status else { return ([], []) }
+        let links = app.enabledLinks.isEmpty ? app.links.links.prefix(1).map { $0 } : app.enabledLinks
+        let columns = LinkFlow.columns(links: links, linkRates: app.linkStats.rates,
+                                       totalRate: status.uplink + status.downlink,
+                                       exits: FlowSummary.exits(app.session.connections))
+        let left = zip(links, columns.left).map { link, node in
+            FlowNode(name: node.title, detail: RateFormat.bitsPerSecond(node.rate), rate: Double(node.rate),
+                     color: LinkColors.color(for: link, in: app.links.links))
         }
+        let right = columns.right.map { node in
+            FlowNode(name: node.title, detail: RateFormat.bitsPerSecond(node.rate), rate: Double(node.rate),
+                     color: node.title == FlowSummary.directName ? .gray : node.title == FlowSummary.otherName ? .secondary : .green)
+        }
+        return (left, right)
     }
+
+    static func links(_ app: AppModel) -> [FlowNode] { columns(app).links }
+    static func exits(_ app: AppModel) -> [FlowNode] { columns(app).exits }
 }

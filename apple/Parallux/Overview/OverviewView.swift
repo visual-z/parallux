@@ -10,12 +10,13 @@ struct OverviewView: View {
         let session = app.session
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("宽度 = 实时速率。M3 接入多条线路后，左侧每条线路一股。")
+                Text("宽度 = 实时速率。左边每条线路一股，中间是汇总，右边是流量的去向。")
                     .font(.caption).foregroundStyle(.secondary)
                 Group {
-                    if session.isRunning, !FlowModel.links(app).isEmpty, !FlowModel.exits(app).isEmpty {
-                        FlowDiagram(links: FlowModel.links(app), exits: FlowModel.exits(app),
-                                    centerLabel: RateFormat.bitsPerSecond((session.status?.downlink ?? 0) + (session.status?.uplink ?? 0)))
+                    let columns = FlowModel.columns(app)
+                    if session.isRunning, !columns.links.isEmpty, !columns.exits.isEmpty {
+                        FlowDiagram(links: columns.links, exits: columns.exits,
+                                    centerLabel: "\(app.effectiveMode?.title ?? "汇总") · " + RateFormat.bitsPerSecond((session.status?.downlink ?? 0) + (session.status?.uplink ?? 0)))
                     } else {
                         ContentUnavailableView(session.isRunning ? "暂无流量" : "未连接", systemImage: "point.3.connected.trianglepath.dotted",
                                                description: Text(session.isRunning ? "有连接产生流量时显示流向。" : "开启 Parallux 后显示实时流向。"))

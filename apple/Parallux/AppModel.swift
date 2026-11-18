@@ -10,7 +10,17 @@ final class AppModel {
     let profiles = ProfileService()
     let settings = SettingsModel()
     let defaultLink = DefaultLinkMonitor()
+    let links = LinkMonitor()
+    let linkSettings = LinkSettingsModel()
+    let linkStats = LinkStatsPoller()
+    @ObservationIgnored private let notifier = LinkNotifier()
+    /// Supplies the multipath outbound for 叠加 (feat-bond-interface); nil until a server is set.
+    var bondProvider: (@MainActor (LinkSettings) -> ProfileComposer.Bond?) = { _ in nil }
+    /// "东京 VPS · 12 ms" for the panel; set by feat-bond-interface.
+    var bondServerSummary: String?
     private(set) var lastError: String?
+    /// The profile content the running tunnel was started with, before composing.
+    @ObservationIgnored private var runningContent: String?
 
     var session: CoreSession { tunnel.session }
 
@@ -19,6 +29,66 @@ final class AppModel {
     func start() {
         profiles.startAutoUpdate()
         Task { await tunnel.load() }
+        observeTunnel()
+        observeLinkHealth()
+    }
+
+    private func observeLinkHealth() {
+        withObservationTracking {
+            _ = linkStats.groups
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.notifier.update(groups: self.linkStats.groups, links: self.links.links, enabled: self.settings.value.notifyLinkChanges)
+                self.observeLinkHealth()
+            }
+        }
+    }
+
+    /// Starts and stops the per-link poller with the tunnel.
+    private func observeTunnel() {
+        withObservationTracking {
+            _ = tunnel.vpnStatus
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                if self.tunnel.isConnected { self.linkStats.start() } else { self.linkStats.stop() }
+                self.observeTunnel()
+            }
+        }
+    }
+
+    /// Enabled links in priority order.
+    var enabledLinks: [LinkInterface] { linkSettings.value.preferences.enabled(links.links) }
+
+    /// The aggregation mode actually in effect: needs two links, and 叠加 needs a server.
+    var effectiveMode: AggregationMode? {
+        guard enabledLinks.count >= 2 else { return nil }
+        let mode = linkSettings.value.mode
+        if mode == .bond, bondProvider(linkSettings.value) == nil { return .failover }
+        return mode
+    }
+
+    func compose(_ content: String) throws -> String {
+        let settings = linkSettings.value
+        return try ProfileComposer.compose(content, links: enabledLinks, backup: settings.preferences.backup,
+                                           mode: settings.mode, bond: bondProvider(settings))
+    }
+
+    /// Applies link or mode changes to a running tunnel without disconnecting.
+    func applyLinkChanges() async {
+        guard tunnel.isConnected, let runningContent else { return }
+        do {
+            try await tunnel.reload(settings.value.startOptions(content: try compose(runningContent)))
+            lastError = nil
+        } catch {
+            lastError = "线路设置未生效：\(error.localizedDescription)"
+        }
+    }
+
+    func setMode(_ mode: AggregationMode) async {
+        linkSettings.value.mode = mode
+        await applyLinkChanges()
     }
 
     func setOn(_ on: Bool) async {
@@ -45,8 +115,14 @@ final class AppModel {
                 return
             }
         }
+        let composed: String
+        do { composed = try compose(content) } catch {
+            lastError = "配置不是有效的 JSON，无法加入线路"
+            return
+        }
+        runningContent = content
         let settings = settings.value
-        await tunnel.connect(settings.startOptions(content: content),
+        await tunnel.connect(settings.startOptions(content: composed),
                              onDemand: (settings.onDemandEnabled, settings.onDemandRules))
     }
 
@@ -80,15 +156,23 @@ final class AppModel {
         case .disconnecting: .disconnecting
         default: .disconnected
         }
+        let linkText: String? = enabledLinks.count >= 2
+            ? "\(effectiveMode?.title ?? "") · \(enabledLinks.count) 条线路"
+            : defaultLink.link?.kind
         return StatusLine.text(setup: setup, tunnel: state, actionError: lastError,
-                               coreError: session.lastError, linkKind: defaultLink.link?.kind)
+                               coreError: session.lastError, linkKind: linkText)
     }
 
     var menuBarState: MenuBarIcon.State {
         guard tunnel.isConnected else { return .disconnected }
         if case .failed = tunnel.phase { return .degraded }
         if session.lastError != nil { return .degraded }
-        // Until M3 there is one link and no aggregation; show plain lines.
-        return .balance
+        // A link the aggregate considers down is the design's 「线路异常」.
+        if linkStats.groups.contains(where: { $0.links.contains { !$0.healthy } }) { return .degraded }
+        switch effectiveMode {
+        case .bond: return .bond
+        case .failover: return .failover
+        default: return .balance
+        }
     }
 }

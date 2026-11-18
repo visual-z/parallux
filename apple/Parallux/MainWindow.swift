@@ -34,9 +34,7 @@ struct MainWindow: View {
                 case .overview: OverviewView()
                 case .connections: ConnectionsView()
                 case .logs: LogsView()
-                case .links:
-                    ContentUnavailableView("线路", systemImage: item.symbol,
-                                           description: Text("线路发现、开关、排序与逐线路统计在 M3 接入；先等 research-sysext-bind-interface 的实测结论。"))
+                case .links: LinksView()
                 case .aggregationServer:
                     ContentUnavailableView("聚合服务器", systemImage: item.symbol,
                                            description: Text("叠加所需的聚合服务器与一键部署在 M4 接入。"))
@@ -72,6 +70,7 @@ struct MainWindow: View {
         switch item {
         case .connections: Int(app.session.status?.connections ?? 0)
         case .profiles: app.profiles.store.profiles.count
+        case .links: app.enabledLinks.count
         default: 0
         }
     }

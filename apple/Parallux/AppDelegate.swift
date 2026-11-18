@@ -86,22 +86,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         let aggregation = NSMenu()
+        let canAggregate = app.enabledLinks.count >= 2
         for mode in AggregationMode.allCases {
-            let item = ActionItem(mode.title) {}
-            item.state = mode == app.settings.value.defaultAggregationMode ? .on : .off
-            item.isEnabled = false
+            let item = ActionItem(mode.title) { [app] in Task { await app.setMode(mode) } }
+            item.state = mode == app.linkSettings.value.mode ? .on : .off
+            item.isEnabled = canAggregate
             aggregation.addItem(item)
         }
+        if !canAggregate {
+            aggregation.addItem(.separator())
+            aggregation.addItem(disabled("启用两条以上线路后可选"))
+        }
         aggregation.addItem(.separator())
-        aggregation.addItem(disabled("需要两条以上线路（M3）"))
+        aggregation.addItem(disabled("聚合服务器：\(app.bondServerSummary ?? "未设置")"))
         menu.addItem(submenu("聚合方式", aggregation))
 
         let links = NSMenu()
-        if let link = app.defaultLink.link {
-            links.addItem(disabled("\(link.kind) · \(link.name)"))
-        } else {
-            links.addItem(disabled("没有可用的网络"))
+        for link in app.links.links {
+            let enabled = !app.linkSettings.value.preferences.disabled.contains(link.name)
+            let item = ActionItem("\(link.kind.title) · \(link.name)") { [app] in
+                if enabled { app.linkSettings.value.preferences.disabled.insert(link.name) } else { app.linkSettings.value.preferences.disabled.remove(link.name) }
+                Task { await app.applyLinkChanges() }
+            }
+            item.state = enabled ? .on : .off
+            links.addItem(item)
         }
+        if app.links.links.isEmpty { links.addItem(disabled("没有可用的网络")) }
         menu.addItem(submenu("线路", links))
 
         let modes = NSMenu()

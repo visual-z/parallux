@@ -5,6 +5,7 @@ import Testing
     @Test func aCoreStreamErrorReplacesConnectedInTheStatusLine() {
         #expect(StatusLine.text(setup: .ready, tunnel: .connected, actionError: nil, coreError: nil, linkKind: "Wi‑Fi") == "已连接 · 1 条线路（Wi‑Fi）")
         #expect(StatusLine.text(setup: .ready, tunnel: .connected, actionError: nil, coreError: nil, linkKind: nil) == "已连接")
+        #expect(StatusLine.text(setup: .ready, tunnel: .connected, actionError: nil, coreError: nil, linkKind: "叠加 · 3 条线路") == "已连接 · 叠加 · 3 条线路")
         let failed = StatusLine.text(setup: .ready, tunnel: .connected, actionError: nil, coreError: "dial xpc: connection refused", linkKind: "Wi‑Fi")
         #expect(failed.contains("dial xpc: connection refused"))
         #expect(!failed.hasPrefix("已连接 ·"))

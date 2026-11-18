@@ -20,6 +20,13 @@ final class CommandXPCDialer: NSObject, LibboxXPCDialerProtocol, @unchecked Send
         return try TunnelXPC.probeLinks(over: connection)
     }
 
+    /// Per-link counters; "[]" when the extension is unreachable.
+    static func linkStats() -> String {
+        guard let connection = try? connection() else { return "[]" }
+        defer { connection.invalidate() }
+        return TunnelXPC.linkStats(over: connection)
+    }
+
     private static func connection() throws -> NSXPCConnection {
         guard let service = MachService.name(in: .main) else {
             throw NSError(domain: "Parallux.XPC", code: 1, userInfo: [

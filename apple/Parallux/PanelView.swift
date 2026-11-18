@@ -3,8 +3,7 @@ import SwiftUI
 
 /// The menu bar panel (left click), laid out as design v0.2: switch, mini
 /// flow, links, aggregation mode, exit, footer. It answers "which links am I
-/// on, do I want another node". Controls that need M3/M4 are shown disabled
-/// with their milestone; nothing displays simulated data.
+/// on, do I want another node". Nothing displays simulated data.
 struct PanelView: View {
     let app: AppModel
     let openMainWindow: () -> Void
@@ -83,36 +82,53 @@ private struct PanelHome: View {
     }
 
     @ViewBuilder private var links: some View {
-        if let link = app.defaultLink.link {
+        if app.links.links.isEmpty {
+            Text("没有可用的网络").font(.callout).foregroundStyle(.secondary)
+        }
+        ForEach(app.links.links) { link in
+            let tag = ProfileComposer.linkTag(link.name)
+            let enabled = !app.linkSettings.value.preferences.disabled.contains(link.name)
             HStack(spacing: 10) {
-                Image(systemName: link.symbol).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
-                    .frame(width: 26, height: 26).background(FlowModel.linkColors[0], in: Circle())
+                Button {
+                    if enabled { app.linkSettings.value.preferences.disabled.insert(link.name) } else { app.linkSettings.value.preferences.disabled.remove(link.name) }
+                    Task { await app.applyLinkChanges() }
+                } label: {
+                    Image(systemName: link.kind.symbol).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                        .frame(width: 26, height: 26)
+                        .background(enabled ? LinkColors.color(for: link, in: app.links.links) : Color.secondary.opacity(0.4), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help(enabled ? "停用\(link.kind.title)" : "启用\(link.kind.title)")
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(link.kind)
-                    Text(link.name).font(.caption).foregroundStyle(.secondary)
+                    Text(link.kind.title).foregroundStyle(enabled ? .primary : .secondary)
+                    Text("\(link.displayName) · \(link.name)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer()
-                if let status = app.session.status {
+                if let stat = app.linkStats.link(tag), !stat.healthy {
+                    Text("不可用").font(.caption).foregroundStyle(.red)
+                } else if let rate = app.linkStats.rates[tag] {
+                    Text(RateFormat.bitsPerSecond(rate.total)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                } else if app.links.links.count == 1, let status = app.session.status {
                     Text(RateFormat.bitsPerSecond(status.downlink + status.uplink)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
                 }
             }
-            Text("其他线路的发现与开关在 M3 接入。").font(.caption2).foregroundStyle(.tertiary)
-        } else {
-            Text("没有可用的网络").font(.callout).foregroundStyle(.secondary)
         }
     }
 
     @ViewBuilder private var aggregation: some View {
-        Picker("聚合方式", selection: .constant(app.settings.value.defaultAggregationMode)) {
+        Picker("聚合方式", selection: Binding(get: { app.linkSettings.value.mode }, set: { mode in Task { await app.setMode(mode) } })) {
             ForEach(AggregationMode.allCases) { Text($0.title).tag($0) }
         }
         .pickerStyle(.segmented).labelsHidden()
-        .disabled(true)
-        .help("需要两条以上线路，M3 接入")
+        .disabled(app.enabledLinks.count < 2)
+        .help(app.enabledLinks.count < 2 ? "启用两条以上线路后可选" : "")
+        if app.linkSettings.value.mode == .bond, app.effectiveMode == .failover {
+            Text("叠加需要聚合服务器；未设置时按主备运行。").font(.caption2).foregroundStyle(.orange)
+        }
         HStack {
             Text("聚合服务器")
             Spacer()
-            Text("M4 接入").foregroundStyle(.tertiary)
+            Text(app.bondServerSummary ?? "未设置").foregroundStyle(app.bondServerSummary == nil ? .tertiary : .secondary)
         }
         .font(.callout)
     }

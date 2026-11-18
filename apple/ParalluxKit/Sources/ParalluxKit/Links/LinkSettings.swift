@@ -11,8 +11,23 @@ public struct LinkSettings: Codable, Equatable, Sendable {
 
     public static let defaultsKey = "parallux.links"
 
-    public static func load(from defaults: UserDefaults) -> LinkSettings { LinkSettings() }
-    public func save(to defaults: UserDefaults) {}
+    public static func load(from defaults: UserDefaults) -> LinkSettings {
+        guard let data = defaults.data(forKey: defaultsKey),
+              let settings = try? JSONDecoder().decode(LinkSettings.self, from: data) else { return LinkSettings() }
+        return settings
+    }
+
+    public func save(to defaults: UserDefaults) {
+        if let data = try? JSONEncoder().encode(self) { defaults.set(data, forKey: Self.defaultsKey) }
+    }
+
+    // Missing keys decode to their defaults.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        preferences = try container.decodeIfPresent(LinkPreferences.self, forKey: .preferences) ?? LinkPreferences()
+        mode = try container.decodeIfPresent(AggregationMode.self, forKey: .mode) ?? .bond
+        bondServerID = try container.decodeIfPresent(UUID.self, forKey: .bondServerID)
+    }
 }
 
 /// The two columns of the flow diagram, as rates.
@@ -37,12 +52,28 @@ public enum LinkFlow {
     ///   - exits: FlowSummary.exits of the live connections.
     public static func columns(links: [LinkInterface], linkRates: [String: LinkRates.Rate], totalRate: Int64,
                                exits: [FlowSummary.Exit]) -> (left: [Node], right: [Node]) {
-        ([], [])
+        let left: [Node] = links.map { link in
+            let measured = linkRates[ProfileComposer.linkTag(link.name)]
+            // One link and no aggregate counters (fewer than two links leave
+            // the profile alone): everything goes through it.
+            let rate = measured?.total ?? (links.count == 1 ? totalRate : 0)
+            return Node(id: link.name, title: link.kind.title, detail: "\(link.displayName) · \(link.name)", rate: max(0, rate))
+        }
+        let right = exits.map { Node(id: $0.name, title: $0.name, detail: "", rate: $0.rate) }
+        return (left, right)
     }
 }
 
 /// 「如果两条线路背后是同一条宽带，这里会提示你：叠加不会更快」(design, links page).
 public enum SharedEgress {
     /// Egress IPs per interface name, as the probe saw them.
-    public static func warning(links: [LinkInterface], egress: [String: String]) -> String? { nil }
+    public static func warning(links: [LinkInterface], egress: [String: String]) -> String? {
+        var byIP: [String: [LinkInterface]] = [:]
+        for link in links {
+            if let ip = egress[link.name], !ip.isEmpty { byIP[ip, default: []].append(link) }
+        }
+        guard let shared = byIP.values.filter({ $0.count > 1 }).max(by: { $0.count < $1.count }) else { return nil }
+        let names = shared.map { "「\($0.kind.title)」" }.joined(separator: "和")
+        return "\(names)走的是同一个公网出口，背后可能是同一条宽带：叠加不会更快，分流也不会多出带宽。"
+    }
 }

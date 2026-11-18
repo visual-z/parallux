@@ -102,6 +102,23 @@ final class TunnelController {
     }
 
     /// Turns on-demand off first, or the system would reconnect at once.
+    /// Reloads the running core with new options without dropping the tunnel
+    /// (the extension's handleAppMessage calls libbox startOrReloadService).
+    func reload(_ options: TunnelStartOptions) async throws {
+        guard let session = manager?.connection as? NETunnelProviderSession, vpnStatus == .connected else { return }
+        let data = try options.json()
+        let reply: Data? = try await withCheckedThrowingContinuation { continuation in
+            do {
+                try session.sendProviderMessage(data) { continuation.resume(returning: $0) }
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+        if let reply, !reply.isEmpty {
+            throw NSError(domain: "Parallux.Tunnel", code: 2, userInfo: [NSLocalizedDescriptionKey: String(decoding: reply, as: UTF8.self)])
+        }
+    }
+
     func disconnect() async {
         if let manager, manager.isOnDemandEnabled {
             manager.isOnDemandEnabled = false

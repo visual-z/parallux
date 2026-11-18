@@ -24,6 +24,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var tunnel = TunnelSettings()
     public var onDemandEnabled = false
     public var onDemandRules: [OnDemandRuleModel] = []
+    /// Notify when a link becomes unavailable or recovers (design 「线路掉线时通知」).
+    public var notifyLinkChanges = true
 
     public init() {}
 
@@ -63,6 +65,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         tunnel = try container.decodeIfPresent(TunnelSettings.self, forKey: .tunnel) ?? defaults.tunnel
         onDemandEnabled = try container.decodeIfPresent(Bool.self, forKey: .onDemandEnabled) ?? defaults.onDemandEnabled
         onDemandRules = try container.decodeIfPresent([OnDemandRuleModel].self, forKey: .onDemandRules) ?? defaults.onDemandRules
+        notifyLinkChanges = try container.decodeIfPresent(Bool.self, forKey: .notifyLinkChanges) ?? defaults.notifyLinkChanges
     }
 }
 
