@@ -36,11 +36,12 @@ has "$info" NetworkExtension.NEMachServiceName '$(PARALLUX_TUNNEL_MACH_SERVICE)'
 has "$info" "NetworkExtension.NEProviderClasses.com\.apple\.networkextension\.packet-tunnel" '$(PRODUCT_MODULE_NAME).PacketTunnelProvider'
 has Parallux/Info.plist ParalluxTunnelMachService '$(PARALLUX_TUNNEL_MACH_SERVICE)'
 
-# The Mach service must sit inside the App Group and change with the version.
+# The Mach service must sit inside the App Group and change with the version
+# and the build number (docs/tasks/fix-signed-run-hazards.md).
 mach="$(sed -n 's/^PARALLUX_TUNNEL_MACH_SERVICE *= *//p' Config/Base.xcconfig)"
 case "$mach" in
-  '$(PARALLUX_APP_GROUP).'*'$(MARKETING_VERSION)'*) ;;
-  *) fail "Config/Base.xcconfig: PARALLUX_TUNNEL_MACH_SERVICE '$mach' must start with \$(PARALLUX_APP_GROUP). and contain \$(MARKETING_VERSION)" ;;
+  '$(PARALLUX_APP_GROUP).'*'$(MARKETING_VERSION)'*'$(CURRENT_PROJECT_VERSION)'*) ;;
+  *) fail "Config/Base.xcconfig: PARALLUX_TUNNEL_MACH_SERVICE '$mach' must start with \$(PARALLUX_APP_GROUP). and contain \$(MARKETING_VERSION) and \$(CURRENT_PROJECT_VERSION)" ;;
 esac
 
 if [ "$failures" -gt 0 ]; then

@@ -15,7 +15,10 @@ PARALLUX_APP_GROUP = $(TeamIdentifierPrefix)$(BUNDLE_ID)
 // Versioned on purpose: after a system extension is replaced, launchd keeps
 // the old version's job owning the endpoint, so a fixed name would connect the
 // app to a dead listener (same reasoning as SFM's AppConfiguration.swift).
-PARALLUX_TUNNEL_MACH_SERVICE = $(PARALLUX_APP_GROUP).tunnel.$(MARKETING_VERSION)
+// The build number is part of it because scripts/build-signed.sh stamps a
+// unique one per build: same-version extensions are not replaced
+// (SystemExtensionInstaller), so without it a rebuilt extension never loads.
+PARALLUX_TUNNEL_MACH_SERVICE = $(PARALLUX_APP_GROUP).tunnel.$(MARKETING_VERSION).$(CURRENT_PROJECT_VERSION)
 
 // Network Extension entitlement value. Developer ID builds (and SFM) use the
 // -systemextension form; Apple Development builds need plain

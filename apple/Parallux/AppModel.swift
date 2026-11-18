@@ -61,23 +61,25 @@ final class AppModel {
     }
 
     var statusLine: String {
-        if let lastError { return lastError }
-        switch tunnel.phase {
-        case .awaitingApproval: return "请在系统设置中允许网络扩展"
-        case let .failed(message): return message
-        default: break
+        let setup: StatusLine.Setup = switch tunnel.phase {
+        case .awaitingApproval: .awaitingApproval
+        case let .failed(message): .failed(message)
+        default: .ready
         }
-        switch tunnel.vpnStatus {
-        case .connected: return "已连接 · \(defaultLink.link.map { "1 条线路（\($0.kind)）" } ?? "")"
-        case .connecting, .reasserting: return "正在连接…"
-        case .disconnecting: return "正在断开…"
-        default: return "未连接"
+        let state: StatusLine.Tunnel = switch tunnel.vpnStatus {
+        case .connected: .connected
+        case .connecting, .reasserting: .connecting
+        case .disconnecting: .disconnecting
+        default: .disconnected
         }
+        return StatusLine.text(setup: setup, tunnel: state, actionError: lastError,
+                               coreError: session.lastError, linkKind: defaultLink.link?.kind)
     }
 
     var menuBarState: MenuBarIcon.State {
         guard tunnel.isConnected else { return .disconnected }
         if case .failed = tunnel.phase { return .degraded }
+        if session.lastError != nil { return .degraded }
         // Until M3 there is one link and no aggregation; show plain lines.
         return .balance
     }

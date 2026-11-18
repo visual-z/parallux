@@ -65,6 +65,7 @@ final class CoreSession {
         logStream = nil
         status = nil
         startedAt = nil
+        lastError = nil
         groups = []
         routeModes = []
         routeMode = nil
@@ -192,6 +193,8 @@ final class CoreSession {
 
     fileprivate func receiveClearLogs() { logs.removeAll() }
 
+    fileprivate func receive(connected _: Void) { lastError = nil }
+
     fileprivate func receive(disconnected message: String?) {
         if let message, !message.isEmpty { lastError = message }
     }
@@ -236,7 +239,16 @@ final class CoreSession {
             options.statusInterval = Int64(NSEC_PER_SEC)
             client = LibboxNewCommandClient(handler, options)
             let box = StreamValue(value: client)
-            Task.detached { try? box.value?.connect() }
+            let handler = self.handler
+            Task.detached {
+                do {
+                    try box.value?.connect()
+                } catch {
+                    // A rejected XPC dial or a dead extension must be visible,
+                    // not an empty page under "connected".
+                    handler.disconnected(error.localizedDescription)
+                }
+            }
         }
 
         func close() {
@@ -255,7 +267,7 @@ final class CoreSession {
             }
         }
 
-        func connected() {}
+        func connected() { main { $0.receive(connected: ()) } }
         func disconnected(_ message: String?) { main { $0.receive(disconnected: message) } }
 
         func writeStatus(_ message: LibboxStatusMessage?) {

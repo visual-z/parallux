@@ -21,15 +21,23 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private var baseURL: URL { FileManager.default.homeDirectoryForCurrentUser }
     private var optionsURL: URL { baseURL.appendingPathComponent("start-options.json") }
 
+    /// libbox's start calls back into openTun, which waits for
+    /// setTunnelNetworkSettings' completion; doing that on the provider's
+    /// callback thread risks waiting on ourselves, so start runs here.
+    private let startQueue = DispatchQueue(label: "parallux.tunnel.start")
+
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
-        do {
-            try start(options)
-            log.info("core \(PxbridgeVersion(), privacy: .public) started")
-            completionHandler(nil)
-        } catch {
-            log.error("start failed: \(String(describing: error), privacy: .public)")
-            stopEverything()
-            completionHandler(error)
+        nonisolated(unsafe) let options = options
+        startQueue.async { [self] in
+            do {
+                try start(options)
+                log.info("core \(PxbridgeVersion(), privacy: .public) started")
+                completionHandler(nil)
+            } catch {
+                log.error("start failed: \(String(describing: error), privacy: .public)")
+                stopEverything()
+                completionHandler(error)
+            }
         }
     }
 
