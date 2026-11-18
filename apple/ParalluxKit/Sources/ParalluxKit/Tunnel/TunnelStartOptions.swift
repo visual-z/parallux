@@ -17,9 +17,26 @@ public struct TunnelStartOptions: Codable, Equatable, Sendable {
     public var systemProxyEnabled = true
     public var excludeDefaultRoute = false
     public var autoRouteUseSubRangesByDefault = false
+    /// SFM #105: the extension's memory limit in MB; 0 leaves the OOM killer off.
+    public var memoryLimitMB = 0
 
     public init(configContent: String) {
         self.configContent = configContent
+    }
+
+    // Missing keys (options persisted by an older build) decode to defaults.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        configContent = try c.decode(String.self, forKey: .configContent)
+        includeAllNetworks = try c.decodeIfPresent(Bool.self, forKey: .includeAllNetworks) ?? false
+        excludeLocalNetworks = try c.decodeIfPresent(Bool.self, forKey: .excludeLocalNetworks) ?? false
+        excludeAPNs = try c.decodeIfPresent(Bool.self, forKey: .excludeAPNs) ?? false
+        excludeDeviceCommunication = try c.decodeIfPresent(Bool.self, forKey: .excludeDeviceCommunication) ?? false
+        enforceRoutes = try c.decodeIfPresent(Bool.self, forKey: .enforceRoutes) ?? false
+        systemProxyEnabled = try c.decodeIfPresent(Bool.self, forKey: .systemProxyEnabled) ?? true
+        excludeDefaultRoute = try c.decodeIfPresent(Bool.self, forKey: .excludeDefaultRoute) ?? false
+        autoRouteUseSubRangesByDefault = try c.decodeIfPresent(Bool.self, forKey: .autoRouteUseSubRangesByDefault) ?? false
+        memoryLimitMB = 0
     }
 
     /// Key under which the encoded options sit in startVPNTunnel(options:).

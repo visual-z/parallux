@@ -124,6 +124,7 @@ private func connect(to server: SocketServer) -> (NSXPCListener, NSXPCConnection
             options.systemProxyEnabled = rng.bool()
             options.excludeDefaultRoute = rng.bool()
             options.autoRouteUseSubRangesByDefault = rng.bool()
+            options.memoryLimitMB = [0, 1, 256, 4096][rng.int(4)]
             let decoded = try TunnelStartOptions.decode(options.encoded())
             #expect(decoded == options)
         }
