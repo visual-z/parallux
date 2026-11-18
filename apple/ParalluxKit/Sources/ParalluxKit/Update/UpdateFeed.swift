@@ -27,6 +27,21 @@ public enum UpdateFeed {
     public static let publicKeyKey = "SUPublicEDKey"
 
     public static func resolve(channel: UpdateChannel, stable: String?, beta: String?, publicKey: String?) -> Resolution {
-        .notConfigured
+        // Without a public key Sparkle cannot verify an update; without an
+        // https stable feed there is nothing safe to check.
+        guard let key = publicKey, usable(key) != nil, let stableURL = secureURL(stable) else { return .notConfigured }
+        if channel == .beta, let betaURL = secureURL(beta) { return .feed(betaURL) }
+        return .feed(stableURL)
+    }
+
+    /// nil for missing, empty or unexpanded build variables ("$(…)").
+    private static func usable(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespaces), !value.isEmpty, !value.hasPrefix("$(") else { return nil }
+        return value
+    }
+
+    private static func secureURL(_ value: String?) -> URL? {
+        guard let text = usable(value), let url = URL(string: text), url.scheme?.lowercased() == "https", url.host() != nil else { return nil }
+        return url
     }
 }

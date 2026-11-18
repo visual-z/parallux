@@ -15,6 +15,7 @@ if [ ! -f apple/Config/Local.xcconfig ]; then
   exit 1
 fi
 scripts/build-core.sh
+scripts/fetch-sparkle.sh
 scripts/gen-xcodeproj.sh
 scripts/check-apple-config.sh
 mkdir -p .build/logs

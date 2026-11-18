@@ -44,6 +44,13 @@ name = "server-build"
 cmd = ["scripts/build-server.sh"]
 timeout_s = 900
 
+# Release gate (docs/RELEASE.md): the last release.sh output must be fit to
+# ship. Only `keel gate --tier release` runs it; the normal gate never does.
+[[gate.step]]
+name = "release-check"
+cmd = ["scripts/check-release.sh", ".build/release/latest/Parallux.app"]
+tier = "release"
+
 [[gate.step]]
 name = "boundaries"
 cmd = ["keel", "check-boundaries"]

@@ -32,4 +32,11 @@ PARALLUX_HELPER_MACH_SERVICE = $(PARALLUX_APP_GROUP).helper.$(MARKETING_VERSION)
 // packet-tunnel-provider. Override in Local.xcconfig for development signing.
 PARALLUX_NE_PROVIDER = packet-tunnel-provider-systemextension
 
+// Sparkle update feeds and EdDSA public key (docs/RELEASE.md). Empty here, so
+// development builds never check for updates; set them in Local.xcconfig or on
+// the release.sh command line. Feeds must be https.
+PARALLUX_UPDATE_FEED =
+PARALLUX_UPDATE_BETA_FEED =
+PARALLUX_UPDATE_PUBLIC_KEY =
+
 #include? "Local.xcconfig"
