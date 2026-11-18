@@ -1,7 +1,7 @@
 /// Tabs of the Settings window (⌘,), in display order. Covers SFM's settings
 /// (docs/research/sfm-parity.md) plus Parallux's own aggregation page.
 public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
-    case general, aggregation, tunnel, onDemand, core, remoteControl
+    case general, aggregation, tunnel, onDemand, core, remoteControl, about
 
     public var id: String { rawValue }
 
@@ -13,6 +13,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .onDemand: "按需连接"
         case .core: "内核"
         case .remoteControl: "远程控制"
+        case .about: ""
         }
     }
 
@@ -24,6 +25,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .onDemand: "wifi"
         case .core: "cpu"
         case .remoteControl: "desktopcomputer"
+        case .about: ""
         }
     }
 }
