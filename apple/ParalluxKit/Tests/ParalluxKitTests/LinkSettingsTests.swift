@@ -28,7 +28,7 @@ import Testing
         #expect(partial.preferences == LinkPreferences())
     }
 
-    @Test func flowColumnsFollowTheLinks() {
+    @Test func flowColumnsFollowTheLinks() throws {
         let exits = [FlowSummary.Exit(name: "HK-03", rate: 300), FlowSummary.Exit(name: "直连", rate: 100)]
         let none = LinkFlow.columns(links: [], linkRates: [:], totalRate: 400, exits: exits)
         #expect(none.left.isEmpty)
@@ -39,7 +39,7 @@ import Testing
             "link-en0": .init(upload: 10, download: 90), "link-en7": .init(upload: 0, download: 250), "link-en8": .init(upload: 0, download: 0),
         ]
         let three = LinkFlow.columns(links: links, linkRates: rates, totalRate: 350, exits: exits)
-        #expect(three.left.map(\.id) == ["en0", "en7", "en8"])
+        try #require(three.left.map(\.id) == ["en0", "en7", "en8"])
         #expect(three.left.map(\.rate) == [100, 250, 0])
         #expect(three.left.map(\.title) == ["Wi‑Fi", "有线", "iPhone"])
         #expect(three.left[0].detail.contains("en0"))
