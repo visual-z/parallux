@@ -9,6 +9,7 @@
 | ID | 不变量（一句话，对所有输入成立） | 检查方式 | 位置 |
 |---|---|---|---|
 | INV-1 | 配置库的选中项要么为空，要么是库里某个配置的 id | 代码断言（`checkInvariants`，每次修改后）+ property | `anyOperationSequenceKeepsTheSelectionValid` |
+| INV-2 | 日志与速率历史的环形缓冲长度不超过容量，并按到达顺序保留最新的条目 | 代码断言 + property | `aRingBufferKeepsTheNewestEntriesInOrder` |
 
 ## 写法提示
 
