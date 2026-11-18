@@ -37,6 +37,13 @@ name = "apple-build"
 cmd = ["scripts/build-apple.sh"]
 timeout_s = 1800
 
+# The aggregation server for Linux VPSes (PLAN decision 18), plus its
+# installer's syntax and shellcheck.
+[[gate.step]]
+name = "server-build"
+cmd = ["scripts/build-server.sh"]
+timeout_s = 900
+
 [[gate.step]]
 name = "boundaries"
 cmd = ["keel", "check-boundaries"]

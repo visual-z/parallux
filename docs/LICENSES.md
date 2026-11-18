@@ -17,3 +17,5 @@
 | `sing-box-mygo` `reference/` | GPLv3（源自 sing-box） | `reference/` | 原样拷贝：官方 daemon proto 与配置 schema |
 | `sing-box-mygo` `docs/research/sfm-feature-matrix.md`、`docs/tasks/parity.md` | GPLv3 | `docs/research/` | 拷贝后加注：状态待重判 |
 | `WuSiYu/singbox-multipath` | 待确认（GitHub 未识别许可证） | 计划用于 M4 叠加出站 | 尚未引用；引用前确认许可证 |
+| `WuSiYu/singbox-multipath` d99530a `protocol/multipath`（含 `stream/`，连同包内测试） | GPLv3，附加条款：衍生品不得使用其名称或暗示关联（上游 `LICENSE` 末段，2026-11-19 确认） | `core/bond/`、`core/bond/stream/` | 原样移植：只改包名（`multipath`→`bond`）、import 路径、把 `option.Multipath*Options` 改为包内类型、`C.TypeMultipath` 改为包内 `Type`，gofmt 调整 import 顺序；未移植上游 `test/` 集成测试目录（依赖其整套 sing-box 测试夹具） |
+| `WuSiYu/singbox-multipath` d99530a `option/multipath.go`、`option/multipath_test.go` | 同上 | `core/bond/options.go`、`core/bond/options_test.go` | 移植：包名改为 `bond`，`ListenOptions` 改引 sing-box `option.ListenOptions` |
