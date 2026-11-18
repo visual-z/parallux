@@ -10,14 +10,19 @@ public enum AppGroup {
     public static let infoPlistKey = "ParalluxAppGroup"
 
     /// The App Group of the running bundle, or nil when the bundle was built
-    /// without one (unsigned builds have an empty team prefix).
+    /// without a team (unsigned builds expand the team prefix to "", leaving
+    /// the bare bundle id, which macOS does not accept as a group).
     public static func identifier(in bundle: Bundle = .main) -> String? {
         resolve(bundle.object(forInfoDictionaryKey: infoPlistKey) as? String)
     }
 
-    /// Exposed for tests: an unexpanded or empty value means "no group".
+    /// Exposed for tests. A usable group is "<Team ID>.<rest>", where a Team
+    /// ID is ten uppercase letters or digits; anything else means no group.
     static func resolve(_ raw: String?) -> String? {
-        guard let raw, !raw.isEmpty, !raw.contains("$(") else { return nil }
+        guard let raw, let dot = raw.firstIndex(of: ".") else { return nil }
+        let team = raw[..<dot]
+        let isTeamID = team.count == 10 && team.allSatisfy { $0.isASCII && ($0.isUppercase || $0.isNumber) }
+        guard isTeamID, raw.index(after: dot) < raw.endIndex else { return nil }
         return raw
     }
 }

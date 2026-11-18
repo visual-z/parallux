@@ -21,7 +21,7 @@ struct SettingsView: View {
         case .core:
             Form {
                 LabeledContent("内核版本", value: PxbridgeVersion())
-                LabeledContent("App Group", value: AppGroup.identifier() ?? "未签名构建，无 App Group")
+                LabeledContent("App Group", value: AppGroup.identifier() ?? "未签名构建，没有 App Group")
             }
             .formStyle(.grouped)
         default:

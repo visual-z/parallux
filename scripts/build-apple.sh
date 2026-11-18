@@ -5,13 +5,17 @@
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 cd "$ROOT"
-# Rebuild the Go framework when it is missing or older than the Go sources
-# it is built from, so the Swift build never links a stale core.
-stamp="apple/Frameworks/Libbox.xcframework/Info.plist"
-if [ ! -f "$stamp" ] || [ -n "$(find go.mod go.sum core -newer "$stamp" -print -quit)" ]; then
-  scripts/build-core.sh
-fi
+# Rebuilds the Go framework only when its inputs changed (content hash, see
+# build-core.sh), so the Swift build never links a stale core.
+scripts/build-core.sh
 scripts/gen-xcodeproj.sh
-xcodebuild -project apple/Parallux.xcodeproj -scheme Parallux -configuration Debug \
-  -derivedDataPath .build/xcode -quiet \
-  CODE_SIGNING_ALLOWED=NO build
+scripts/check-apple-config.sh
+mkdir -p .build/logs
+log=.build/logs/build-apple.log
+if ! xcodebuild -project apple/Parallux.xcodeproj -scheme Parallux -configuration Debug \
+  -destination 'platform=macOS,arch=arm64' -derivedDataPath .build/xcode -quiet \
+  CODE_SIGNING_ALLOWED=NO build >"$log" 2>&1; then
+  grep -E "error:|Undefined symbols|ld: " "$log" | head -40 >&2 || tail -40 "$log" >&2
+  exit 1
+fi
+echo "built .build/xcode/Build/Products/Debug/Parallux.app; log: $log"

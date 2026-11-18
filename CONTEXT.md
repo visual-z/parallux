@@ -11,9 +11,12 @@
 | 叠加（bond） | 同一条连接拆到多条线路，在聚合服务器上重组；唯一能让单条连接变快的方式。 | `bonding`；也别叫「绑定」（绑定指出站绑网口） |
 | 主备（failover） | 只走首选线路，其他线路待命，首选失效时切换。 | `故障转移` |
 | 聚合服务器 | 用户自己的 VPS，运行 Parallux 服务端，负责把叠加拆开的数据重组后转发。 | 叫它「中转」 |
+| 线路出站 | 绑定一条线路的 sing-box `direct` 出站（`bind_interface`）；每条线路一个。 | — |
+| 聚合出站（aggregate） | Parallux 注册的出站类型，带 mode 与 links，把连接分到线路出站上；节点经 `detour` 指向它。 | — |
+| 辅助服务 | 以 root 运行的 SMAppService 守护进程，只做按进程分流、工作目录、崩溃归档、安装更新。内核不在这里。 | — |
 | 出口 | 流量离开 Parallux 后去的地方：直连、某个节点，或经聚合服务器再到节点。 | — |
 | 节点 | 配置里的一个代理出站（sing-box outbound）。 | 单说「服务器」（易与聚合服务器混） |
 | 配置（profile） | 一份 sing-box 配置：本地、iCloud 或远程订阅。 | 用「订阅」指代全部配置 |
 | 路由模式 | sing-box 的 clash mode：规则、全局、直连。 | — |
 | 内核（core） | 网络扩展里运行的 Go 代码：sing-box 加 Parallux 的聚合模块。 | `后端` |
-| 网络扩展 | 承载内核的 NEPacketTunnelProvider 系统扩展（`apple/PacketTunnel`）。 | 叫它 helper（那是旧仓库的 root 服务） |
+| 网络扩展 | 承载内核的 NEPacketTunnelProvider 系统扩展（`apple/PacketTunnel`）。 | 把它和辅助服务混称 |

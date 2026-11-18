@@ -7,7 +7,7 @@ struct ParalluxApp: App {
 
     var body: some Scene {
         Window("Parallux", id: MainWindow.id) {
-            MainWindow { appDelegate.openWindow = $0 }
+            MainWindow { appDelegate.sceneActions = $0 }
         }
         .defaultSize(width: 1040, height: 680)
 

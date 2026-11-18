@@ -97,7 +97,9 @@ core/pxbridge         Parallux 自己导出给 Swift 的 Go API（只用 gomobil
 sing-box experimental/libbox   官方库：服务、command server（gRPC）
 ```
 
-- App 与扩展之间走 libbox 的 command server（官方 StartedService gRPC）；聚合与线路统计另加协议。
+- App 与扩展之间：扩展经版本化的 Mach XPC 服务把 command server 的 socket fd 传给 App，App 说官方 StartedService gRPC（PLAN 决策 11）。
+- sing-box 来自 fork（`go.mod` 的 replace，决策 10）；Parallux 的出站类型在 `core/` 里经 fork 的钩子注册。
+- Info.plist 与 entitlements 也由 XcodeGen 生成，`scripts/check-apple-config.sh` 检查关键键。
 - `apple/*.xcodeproj` 由 `apple/project.yml`（XcodeGen）生成，不入库，不手改。
 - 已写成规则的边界见 `keel.toml` 的 `[[boundary.rule]]`。
 

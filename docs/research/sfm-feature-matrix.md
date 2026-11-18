@@ -123,7 +123,7 @@ message URLTestRequest { string outboundTag = 1; }
 **出处：**
 
 - [configuration/service/api](https://sing-box.sagernet.org/configuration/service/api/)
-- proto：`daemon/started_service.proto`（与本仓库 `reference/protos/started_service.proto` 同形）
+- proto：`daemon/started_service.proto`（与本仓库 `reference/started_service.proto` 同形）
 - 内核：`experimental/libbox/command_client.go` `URLTest`；`daemon/started_service.go` `URLTest`
 - 客户端：`GroupListViewModel.doURLTest`；`StatusBarController.performURLTestForGroup` / `performURLTestForAllGroups`
 

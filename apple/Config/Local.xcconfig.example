@@ -1,4 +1,10 @@
 // Copy to Local.xcconfig (ignored by git) and fill in. Required for a signed
-// build that can install the system extension.
+// build that can install the system extension. The app must run from
+// /Applications for macOS to activate the extension.
 DEVELOPMENT_TEAM = ABCDE12345
 CODE_SIGN_STYLE = Automatic
+
+// With an Apple Development certificate (day-to-day debugging) the Network
+// Extension entitlement has no -systemextension suffix. Remove this line for
+// Developer ID builds.
+PARALLUX_NE_PROVIDER = packet-tunnel-provider

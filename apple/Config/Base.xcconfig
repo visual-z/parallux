@@ -4,8 +4,22 @@
 BUNDLE_ID = io.github.visual-z.parallux
 MACOSX_DEPLOYMENT_TARGET = 26.0
 SWIFT_VERSION = 6.0
-// App Group shared by the app and the system extension. On macOS it must carry
-// the team prefix; NEMachServiceName lives inside it.
+MARKETING_VERSION = 0.0.1
+CURRENT_PROJECT_VERSION = 1
+
+// App Group shared by the app and the system extension. On macOS it carries
+// the team prefix ($(TeamIdentifierPrefix) is "ABCDE12345." when signed and
+// empty when not); the extension's Mach service lives inside it.
 PARALLUX_APP_GROUP = $(TeamIdentifierPrefix)$(BUNDLE_ID)
+
+// Versioned on purpose: after a system extension is replaced, launchd keeps
+// the old version's job owning the endpoint, so a fixed name would connect the
+// app to a dead listener (same reasoning as SFM's AppConfiguration.swift).
+PARALLUX_TUNNEL_MACH_SERVICE = $(PARALLUX_APP_GROUP).tunnel.$(MARKETING_VERSION)
+
+// Network Extension entitlement value. Developer ID builds (and SFM) use the
+// -systemextension form; Apple Development builds need plain
+// packet-tunnel-provider. Override in Local.xcconfig for development signing.
+PARALLUX_NE_PROVIDER = packet-tunnel-provider-systemextension
 
 #include? "Local.xcconfig"

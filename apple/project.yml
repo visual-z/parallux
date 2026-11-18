@@ -1,5 +1,8 @@
-# XcodeGen spec. The .xcodeproj is generated (scripts/gen-xcodeproj.sh) and not
-# committed; edit this file, never the project.
+# XcodeGen spec. Everything Xcode needs is generated from this file by
+# scripts/gen-xcodeproj.sh: the .xcodeproj, both Info.plist files and both
+# entitlements files. None of them is committed; edit this file, never them.
+# (XcodeGen rewrites an entitlements file from `properties` on every run and
+# empties it when there are none, which is how M0 shipped empty ones.)
 name: Parallux
 options:
   deploymentTarget:
@@ -11,6 +14,9 @@ configFiles:
 packages:
   ParalluxKit:
     path: ParalluxKit
+# Both targets link Libbox.xcframework plus the system libraries its cronet
+# (naive outbound) and usbip code need; found by linking
+# (docs/tasks/chore-m0-skeleton.md, 环境假设).
 targets:
   Parallux:
     type: application
@@ -18,14 +24,19 @@ targets:
     sources: [Parallux]
     entitlements:
       path: Parallux/Parallux.entitlements
+      properties:
+        com.apple.developer.system-extension.install: true
+        com.apple.developer.networking.networkextension: [$(PARALLUX_NE_PROVIDER)]
+        com.apple.security.application-groups: [$(PARALLUX_APP_GROUP)]
     info:
       path: Parallux/Info.plist
       properties:
         CFBundleDisplayName: Parallux
-        CFBundleShortVersionString: "0.0.1"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.utilities
         ParalluxAppGroup: $(PARALLUX_APP_GROUP)
+        ParalluxTunnelMachService: $(PARALLUX_TUNNEL_MACH_SERVICE)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID)
@@ -35,15 +46,13 @@ targets:
       - framework: Frameworks/Libbox.xcframework
         embed: false
       - sdk: libresolv.tbd
-      # Libbox's cronet (naive outbound) and usbip pull these in; found by
-      # linking, see scripts/build-core.sh for the tag list behind them.
       - sdk: libbsm.tbd
       - sdk: AppKit.framework
       - sdk: ApplicationServices.framework
       - sdk: CoreText.framework
       - sdk: IOUSBHost.framework
-      - sdk: SystemConfiguration.framework
       - sdk: Network.framework
+      - sdk: SystemConfiguration.framework
       - target: PacketTunnel
         embed: true
   PacketTunnel:
@@ -52,15 +61,21 @@ targets:
     sources: [PacketTunnel]
     entitlements:
       path: PacketTunnel/PacketTunnel.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.developer.networking.networkextension: [$(PARALLUX_NE_PROVIDER)]
+        com.apple.security.application-groups: [$(PARALLUX_APP_GROUP)]
     info:
       path: PacketTunnel/Info.plist
       properties:
         CFBundleDisplayName: Parallux Tunnel
-        CFBundleShortVersionString: "0.0.1"
-        CFBundleVersion: "1"
+        CFBundlePackageType: SYSX
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ParalluxAppGroup: $(PARALLUX_APP_GROUP)
+        ParalluxTunnelMachService: $(PARALLUX_TUNNEL_MACH_SERVICE)
         NetworkExtension:
-          NEMachServiceName: $(PARALLUX_APP_GROUP).tunnel
+          NEMachServiceName: $(PARALLUX_TUNNEL_MACH_SERVICE)
           NEProviderClasses:
             com.apple.networkextension.packet-tunnel: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
     settings:
@@ -74,15 +89,13 @@ targets:
       - framework: Frameworks/Libbox.xcframework
         embed: false
       - sdk: libresolv.tbd
-      # Libbox's cronet (naive outbound) and usbip pull these in; found by
-      # linking, see scripts/build-core.sh for the tag list behind them.
       - sdk: libbsm.tbd
       - sdk: AppKit.framework
       - sdk: ApplicationServices.framework
       - sdk: CoreText.framework
       - sdk: IOUSBHost.framework
-      - sdk: SystemConfiguration.framework
       - sdk: Network.framework
+      - sdk: SystemConfiguration.framework
 schemes:
   Parallux:
     build:

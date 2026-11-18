@@ -6,6 +6,7 @@ import SwiftUI
 /// wired to the core yet.
 struct PanelView: View {
     let openMainWindow: () -> Void
+    let openSettings: () -> Void
 
     @State private var isOn = false
     @State private var mode: AggregationMode = .balance
@@ -32,7 +33,8 @@ struct PanelView: View {
             HStack {
                 Button("打开主窗口", action: openMainWindow)
                 Spacer()
-                SettingsLink { Image(systemName: "gearshape") }
+                Button("设置", systemImage: "gearshape", action: openSettings)
+                    .labelStyle(.iconOnly)
                     .help("设置")
             }
         }

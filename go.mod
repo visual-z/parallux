@@ -184,3 +184,8 @@ require (
 	lukechampine.com/blake3 v1.3.0 // indirect
 	zombiezen.com/go/capnproto2 v2.18.2+incompatible // indirect
 )
+
+// Parallux's sing-box fork: upstream v1.14.4 plus one commit that lets
+// core/aggregate register its outbound type (PLAN decision 10). Branch
+// parallux/v1.14.4 of github.com/visual-z/sing-box; rebase that commit to move.
+replace github.com/sagernet/sing-box => github.com/visual-z/sing-box v0.0.0-20261118143423-78a56380d097

@@ -1,29 +1,70 @@
 #!/usr/bin/env bash
 # Builds apple/Frameworks/Libbox.xcframework: sing-box's experimental/libbox
-# plus core/pxbridge, bound by gomobile into one macOS framework.
+# (from the Parallux fork, see go.mod) plus core/pxbridge, bound by gomobile
+# into one macOS framework.
 #
 # Mirrors sing-box's own Apple build (cmd/internal/build_libbox, v1.14.4):
-# same gomobile fork, same tags and linker flags, macOS only, and the
-# deployment target raised to 26.0 (PLAN decision 2).
+# same gomobile fork, tags and linker flags, macOS only, deployment target 26.0
+# (PLAN decision 2).
 #
-#   scripts/build-core.sh          release build (stripped)
-#   DEBUG=1 scripts/build-core.sh  keeps symbols and adds the `debug` tag
+# The build is skipped when its inputs hash to the value in .build/core.stamp:
+# go.mod, go.sum, every .go file under core/, this script, and `go version`.
+# The core version string carries that hash, so it changes exactly when the
+# framework does.
+#
+#   scripts/build-core.sh                build if stale (arm64 only)
+#   scripts/build-core.sh --check-fresh  exit 0 if fresh, 1 if a build is due
+#   ARCHS=all scripts/build-core.sh      arm64 + x86_64, for release
+#   DEBUG=1 scripts/build-core.sh        keep symbols, add the `debug` tag
+#   FORCE=1 scripts/build-core.sh        ignore the stamp
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 cd "$ROOT"
 
-BIN="$ROOT/.build/bin"
 OUT="$ROOT/apple/Frameworks/Libbox.xcframework"
-mkdir -p "$BIN" "$(dirname "$OUT")"
+STAMP="$ROOT/.build/core.stamp"
+LOGS="$ROOT/.build/logs"
+BIN="$ROOT/.build/bin"
+ARCHS="${ARCHS:-arm64}"
 
-# gomobile and gobind at the versions go.mod pins (core/tools.go).
+input_hash() {
+  {
+    echo "archs=$ARCHS debug=${DEBUG:-}"
+    go version
+    cat go.mod go.sum scripts/build-core.sh
+    find core -name '*.go' -type f | LC_ALL=C sort | while read -r f; do
+      echo "$f"; cat "$f"
+    done
+  } | shasum -a 256 | cut -c1-16
+}
+
+HASH="$(input_hash)"
+fresh() { [ -f "$STAMP" ] && [ -d "$OUT" ] && [ "$(cat "$STAMP")" = "$HASH" ]; }
+
+if [ "${1:-}" = "--check-fresh" ]; then
+  if fresh; then echo "core is fresh ($HASH)"; exit 0; fi
+  echo "core is stale: inputs hash to $HASH, stamp has $(cat "$STAMP" 2>/dev/null || echo none)"
+  exit 1
+fi
+if [ -z "${FORCE:-}" ] && fresh; then
+  echo "core is fresh ($HASH), skipping build"
+  exit 0
+fi
+
+mkdir -p "$BIN" "$LOGS" "$(dirname "$OUT")"
 go build -o "$BIN/gomobile" github.com/sagernet/gomobile/cmd/gomobile
 go build -o "$BIN/gobind" github.com/sagernet/gomobile/cmd/gobind
 export PATH="$BIN:$PATH"
 
+case "$ARCHS" in
+  arm64) TARGET="macos/arm64" ;;
+  all) TARGET="macos" ;;
+  *) echo "ARCHS must be arm64 or all" >&2; exit 2 ;;
+esac
+
 SINGBOX_VERSION="$(go list -m -f '{{.Version}}' github.com/sagernet/sing-box)"
 SINGBOX_VERSION="${SINGBOX_VERSION#v}"
-CORE_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo 0.0.0-dev)"
+CORE_VERSION="0.0.0-dev+$HASH"
 
 # Tag list copied from sing-box v1.14.4 cmd/internal/build_libbox (sharedTags +
 # darwinTags). Re-check it whenever go.mod moves sing-box.
@@ -40,9 +81,11 @@ else
   LDFLAGS="$LDFLAGS -s -w -buildid="
 fi
 
-rm -rf "$OUT"
-gomobile bind -v \
-  -target macos \
+LOG="$LOGS/build-core.log"
+rm -rf "$OUT" "$STAMP"
+echo "building Libbox.xcframework ($TARGET, core $CORE_VERSION); log: $LOG"
+if ! gomobile bind -v \
+  -target "$TARGET" \
   -macosversion=26.0 \
   -libname=box \
   -trimpath -buildvcs=false \
@@ -50,6 +93,9 @@ gomobile bind -v \
   -tags "$TAGS" \
   -o "$OUT" \
   github.com/sagernet/sing-box/experimental/libbox \
-  github.com/visual-z/parallux/core/pxbridge
-
+  github.com/visual-z/parallux/core/pxbridge >"$LOG" 2>&1; then
+  tail -40 "$LOG" >&2
+  exit 1
+fi
+echo "$HASH" >"$STAMP"
 echo "built $OUT (sing-box $SINGBOX_VERSION, core $CORE_VERSION)"

@@ -11,3 +11,8 @@ apple/*.xcodeproj/
 # per-developer signing (copy apple/Config/Local.xcconfig.example)
 apple/Config/Local.xcconfig
 xcuserdata/
+# generated from apple/project.yml as well (XcodeGen rewrites them every run)
+apple/Parallux/Info.plist
+apple/Parallux/Parallux.entitlements
+apple/PacketTunnel/Info.plist
+apple/PacketTunnel/PacketTunnel.entitlements
