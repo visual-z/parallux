@@ -62,6 +62,11 @@ public struct ConnectionRow: Identifiable, Equatable, Sendable {
     public var downlinkTotal: Int64
     public var createdAt: Date
     public var isClosed: Bool
+    /// Bytes per second over the last statistics interval.
+    public var uplink: Int64 = 0
+    public var downlink: Int64 = 0
+    /// sing-box outbound type of `outbound` ("direct", "selector", "vmess"…).
+    public var outboundType: String = ""
 
     public init(id: String, process: String, destination: String, rule: String, outbound: String, chain: [String] = [],
                 network: String = "tcp", uplinkTotal: Int64 = 0, downlinkTotal: Int64 = 0, createdAt: Date = Date(), isClosed: Bool = false) {

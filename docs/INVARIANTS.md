@@ -10,6 +10,7 @@
 |---|---|---|---|
 | INV-1 | 配置库的选中项要么为空，要么是库里某个配置的 id | 代码断言（`checkInvariants`，每次修改后）+ property | `anyOperationSequenceKeepsTheSelectionValid` |
 | INV-2 | 日志与速率历史的环形缓冲长度不超过容量，并按到达顺序保留最新的条目 | 代码断言 + property | `aRingBufferKeepsTheNewestEntriesInOrder` |
+| INV-3 | 流向图里每个节点高度等于流经它的流带宽度之和，左右两侧总高度相等 | 代码断言 + property | `aSankeyLayoutConservesWidth` |
 
 ## 写法提示
 
