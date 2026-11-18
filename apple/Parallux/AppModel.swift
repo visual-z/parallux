@@ -14,10 +14,17 @@ final class AppModel {
     let linkSettings = LinkSettingsModel()
     let linkStats = LinkStatsPoller()
     @ObservationIgnored private let notifier = LinkNotifier()
-    /// Supplies the multipath outbound for 叠加 (feat-bond-interface); nil until a server is set.
-    var bondProvider: (@MainActor (LinkSettings) -> ProfileComposer.Bond?) = { _ in nil }
-    /// "东京 VPS · 12 ms" for the panel; set by feat-bond-interface.
-    var bondServerSummary: String?
+    let servers = AggregationServersModel()
+
+    /// The multipath outbound for 叠加: the chosen server over the two top links.
+    func bondProvider(_ settings: LinkSettings) -> ProfileComposer.Bond? {
+        guard let id = settings.bondServerID, let server = servers.servers.first(where: { $0.id == id }),
+              let psk = servers.psk(for: id) else { return nil }
+        return server.bond(links: enabledLinks, psk: psk)
+    }
+
+    /// "东京 VPS · 12 ms" for the panel and menu.
+    var bondServerSummary: String? { servers.summary(linkSettings.value.bondServerID) }
     private(set) var lastError: String?
     /// The profile content the running tunnel was started with, before composing.
     @ObservationIgnored private var runningContent: String?

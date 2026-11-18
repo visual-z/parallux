@@ -35,9 +35,7 @@ struct MainWindow: View {
                 case .connections: ConnectionsView()
                 case .logs: LogsView()
                 case .links: LinksView()
-                case .aggregationServer:
-                    ContentUnavailableView("聚合服务器", systemImage: item.symbol,
-                                           description: Text("叠加所需的聚合服务器与一键部署在 M4 接入。"))
+                case .aggregationServer: AggregationServersView()
                 case .diagnostics: DiagnosticsView()
                 case .profiles: ProfilesView()
                 case .outbounds: OutboundsView()

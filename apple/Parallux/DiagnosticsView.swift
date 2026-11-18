@@ -18,6 +18,7 @@ struct DiagnosticsView: View {
     @State private var tunnel: Arm<[LinkProbeResult]> = .idle
     @State private var probeProfileError: String?
     @State private var usingProbeProfile = false
+    @State private var speed = SpeedTestRunner()
 
     enum Arm<Value> {
         case idle, running, done(Value, tunnelWasOn: Bool), failed(String)
@@ -25,6 +26,7 @@ struct DiagnosticsView: View {
 
     var body: some View {
         Form {
+            speedSection
             Section {
                 Text("三组结果一起看：App 内检测在隧道关着时跑，作为对照；扩展内与 sing-box 两组在隧道开着时跑。拷贝全部结果贴回研究卡。")
                     .font(.callout).foregroundStyle(.secondary)
@@ -71,6 +73,37 @@ struct DiagnosticsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// 单线程下载测速 (design): each link alone, then all links bonded.
+    @ViewBuilder private var speedSection: some View {
+        Section("单线程下载测速") {
+            Text("测速依次只用一条线路，再用叠加，看叠加到底多出多少。每条路径一个连接、\(SpeedTestRunner.secondsPerPath) 秒。需要隧道已连接且启用两条以上线路；叠加一项需要聚合服务器。")
+                .font(.callout).foregroundStyle(.secondary)
+            HStack {
+                if let current = speed.current { ProgressView().controlSize(.small); Text("正在测 \(current)…").font(.caption) }
+                Spacer()
+                Button("开始测试") { speed.run(paths: speedPaths) }
+                    .disabled(speed.isRunning || !app.tunnel.isConnected || app.enabledLinks.count < 2)
+            }
+            ForEach(Array(speed.results.enumerated()), id: \.offset) { _, result in
+                LabeledContent(result.label) {
+                    Text(result.rate.map { RateFormat.bitsPerSecond($0) } ?? "失败").monospacedDigit()
+                        .foregroundStyle(result.rate == nil ? .red : .primary)
+                }
+            }
+            if let summary = SpeedTest.summary(speed.results) {
+                Text(summary).font(.callout.weight(.medium))
+            }
+        }
+    }
+
+    private var speedPaths: [(label: String, outbound: String, isBond: Bool)] {
+        var paths = app.enabledLinks.map { (label: "\($0.kind.title)（\($0.name)）", outbound: ProfileComposer.linkTag($0.name), isBond: false) }
+        if app.effectiveMode == .bond {
+            paths.append((label: "叠加", outbound: AggregationServer.bondTag, isBond: true))
+        }
+        return paths
     }
 
     private var probeGroup: OutboundGroupModel? {
