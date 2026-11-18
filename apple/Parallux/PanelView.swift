@@ -39,6 +39,9 @@ private struct PanelHome: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
+            if let server = app.remote.active {
+                Label("正在查看「\(server.name)」", systemImage: "desktopcomputer").font(.caption).foregroundStyle(.secondary)
+            }
             if app.tunnel.isConnected { miniFlow }
             section("线路") { links }
             Divider()
@@ -58,7 +61,7 @@ private struct PanelHome: View {
             }
             Spacer()
             Toggle("开启 Parallux", isOn: isOn).toggleStyle(.switch).labelsHidden()
-                .disabled(app.tunnel.isBusy)
+                .disabled(app.tunnel.isBusy || !app.controlsLocalCore)
         }
     }
 

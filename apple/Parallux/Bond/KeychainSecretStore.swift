@@ -4,7 +4,13 @@ import Security
 
 /// Aggregation-server psks in the login Keychain (never in UserDefaults).
 struct KeychainSecretStore: SecretStore {
-    static let service = (Bundle.main.bundleIdentifier ?? "io.github.visual-z.parallux") + ".aggregation-server"
+    static let aggregationService = (Bundle.main.bundleIdentifier ?? "io.github.visual-z.parallux") + ".aggregation-server"
+    static let remoteService = (Bundle.main.bundleIdentifier ?? "io.github.visual-z.parallux") + ".remote-control"
+    let service: String
+
+    init(service: String = KeychainSecretStore.aggregationService) {
+        self.service = service
+    }
 
     struct Failure: LocalizedError {
         let status: OSStatus
@@ -12,7 +18,7 @@ struct KeychainSecretStore: SecretStore {
     }
 
     private func query(_ id: UUID) -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: Self.service, kSecAttrAccount as String: id.uuidString]
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: id.uuidString]
     }
 
     func secret(for id: UUID) -> String? {

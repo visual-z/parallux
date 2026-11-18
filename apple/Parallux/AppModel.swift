@@ -15,6 +15,7 @@ final class AppModel {
     let linkStats = LinkStatsPoller()
     @ObservationIgnored private let notifier = LinkNotifier()
     let servers = AggregationServersModel()
+    let remote = RemoteControlModel()
 
     /// The multipath outbound for 叠加: the chosen server over the two top links.
     func bondProvider(_ settings: LinkSettings) -> ProfileComposer.Bond? {
@@ -32,6 +33,9 @@ final class AppModel {
     var session: CoreSession { tunnel.session }
 
     var isOn: Bool { tunnel.isConnected || tunnel.vpnStatus == .connecting || tunnel.vpnStatus == .reasserting }
+
+    /// Local-only controls (tunnel switch, links, mode, system proxy) are off while viewing a remote device.
+    var controlsLocalCore: Bool { !remote.isRemote }
 
     func start() {
         profiles.startAutoUpdate()

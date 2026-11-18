@@ -149,7 +149,7 @@ final class CoreSession {
     func loadDeprecatedNotes() {
         Task.detached { [weak self] in
             var notes: [String] = []
-            if let client = LibboxNewStandaloneCommandClient(), let iterator = try? client.getDeprecatedNotes() {
+            if let client = try? CommandTarget.standalone(), let iterator = try? client.getDeprecatedNotes() {
                 while iterator.hasNext(), let note = iterator.next() { notes.append(note.message()) }
             }
             await MainActor.run { self?.deprecatedNotes = notes }
@@ -160,7 +160,7 @@ final class CoreSession {
         Task.detached { [weak self] in
             var message: String?
             do {
-                guard let client = LibboxNewStandaloneCommandClient() else { throw CocoaError(.featureUnsupported) }
+                let client = try CommandTarget.standalone()
                 try action(client)
             } catch {
                 message = error.localizedDescription
@@ -261,7 +261,7 @@ final class CoreSession {
             for command in commands { options.addCommand(command) }
             // Why 1 s: the design refreshes rates at most once per second.
             options.statusInterval = Int64(NSEC_PER_SEC)
-            client = LibboxNewCommandClient(handler, options)
+            client = CommandTarget.client(handler, options)
             let box = StreamValue(value: client)
             let handler = self.handler
             Task.detached {

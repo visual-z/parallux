@@ -35,7 +35,7 @@ final class SpeedTestRunner {
         await withCheckedContinuation { continuation in
             let handler = Handler { continuation.resume(returning: $0) }
             Task.detached {
-                guard let client = LibboxNewStandaloneCommandClient() else {
+                guard let client = try? CommandTarget.standalone() else {
                     handler.finish(nil)
                     return
                 }

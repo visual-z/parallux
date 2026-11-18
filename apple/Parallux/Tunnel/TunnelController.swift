@@ -174,6 +174,8 @@ final class TunnelController {
         let wasConnected = vpnStatus == .connected
         vpnStatus = connection.status
         connectedDate = connection.connectedDate
+        // While a remote device is being viewed, the session follows it, not this Mac's tunnel.
+        guard CommandTarget.remote == nil else { return }
         if connection.status == .connected, !wasConnected {
             session.start()
         } else if connection.status != .connected, wasConnected {

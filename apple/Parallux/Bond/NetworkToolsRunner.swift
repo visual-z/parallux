@@ -41,7 +41,7 @@ final class NetworkToolsRunner {
         }
         Task.detached {
             do {
-                guard let client = LibboxNewStandaloneCommandClient() else { throw CocoaError(.featureUnsupported) }
+                let client = try CommandTarget.standalone()
                 handler.session = try client.startNetworkQualityTest(LibboxNetworkQualityDefaultConfigURL, outboundTag: outbound,
                                                                      serial: false, maxRuntimeSeconds: Self.qualitySeconds, http3: false, handler: handler)
             } catch {
@@ -63,7 +63,7 @@ final class NetworkToolsRunner {
         }
         Task.detached {
             do {
-                guard let client = LibboxNewStandaloneCommandClient() else { throw CocoaError(.featureUnsupported) }
+                let client = try CommandTarget.standalone()
                 handler.session = try client.startSTUNTest(LibboxSTUNDefaultServer, outboundTag: outbound, handler: handler)
             } catch {
                 handler.finish(nil, error.localizedDescription)
