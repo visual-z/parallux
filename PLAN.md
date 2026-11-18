@@ -87,3 +87,7 @@ App 与扩展之间照 SFM：扩展在版本化的 `NEMachServiceName` 上开 XP
 | 13 | 2026-11-18 | 聚合模型：每条线路一个 `direct` + `bind_interface` 出站；一个 `aggregate` 出站（mode + links）承载分流 / 主备 / 叠加，节点用 `detour` 指向它；全局三选一只是预设 | 避免节点 × 线路展开；singbox-multipath 本就以出站 tag 为 leg。Fable 审计 | 生效 |
 | 14 | 2026-11-18 | M1 的退出条件只差作者手测（签名安装、两条真实线路）时，可以并行推进 M2 里不依赖签名与网口绑定的部分（界面、配置管理、数据层）；依赖网口绑定的 M3 仍等 `research-sysext-bind-interface` 的结论 | 作者选定；M1 手测需要作者在场，等待期间不空转 | 生效 |
 | 15 | 2026-11-18 | 日常开发用 Apple Development 签名，`PARALLUX_NE_PROVIDER = packet-tunnel-provider`；由 `xcodebuild -allowProvisioningUpdates -allowProvisioningDeviceRegistration` 在团队账号上注册 App ID、App Group 与本机；Developer ID 留给 M6 发布 | 作者选定并授权改动开发者账号；2026-11-18 对拍：签名构建成功，entitlements 齐全 | 生效 |
+| 16 | 2026-11-19 | 作者暂时不能手测：M3–M6 不再等上一层手测通过，代码全部写完后统一手测；M3 照决策 13 实现，`research-sysext-bind-interface` 若实测证伪，只换线路出站的实现，配置格式与界面不动 | 作者选定。PLAN §6「下一层只在上一层全绿后开始」中「手测」一项由本决策暂缓，gate 仍须全绿 | 生效 |
+| 17 | 2026-11-19 | 叠加：把 singbox-multipath（beta11，d99530a）的 `protocol/multipath` 整包移植进 `core/bond`，经 fork 的注册钩子注册为 `multipath` 出站与入站；`aggregate` 的 bond 模式生成到它的配置 | 作者选定；GPLv3 与本项目一致（附加条款：不得用 sing-box 名称）；只依赖 sing-box 公开包与 quic-go（已在依赖图里）；不依赖它的 fork，理由同决策 10 | 生效 |
+| 18 | 2026-11-19 | 聚合服务器：仓库加 `server/`（Go，复用 `core/bond` 的入站）与一键安装脚本（systemd、生成 psk、输出导入链接）；App 粘贴链接添加服务器 | 作者选定；设计稿「添加服务器」一节 | 生效 |
+| 19 | 2026-11-19 | 发布：写 Developer ID 签名、公证、DMG 打包脚本；自动更新用 Sparkle（新依赖，MIT）；公证凭据由作者之后配进钥匙串，脚本缺凭据时报错并说明，不推送、不发布 | 作者选定；Sparkle 是 macOS 独立分发 App 的通行做法（SFM 走 App Store，不适用） | 生效 |
