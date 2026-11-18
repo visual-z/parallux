@@ -22,7 +22,7 @@
 | 6 | 扫码导入 | 不适用 | Mac 上扫码要摄像头权限；导入链接、.bpf 文件与 iCloud 已覆盖同样需求 |
 | 7 | QRS 动态码分享 | 待做 | QRS 是 SFM 自己的多帧二维码格式；没有现成 Swift 实现，留作后续 |
 | 8 | 链接二维码分享 | 待手测 | 远程配置「分享…」：导入链接 + CoreImage 二维码 |
-| 9 | `sing-box://import-remote-profile` 链接 | 待手测 | 「从链接导入…」用 libbox `ParseRemoteProfileImportLink`；URL scheme 注册 M5 |
+| 9 | `sing-box://import-remote-profile` 链接 | 待手测 | 「从链接导入…」与 `sing-box://`、`parallux://` URL scheme |
 | 10 | 打开 .bpf 文件 | 待手测 | 同 #5；双击打开 .bpf 的文件关联随 `feat-system-integration` |
 | 11 | 编辑元数据 | 待手测 | 右键「名称与更新…」 |
 | 12 | 编辑内容（校验 + 格式化） | 待手测 | JSON 编辑器，`LibboxCheckConfig` / `LibboxFormatConfig` |
@@ -52,7 +52,7 @@
 | 31 | 系统 HTTP 代理开关 | 等价 | 设置里的开关在下次连接时生效；SFM 能运行中切换（`setSystemProxyEnabled`），我们的扩展目前返回「下次连接生效」 |
 | 32 | 路由模式 | 待手测 | 概览、面板、节点与规则页工具栏、右键菜单 |
 | 33 | 配置卡 | 待手测 | 概览 |
-| 34 | 概览卡片开关与排序 | 待做 | M5 |
+| 34 | 概览卡片开关与排序 | 待手测 | 概览卡片右键：显示 / 隐藏、左移、恢复默认（`feat-parity-tail`） |
 | 35 | 切换即生效 | 待手测 | 同 #19 |
 | 36 | 启动失败提示 | 待手测 | 状态行显示扩展返回的错误；内核流失败也显示（`StatusLine`） |
 
@@ -132,22 +132,22 @@
 |---|---|---|---|
 | 97 | 网络质量测试 | 待手测 | 诊断页「网络质量」，可选经由的出站 |
 | 98 | STUN 测试 | 待手测 | 诊断页「STUN」 |
-| 99 | Tailscale 状态 / 出口节点 | 待做 | Tailscale endpoint 的界面；需要配置里有 tailscale endpoint 才能测 |
+| 99 | Tailscale 状态 / 出口节点 | 待手测 | 诊断 › 端点：状态、登录地址、出口节点 |
 | 100 | Tailscale SSH 终端 | 不适用 | 设计稿注明实验功能，先不做 |
-| 101 | Taildrop | 待做 | 随 #99 |
+| 101 | Taildrop | 等价 | 只显示待接收文件数；收发文件在其他 Tailscale 客户端里做 |
 | 102 | 分享扩展 | 不适用 | 需要另一个 App 扩展；收益低 |
-| 103 | OpenConnect / OpenVPN 状态 | 待做 | OpenConnect / OpenVPN endpoint 的状态与认证挑战 |
+| 103 | OpenConnect / OpenVPN 状态 | 待手测 | 诊断 › 端点：状态与认证挑战（OpenConnect 表单、OpenVPN 用户名密码）；浏览器登录不支持 |
 | 104 | USB/IP | 待做 | USB/IP 共享；扩展已链接 IOUSBHost |
-| 105 | OOM 报告 / 内存上限 | 待做 | 扩展启动参数里的 OOM 上限（`LibboxSetupOptions.oomMemoryLimit`） |
+| 105 | OOM 报告 / 内存上限 | 待手测 | 诊断 › 内核：内存上限，扩展启动时开 OOM |
 | 106 | 崩溃报告 | 待手测 | 同 #58 |
 | 107 | 台湾旗帜检测 | 不适用 | 与代理无关 |
-| 108 | 快捷指令 | 待做 | M5（PLAN） |
+| 108 | 快捷指令 | 待手测 | App Intents 与快捷指令（`feat-system-integration`） |
 | 109 | 赞助 | 不适用 | SFM 自身的入口 |
-| 110 | 文档 / 源码链接 | 待做 | M6 关于页 |
-| 111 | 内核通知 | 待做 | 扩展的 `send(_:)` 目前忽略；M5 |
-| 112 | 必须在 /Applications | 待做 | 不在 /Applications 时提示；M5 |
+| 110 | 文档 / 源码链接 | 待手测 | 设置 › 关于 |
+| 111 | 内核通知 | 待手测 | 扩展排队，App 经 XPC 每 2 秒取并发通知 |
+| 112 | 必须在 /Applications | 待手测 | 启动时检查，提供移到 /Applications |
 | 113 | Include All Networks（文档名） | 待手测 | 同 #77 |
 
 ## 计数（2026-11-19，M3–M5 后）
 
-108 行：待手测 76、待做 15、不适用 10、等价 7。没有「做」：在作者手测之前，任何一项都不算完成。
+108 行：待手测 84、待做 6、不适用 10、等价 8。没有「做」：在作者手测之前，任何一项都不算完成。
