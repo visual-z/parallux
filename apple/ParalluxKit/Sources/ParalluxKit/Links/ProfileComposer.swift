@@ -104,7 +104,8 @@ public enum ProfileComposer {
         if useBond, let bond, !taken.contains(bond.tag) {
             var multipath = bond.outbound.mapValues(\.foundation)
             multipath["tag"] = bond.tag
-            multipath["outbounds"] = linkTags
+            // A bond fragment may name its legs (AggregationServer.bond picks two).
+            if multipath["outbounds"] == nil { multipath["outbounds"] = linkTags }
             added.append(multipath)
         }
         outbounds.append(contentsOf: added)
