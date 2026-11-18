@@ -15,12 +15,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// item and its menu) can reopen the main and settings windows.
     var sceneActions: SceneActions?
     let tunnel = TunnelController()
+    let profiles = ProfileService()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         popover.behavior = .transient
         Task { await tunnel.load() }
+        profiles.startAutoUpdate()
         popover.contentViewController = NSHostingController(rootView: PanelView(
             tunnel: tunnel,
+            profiles: profiles,
             openMainWindow: { [weak self] in self?.showMainWindow() },
             openSettings: { [weak self] in self?.showSettings() }
         ))

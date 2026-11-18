@@ -53,9 +53,16 @@ public enum RemoteUpdate {
     /// Why 7 d: anything longer is effectively manual; keeps the picker finite.
     public static let maximumInterval: TimeInterval = 7 * 86400
 
-    public static func clamp(_ interval: TimeInterval) -> TimeInterval { interval }
+    public static func clamp(_ interval: TimeInterval) -> TimeInterval {
+        guard interval.isFinite else { return interval > 0 ? maximumInterval : minimumInterval }
+        return min(max(interval, minimumInterval), maximumInterval)
+    }
 
-    public static func isDue(_ profile: Profile, now: Date) -> Bool { false }
+    public static func isDue(_ profile: Profile, now: Date) -> Bool {
+        guard profile.kind == .remote, profile.autoUpdate else { return false }
+        guard let last = profile.lastUpdated else { return true }
+        return now.timeIntervalSince(last) >= clamp(profile.autoUpdateInterval)
+    }
 }
 
 public enum BoundedDownload {
@@ -69,6 +76,11 @@ public enum BoundedDownload {
 
     /// Collects bytes and fails as soon as more than `limit` arrive.
     public static func collect<S: AsyncSequence>(_ bytes: S, limit: Int = maxBytes) async throws -> Data where S.Element == UInt8 {
-        Data()
+        var data = Data()
+        for try await byte in bytes {
+            guard data.count < limit else { throw TooLarge(limit: limit) }
+            data.append(byte)
+        }
+        return data
     }
 }

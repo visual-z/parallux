@@ -8,6 +8,8 @@ struct ParalluxApp: App {
     var body: some Scene {
         Window("Parallux", id: MainWindow.id) {
             MainWindow { appDelegate.sceneActions = $0 }
+                .environment(appDelegate.profiles)
+                .environment(appDelegate.tunnel)
         }
         .defaultSize(width: 1040, height: 680)
 

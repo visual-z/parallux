@@ -30,6 +30,7 @@ struct MainWindow: View {
             Group {
                 switch item {
                 case .diagnostics: DiagnosticsView()
+                case .profiles: ProfilesView()
                 default: ContentUnavailableView(item.title, systemImage: item.symbol, description: Text("尚未实现"))
                 }
             }

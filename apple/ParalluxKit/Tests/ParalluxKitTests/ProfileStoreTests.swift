@@ -131,3 +131,18 @@ import Testing
 }
 
 extension SplitMix64: RandomNumberGenerator {}
+
+@Suite struct ProfileDescriptionTests {
+    @Test func aRemoteProfileReadsLikeTheDesign() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let profile = Profile(name: "主力机场", kind: .remote, autoUpdate: true, autoUpdateInterval: 12 * 3600,
+                              lastUpdated: now.addingTimeInterval(-3 * 3600))
+        #expect(ProfileDescription.detail(profile, now: now) == "远程 · 每 12 小时更新 · 3 小时前更新")
+    }
+
+    @Test func everyIntervalChoiceIsWithinTheClamp() {
+        for choice in ProfileDescription.intervalChoices {
+            #expect(RemoteUpdate.clamp(choice) == choice)
+        }
+    }
+}

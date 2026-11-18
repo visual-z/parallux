@@ -7,6 +7,7 @@ import SwiftUI
 /// arrives with the M2 interface card.
 struct PanelView: View {
     let tunnel: TunnelController
+    let profiles: ProfileService
     let openMainWindow: () -> Void
     let openSettings: () -> Void
 
@@ -20,7 +21,7 @@ struct PanelView: View {
                     if on {
                         if tunnel.phase != .ready { await tunnel.install() }
                         if tunnel.phase == .ready {
-                            await tunnel.connect(TunnelStartOptions(configContent: SampleProfile.content))
+                            await connectSelectedProfile()
                         }
                     } else {
                         tunnel.disconnect()
@@ -30,7 +31,23 @@ struct PanelView: View {
         )
     }
 
+    /// Uses the selected profile; before any profile exists, the bundled sample.
+    private func connectSelectedProfile() async {
+        var content = SampleProfile.content
+        if let profile = profiles.store.selected {
+            do { content = try await profiles.content(of: profile) } catch {
+                profileError = error.localizedDescription
+                return
+            }
+        }
+        profileError = nil
+        await tunnel.connect(TunnelStartOptions(configContent: content))
+    }
+
+    @State private var profileError: String?
+
     private var statusLine: String {
+        if let profileError { return profileError }
         switch tunnel.phase {
         case .awaitingApproval: return "请在系统设置中允许网络扩展"
         case let .failed(message): return message
