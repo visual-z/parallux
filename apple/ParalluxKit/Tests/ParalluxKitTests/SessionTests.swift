@@ -115,3 +115,23 @@ import Testing
         #expect(RuleSummary.parse(config: "{}").isEmpty)
     }
 }
+
+@Suite struct RuleTruncationTests {
+    @Test func longRuleSetListsAreMatchedUntruncated() {
+        let config = """
+        {"route": {"rules": [
+          {"rule_set": ["geosite-a", "geosite-b", "geosite-c", "geosite-d"], "outbound": "Proxy"},
+          {"domain_suffix": ["a.com", "b.com", "c.com", "d.com"], "outbound": "direct"}
+        ]}}
+        """
+        let rules = RuleSummary.parse(config: config)
+        let connections = [
+            // sing-box prints rule_set in full (rule_item_rule_set.go) and domain_suffix truncated (rule_item_domain.go).
+            ConnectionRow(id: "1", process: "", destination: "", rule: "rule_set=[geosite-a geosite-b geosite-c geosite-d]", outbound: "Proxy"),
+            ConnectionRow(id: "2", process: "", destination: "", rule: "domain_suffix=[a.com b.com c.com...]", outbound: "direct"),
+        ]
+        let hits = RuleSummary.hits(rules, connections: connections)
+        #expect(hits[0] == 1)
+        #expect(hits[1] == 1)
+    }
+}
