@@ -26,6 +26,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var onDemandRules: [OnDemandRuleModel] = []
     /// Notify when a link becomes unavailable or recovers (design 「线路掉线时通知」).
     public var notifyLinkChanges = true
+    /// SFM #76: stop showing the configuration's deprecation notes.
+    public var hideDeprecatedNotes = false
 
     public init() {}
 
@@ -66,6 +68,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         onDemandEnabled = try container.decodeIfPresent(Bool.self, forKey: .onDemandEnabled) ?? defaults.onDemandEnabled
         onDemandRules = try container.decodeIfPresent([OnDemandRuleModel].self, forKey: .onDemandRules) ?? defaults.onDemandRules
         notifyLinkChanges = try container.decodeIfPresent(Bool.self, forKey: .notifyLinkChanges) ?? defaults.notifyLinkChanges
+        hideDeprecatedNotes = try container.decodeIfPresent(Bool.self, forKey: .hideDeprecatedNotes) ?? defaults.hideDeprecatedNotes
     }
 }
 

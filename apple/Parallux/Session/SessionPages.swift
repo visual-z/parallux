@@ -1,3 +1,5 @@
+import AppKit
+import Libbox
 import ParalluxKit
 import SwiftUI
 
@@ -85,6 +87,13 @@ private struct GroupSection: View {
     let group: OutboundGroupModel
     let search: String
     @Environment(CoreSession.self) private var session
+    @AppStorage private var collapsed: Bool
+
+    init(group: OutboundGroupModel, search: String) {
+        self.group = group
+        self.search = search
+        _collapsed = AppStorage(wrappedValue: false, "nodes.collapsed.\(group.tag)")
+    }
 
     private var items: [OutboundGroupModel.Item] {
         search.isEmpty ? group.items : group.items.filter { $0.tag.localizedCaseInsensitiveContains(search) }
@@ -94,7 +103,17 @@ private struct GroupSection: View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
+                    Button {
+                        withAnimation(.snappy) { collapsed.toggle() }
+                    } label: {
+                        Image(systemName: "chevron.right").rotationEffect(.degrees(collapsed ? 0 : 90))
+                    }
+                    .buttonStyle(.borderless)
+                    .help(collapsed ? "展开" : "折叠")
                     Text(group.tag).font(.headline)
+                    if collapsed {
+                        Text(group.selected).font(.caption).foregroundStyle(.secondary)
+                    }
                     if session.testing.contains(group.tag) { ProgressView().controlSize(.mini) }
                     Spacer()
                     Text(group.subtitle).font(.caption).foregroundStyle(.secondary)
@@ -102,12 +121,14 @@ private struct GroupSection: View {
                         .labelStyle(.iconOnly).buttonStyle(.borderless)
                         .disabled(session.testing.contains(group.tag))
                 }
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 8)], spacing: 8) {
-                    ForEach(items) { item in
-                        NodeCard(item: item, isSelected: item.tag == group.selected)
-                            .onTapGesture {
-                                if group.selectable { session.select(group: group.tag, outbound: item.tag) }
-                            }
+                if !collapsed || !search.isEmpty {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 8)], spacing: 8) {
+                        ForEach(items) { item in
+                            NodeCard(item: item, isSelected: item.tag == group.selected)
+                                .onTapGesture {
+                                    if group.selectable { session.select(group: group.tag, outbound: item.tag) }
+                                }
+                        }
                     }
                 }
             }
@@ -143,8 +164,13 @@ struct ConnectionsView: View {
     @State private var search = ""
     @State private var selection: ConnectionRow.ID?
     @State private var showInspector = false
+    @AppStorage("connections.state") private var state: ConnectionState = .active
+    @AppStorage("connections.sort") private var sort: ConnectionSort = .date
+    @AppStorage("connections.hideDNS") private var hideDNS = false
 
-    private var rows: [ConnectionRow] { ConnectionQuery.filter(session.connections, text: search) }
+    private var rows: [ConnectionRow] {
+        ConnectionQuery.apply(session.connections, state: state, sort: sort, hideDNS: hideDNS, text: search)
+    }
 
     var body: some View {
         Group {
@@ -164,18 +190,29 @@ struct ConnectionsView: View {
                     }
                     .width(min: 80, ideal: 160)
                     TableColumn("出站") { Text($0.outbound) }.width(min: 60, ideal: 100)
-                    TableColumn("↓") { Text(RateFormat.bytes($0.downlinkTotal)).monospacedDigit() }.width(min: 50, ideal: 70)
+                    TableColumn("↓") { row in
+                        Text(RateFormat.bytes(row.downlinkTotal)).monospacedDigit().foregroundStyle(row.isClosed ? .secondary : .primary)
+                    }
+                    .width(min: 50, ideal: 70)
                 }
                 .onChange(of: selection) { _, new in if new != nil { showInspector = true } }
             }
         }
-        .navigationSubtitle("\(session.connections.count) 条活跃")
+        .navigationSubtitle("\(session.connections.filter { !$0.isClosed }.count) 条活跃")
         .searchable(text: $search, placement: .toolbar, prompt: "搜索")
         .inspector(isPresented: $showInspector) {
             ConnectionInspector(row: session.connections.first { $0.id == selection })
                 .inspectorColumnWidth(min: 240, ideal: 280)
         }
         .toolbar {
+            ToolbarItem {
+                Menu("筛选", systemImage: "line.3.horizontal.decrease") {
+                    Picker("状态", selection: $state) { ForEach(ConnectionState.allCases) { Text($0.title).tag($0) } }
+                    Picker("排序", selection: $sort) { ForEach(ConnectionSort.allCases) { Text($0.title).tag($0) } }
+                    Toggle("隐藏 DNS 连接", isOn: $hideDNS)
+                }
+                .help("筛选与排序")
+            }
             ToolbarItem {
                 Button("全部关闭", systemImage: "xmark.circle") { session.closeAllConnections() }
                     .disabled(session.connections.isEmpty)
@@ -266,11 +303,28 @@ struct LogsView: View {
                 .help(session.logsPaused ? "继续" : "暂停")
             }
             ToolbarItem {
+                Button("导出", systemImage: "square.and.arrow.up") { export(entries) }
+                    .disabled(entries.isEmpty)
+                    .help("导出当前显示的日志，订阅地址里的 token 与密码会被脱敏")
+            }
+            ToolbarItem {
                 Button("清空", systemImage: "trash") { session.clearLogs() }.help("清空日志")
             }
         }
         .onAppear { session.retainLogs() }
         .onDisappear { session.releaseLogs() }
+    }
+}
+
+extension LogsView {
+    /// Redacted with the core's own redact.Text (core/internal/redact), never a Swift copy.
+    func export(_ entries: [LogEntry]) {
+        let text = entries.map { "\($0.level.title) \($0.message)" }.joined(separator: "\n")
+        let redacted = PxbridgeRedactText(text)
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "parallux-\(Date().formatted(.iso8601.year().month().day()))-logs.txt"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? Data(redacted.utf8).write(to: url, options: .atomic)
     }
 }
 

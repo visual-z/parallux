@@ -27,6 +27,25 @@ public enum ConnectionSort: String, CaseIterable, Identifiable, Sendable {
 extension ConnectionQuery {
     /// Filter by state, hide DNS, search, then sort (newest / largest first).
     public static func apply(_ rows: [ConnectionRow], state: ConnectionState, sort: ConnectionSort, hideDNS: Bool, text: String) -> [ConnectionRow] {
-        rows
+        let kept = rows.filter { row in
+            switch state {
+            case .active: if row.isClosed { return false }
+            case .closed: if !row.isClosed { return false }
+            case .all: break
+            }
+            return !(hideDNS && isDNS(row))
+        }
+        return filter(kept, text: text).sorted { a, b in
+            switch sort {
+            case .date: a.createdAt > b.createdAt
+            case .traffic: (a.uplinkTotal + a.downlinkTotal) > (b.uplinkTotal + b.downlinkTotal)
+            case .rate: (a.uplink + a.downlink, a.createdAt) > (b.uplink + b.downlink, b.createdAt)
+            }
+        }
+    }
+
+    /// Port 53 or a sniffed DNS protocol (SFM hides the same).
+    static func isDNS(_ row: ConnectionRow) -> Bool {
+        row.destination.hasSuffix(":53") || row.rule.contains("protocol=dns")
     }
 }

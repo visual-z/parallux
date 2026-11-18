@@ -25,6 +25,9 @@ final class CoreSession {
     static let rateHistoryCapacity = 120
     /// Why 3000: SFM's logMaxLines; a few hundred KB of text at most.
     static let logCapacity = 3000
+    /// Why 500: closed connections are kept for the 「已关闭」 filter; past a
+    /// few hundred the table is unreadable and memory grows with every request.
+    static let closedConnectionCapacity = 500
 
     private(set) var status: CoreStatus?
     private(set) var rateHistory = RingBuffer<RatePoint>(capacity: rateHistoryCapacity)
@@ -52,6 +55,7 @@ final class CoreSession {
         guard base == nil else { return }
         startedAt = Date()
         base = Stream(session: self, commands: [LibboxCommandStatus, LibboxCommandGroup, LibboxCommandClashMode])
+        loadDeprecatedNotes()
         if connectionConsumers > 0 { openConnections() }
         if logConsumers > 0 { openLogs() }
     }
@@ -66,6 +70,7 @@ final class CoreSession {
         status = nil
         startedAt = nil
         lastError = nil
+        deprecatedNotes = []
         groups = []
         routeModes = []
         routeMode = nil
@@ -138,6 +143,19 @@ final class CoreSession {
 
     func dismissError() { lastError = nil }
 
+    /// Deprecation notes for the running configuration (SFM #76).
+    private(set) var deprecatedNotes: [String] = []
+
+    func loadDeprecatedNotes() {
+        Task.detached { [weak self] in
+            var notes: [String] = []
+            if let client = LibboxNewStandaloneCommandClient(), let iterator = try? client.getDeprecatedNotes() {
+                while iterator.hasNext(), let note = iterator.next() { notes.append(note.message()) }
+            }
+            await MainActor.run { self?.deprecatedNotes = notes }
+        }
+    }
+
     private func perform(_ action: @escaping @Sendable (LibboxCommandClient) throws -> Void, then done: (@MainActor () -> Void)? = nil) {
         Task.detached { [weak self] in
             var message: String?
@@ -173,12 +191,18 @@ final class CoreSession {
     fileprivate func receive(connectionEvents: StreamValue<LibboxConnectionEvents>) {
         guard let store = connectionStore else { return }
         store.apply(connectionEvents.value)
-        store.filterState(Int32(LibboxConnectionStateActive))
+        store.filterState(Int32(LibboxConnectionStateAll))
         store.sortByDate()
         var rows: [ConnectionRow] = []
+        var closed = 0
         let iterator = store.iterator()
         while let iterator, iterator.hasNext(), let connection = iterator.next() {
-            rows.append(Self.row(connection))
+            let row = Self.row(connection)
+            if row.isClosed {
+                closed += 1
+                if closed > Self.closedConnectionCapacity { continue }
+            }
+            rows.append(row)
         }
         connections = rows
     }

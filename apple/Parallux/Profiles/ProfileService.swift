@@ -113,11 +113,52 @@ final class ProfileService {
         try store.add(Profile(name: name, kind: .local), content: content)
     }
 
-    func importFile(_ url: URL) throws {
+    /// .json adds a local profile; .bpf (SFM's binary profile) restores
+    /// local or remote profiles with their update settings.
+    func importFile(_ url: URL) async throws {
         let accessing = url.startAccessingSecurityScopedResource()
         defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        if url.pathExtension.lowercased() == "bpf" {
+            var error: NSError?
+            guard let content = LibboxDecodeProfileContent(try Data(contentsOf: url), &error), error == nil else {
+                throw Failure(message: "不是有效的 .bpf 文件：\(error?.localizedDescription ?? "")")
+            }
+            try Self.validate(content.config)
+            if content.type == LibboxProfileTypeRemote, let remote = URL(string: content.remotePath) {
+                let interval = content.autoUpdateInterval > 0 ? TimeInterval(content.autoUpdateInterval) * 60 : RemoteUpdate.defaultInterval
+                try store.add(Profile(name: content.name, kind: .remote, remoteURL: remote, autoUpdate: content.autoUpdate,
+                                      autoUpdateInterval: RemoteUpdate.clamp(interval),
+                                      lastUpdated: content.lastUpdated > 0 ? Date(timeIntervalSince1970: TimeInterval(content.lastUpdated)) : nil),
+                              content: content.config)
+            } else {
+                try store.add(Profile(name: content.name, kind: .local), content: content.config)
+            }
+            return
+        }
         let content = try String(contentsOf: url, encoding: .utf8)
         try addLocal(name: url.deletingPathExtension().lastPathComponent, content: content)
+    }
+
+    /// SFM-compatible .bpf bytes (libbox ProfileContent.encode).
+    func exportBPF(_ profile: Profile) async throws -> Data {
+        let content = LibboxProfileContent()
+        content.name = profile.name
+        content.config = try await self.content(of: profile)
+        switch profile.kind {
+        case .remote:
+            content.type = LibboxProfileTypeRemote
+            content.remotePath = profile.remoteURL?.absoluteString ?? ""
+            content.autoUpdate = profile.autoUpdate
+            // SFM stores the interval in minutes.
+            content.autoUpdateInterval = Int32(profile.autoUpdateInterval / 60)
+            content.lastUpdated = Int64(profile.lastUpdated?.timeIntervalSince1970 ?? 0)
+        case .icloud:
+            content.type = LibboxProfileTypeiCloud
+        case .local:
+            content.type = LibboxProfileTypeLocal
+        }
+        guard let data = content.encode() else { throw Failure(message: "无法编码 .bpf") }
+        return data
     }
 
     func addICloud(name: String, fileURL: URL) async throws {
@@ -171,7 +212,7 @@ final class ProfileService {
     }
 
     static func download(_ url: URL) async throws -> String {
-        var request = URLRequest(url: url, timeoutInterval: requestTimeout)
+        var request = BasicAuth.request(for: url, timeout: requestTimeout)
         request.setValue("Parallux (sing-box)", forHTTPHeaderField: "User-Agent")
         let (bytes, response) = try await URLSession.shared.bytes(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {

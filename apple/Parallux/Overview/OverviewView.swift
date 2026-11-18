@@ -10,6 +10,9 @@ struct OverviewView: View {
         let session = app.session
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                if !session.deprecatedNotes.isEmpty, !app.settings.value.hideDeprecatedNotes {
+                    DeprecationBanner(notes: session.deprecatedNotes) { app.settings.value.hideDeprecatedNotes = true }
+                }
                 Text("宽度 = 实时速率。左边每条线路一股，中间是汇总，右边是流量的去向。")
                     .font(.caption).foregroundStyle(.secondary)
                 Group {
@@ -36,6 +39,22 @@ struct OverviewView: View {
         .navigationSubtitle(app.statusLine)
         .onAppear { session.retainConnections() }
         .onDisappear { session.releaseConnections() }
+    }
+}
+
+/// The running configuration's deprecation notes (SFM #76), dismissable for good.
+private struct DeprecationBanner: View {
+    let notes: [String]
+    let hide: () -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("当前配置用到了 sing-box 弃用的写法", systemImage: "exclamationmark.triangle").font(.callout.weight(.medium))
+            ForEach(notes, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
+            Button("不再提示", action: hide).controlSize(.small)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 

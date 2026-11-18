@@ -1,3 +1,4 @@
+import AppKit
 import CoreImage.CIFilterBuiltins
 import ParalluxKit
 import SwiftUI
@@ -9,6 +10,7 @@ struct ProfilesView: View {
     @State private var adding: ProfileKind?
     @State private var editing: Profile?
     @State private var sharing: Profile?
+    @State private var editingInfo: Profile?
     @State private var importingFile = false
     @State private var linkPrompt = false
     @State private var link = ""
@@ -44,8 +46,9 @@ struct ProfilesView: View {
         .sheet(item: $adding) { kind in AddProfileSheet(kind: kind) }
         .sheet(item: $editing) { profile in ProfileEditor(profile: profile) }
         .sheet(item: $sharing) { profile in ShareProfileSheet(profile: profile) }
-        .fileImporter(isPresented: $importingFile, allowedContentTypes: [.json]) { result in
-            run { try service.importFile(try result.get()) }
+        .sheet(item: $editingInfo) { profile in ProfileInfoEditor(profile: profile) }
+        .fileImporter(isPresented: $importingFile, allowedContentTypes: [.json, UTType(filenameExtension: "bpf") ?? .data]) { result in
+            Task { await runAsync { try await service.importFile(try result.get()) } }
         }
         .alert("从链接导入", isPresented: $linkPrompt) {
             TextField("sing-box://import-remote-profile?url=…", text: $link)
@@ -75,13 +78,28 @@ struct ProfilesView: View {
 
     @ViewBuilder private func menu(for profile: Profile) -> some View {
         Button("使用此配置") { run { try store.select(profile.id) } }
-        Button("编辑 JSON…") { editing = profile }
+        Button(profile.isReadOnly ? "查看 JSON…" : "编辑 JSON…") { editing = profile }
+        Button("名称与更新…") { editingInfo = profile }
+        Menu("导出") {
+            Button("导出为 .bpf（与 SFM 互通）…") { Task { await export(profile, bpf: true) } }
+            Button("导出为 JSON…") { Task { await export(profile, bpf: false) } }
+        }
         if profile.kind == .remote {
             Button("立即更新") { Task { await runAsync { try await service.update(profile) } } }
             Button("分享…") { sharing = profile }
         }
         Divider()
         Button("删除", role: .destructive) { run { try store.delete(profile.id) } }
+    }
+
+    private func export(_ profile: Profile, bpf: Bool) async {
+        await runAsync {
+            let data = bpf ? try await service.exportBPF(profile) : Data(try await service.content(of: profile).utf8)
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = profile.name + (bpf ? ".bpf" : ".json")
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            try data.write(to: url, options: .atomic)
+        }
     }
 
     private func run(_ body: () throws -> Void) {
@@ -204,9 +222,14 @@ private struct ProfileEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if profile.isReadOnly {
+                Label("远程配置只读：每次更新都会覆盖本地内容。要修改，请导出为 JSON 后作为本地配置导入。", systemImage: "lock")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
             TextEditor(text: $text)
                 .font(.system(.body, design: .monospaced))
                 .autocorrectionDisabled()
+                .disabled(profile.isReadOnly)
                 .frame(minWidth: 640, minHeight: 440)
             if let error {
                 Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.callout)
@@ -216,7 +239,7 @@ private struct ProfileEditor: View {
         .navigationTitle(profile.name)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-            ToolbarItem { Button("格式化") { do { text = try ProfileService.format(text); error = nil } catch { self.error = error.localizedDescription } } }
+            ToolbarItem { Button("格式化") { do { text = try ProfileService.format(text); error = nil } catch { self.error = error.localizedDescription } }.disabled(profile.isReadOnly) }
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存") {
                     Task {
@@ -226,7 +249,7 @@ private struct ProfileEditor: View {
                         } catch { self.error = error.localizedDescription }
                     }
                 }
-                .disabled(!loaded)
+                .disabled(!loaded || profile.isReadOnly)
             }
         }
         .task {
@@ -234,6 +257,53 @@ private struct ProfileEditor: View {
                 text = try await service.content(of: profile)
                 loaded = true
             } catch { self.error = error.localizedDescription }
+        }
+    }
+}
+
+/// 名称与（远程）更新设置。
+private struct ProfileInfoEditor: View {
+    @State var profile: Profile
+    @Environment(ProfileService.self) private var service
+    @Environment(\.dismiss) private var dismiss
+    @State private var url = ""
+    @State private var error: String?
+
+    var body: some View {
+        Form {
+            TextField("名称", text: $profile.name)
+            if profile.kind == .remote {
+                TextField("订阅地址", text: $url)
+                Toggle("自动更新", isOn: $profile.autoUpdate)
+                Picker("更新间隔", selection: $profile.autoUpdateInterval) {
+                    ForEach(ProfileDescription.intervalChoices, id: \.self) { Text(ProfileDescription.interval($0)).tag($0) }
+                }
+                .disabled(!profile.autoUpdate)
+            }
+            if let error { Text(error).foregroundStyle(.red) }
+        }
+        .formStyle(.grouped)
+        .frame(width: 440)
+        .onAppear { url = profile.remoteURL?.absoluteString ?? "" }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("保存") {
+                    if profile.kind == .remote {
+                        guard let parsed = URL(string: url), parsed.scheme?.hasPrefix("http") == true else {
+                            error = "订阅地址要以 http:// 或 https:// 开头"
+                            return
+                        }
+                        profile.remoteURL = parsed
+                        profile.autoUpdateInterval = RemoteUpdate.clamp(profile.autoUpdateInterval)
+                    }
+                    do {
+                        try service.store.update(profile)
+                        dismiss()
+                    } catch { self.error = error.localizedDescription }
+                }
+                .disabled(profile.name.isEmpty)
+            }
         }
     }
 }
