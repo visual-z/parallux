@@ -27,6 +27,7 @@ struct SettingsView: View {
         case .remoteControl:
             ContentUnavailableView("远程控制", systemImage: tab.symbol,
                                    description: Text("查看并控制另一台设备上运行的内核（与 SFM 相同），在 M5 提供。"))
+        case .about: AboutSection()
         }
     }
 }

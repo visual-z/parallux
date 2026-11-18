@@ -265,8 +265,22 @@ final class ExtensionPlatform: NSObject, LibboxPlatformInterfaceProtocol, Libbox
     func createBridge(_: LibboxBridgeOptions?) throws -> any LibboxBridgeSessionProtocol { throw ExtensionError("no bridge") }
     func startNeighborMonitor(_: (any LibboxNeighborUpdateListenerProtocol)?) throws {}
     func closeNeighborMonitor(_: (any LibboxNeighborUpdateListenerProtocol)?) throws {}
-    func send(_: LibboxNotification?) throws {}
-    func cancelNotification(_: String?, typeID _: Int32) throws {}
+    /// Core notifications wait here until the app drains them over XPC: a
+    /// system extension runs outside the user session and cannot post them
+    /// itself (SFM forwards them to the app for the same reason).
+    static let notifications = NotificationQueue()
+
+    func send(_ notification: LibboxNotification?) throws {
+        guard let notification else { return }
+        Self.notifications.push(CoreNotification(identifier: notification.identifier, title: notification.title,
+                                                 subtitle: notification.subtitle, body: notification.body,
+                                                 openURL: notification.openURL))
+    }
+
+    func cancelNotification(_ identifier: String?, typeID _: Int32) throws {
+        guard let identifier else { return }
+        Self.notifications.push(CoreNotification(identifier: identifier, cancel: true))
+    }
 
     // MARK: LibboxCommandServerHandler
 

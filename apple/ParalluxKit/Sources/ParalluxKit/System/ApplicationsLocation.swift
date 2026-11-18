@@ -9,5 +9,12 @@ public enum ApplicationsLocation: Equatable, Sendable {
     case translocated
     case notInApplications
 
-    public static func classify(bundlePath: String, home: String) -> ApplicationsLocation { .ok }
+    public static func classify(bundlePath: String, home: String) -> ApplicationsLocation {
+        let components = URL(fileURLWithPath: bundlePath).standardizedFileURL.pathComponents
+        guard !bundlePath.isEmpty else { return .notInApplications }
+        if components.contains("AppTranslocation") { return .translocated }
+        let path = "/" + components.dropFirst().joined(separator: "/")
+        let roots = ["/Applications/", URL(fileURLWithPath: home).standardizedFileURL.path + "/Applications/"]
+        return roots.contains { path.hasPrefix($0) } ? .ok : .notInApplications
+    }
 }

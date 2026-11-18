@@ -14,6 +14,10 @@ import Foundation
     /// Replies with core/pxbridge LinkStatsJSON: per-link counters of every
     /// running aggregate outbound.
     func linkStats(reply: @escaping (String) -> Void)
+    /// Removes and replies with the core's queued notifications
+    /// (NotificationQueue.encode); the app posts them, because a system
+    /// extension runs outside the user session.
+    func drainNotifications(reply: @escaping (Data) -> Void)
 }
 
 public enum TunnelXPC {
@@ -73,6 +77,21 @@ public enum TunnelXPC {
         }
         guard proxy != nil, done.wait(timeout: .now() + timeout) == .success, case let .success(data)? = box.get() else { return "[]" }
         return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Fetches queued core notifications; empty when the extension does not answer in time.
+    public static func drainNotifications(over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout) -> [CoreNotification] {
+        connection.remoteObjectInterface = makeInterface()
+        connection.resume()
+        let done = DispatchSemaphore(value: 0)
+        let box = ReplyBox()
+        let proxy = connection.remoteObjectProxyWithErrorHandler { _ in done.signal() } as? TunnelXPCProtocol
+        proxy?.drainNotifications { data in
+            box.set(.success(data))
+            done.signal()
+        }
+        guard proxy != nil, done.wait(timeout: .now() + timeout) == .success, case let .success(data)? = box.get() else { return [] }
+        return NotificationQueue.decode(data)
     }
 
     /// Runs the probes concurrently; used by the extension's XPC handler.

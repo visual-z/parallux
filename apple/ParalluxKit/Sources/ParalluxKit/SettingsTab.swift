@@ -13,7 +13,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .onDemand: "按需连接"
         case .core: "内核"
         case .remoteControl: "远程控制"
-        case .about: ""
+        case .about: "关于"
         }
     }
 
@@ -25,7 +25,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .onDemand: "wifi"
         case .core: "cpu"
         case .remoteControl: "desktopcomputer"
-        case .about: ""
+        case .about: "info.circle"
         }
     }
 }

@@ -26,10 +26,13 @@ public struct WidgetSnapshot: Codable, Equatable, Sendable {
     /// without a write means the app quit, so the numbers are not current.
     public static let staleAfter: TimeInterval = 60
 
-    public func isStale(now: Date) -> Bool { false }
+    public func isStale(now: Date) -> Bool { now.timeIntervalSince(updatedAt) >= Self.staleAfter }
 
-    public func encoded() -> Data { Data() }
-    public static func decode(_ data: Data?) -> WidgetSnapshot? { nil }
+    public func encoded() -> Data { (try? JSONEncoder().encode(self)) ?? Data() }
+    public static func decode(_ data: Data?) -> WidgetSnapshot? {
+        guard let data else { return nil }
+        return try? JSONDecoder().decode(WidgetSnapshot.self, from: data)
+    }
 }
 
 /// Decides when the app writes a new snapshot.
@@ -41,8 +44,21 @@ public struct WidgetSnapshotThrottle: Sendable {
     public init() {}
 
     /// true when `snapshot` should be written now; records it if so.
-    public mutating func shouldWrite(_ snapshot: WidgetSnapshot) -> Bool { true }
+    public mutating func shouldWrite(_ snapshot: WidgetSnapshot) -> Bool {
+        let write: Bool
+        if let last, !Self.isStateChange(from: last, to: snapshot) {
+            write = snapshot.updatedAt.timeIntervalSince(last.updatedAt) >= Self.interval
+        } else {
+            write = true
+        }
+        if write { last = snapshot }
+        return write
+    }
 
     /// true when the change also needs widget and control reloads (state, not just rate).
-    public static func isStateChange(from old: WidgetSnapshot?, to new: WidgetSnapshot) -> Bool { true }
+    public static func isStateChange(from old: WidgetSnapshot?, to new: WidgetSnapshot) -> Bool {
+        guard let old else { return true }
+        return old.connected != new.connected || old.mode != new.mode || old.linkCount != new.linkCount
+            || old.profileName != new.profileName
+    }
 }

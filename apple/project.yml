@@ -39,6 +39,13 @@ targets:
         ParalluxTunnelMachService: $(PARALLUX_TUNNEL_MACH_SERVICE)
         ParalluxHelperMachService: $(PARALLUX_HELPER_MACH_SERVICE)
         ParalluxHelperLabel: $(PARALLUX_HELPER_LABEL)
+        # parallux:// links (connect, servers, profiles) and SFM's sing-box://
+        # import-remote-profile links (docs/tasks/feat-system-integration.md).
+        CFBundleURLTypes:
+          - CFBundleURLName: $(BUNDLE_ID)
+            CFBundleURLSchemes: [parallux]
+          - CFBundleURLName: $(BUNDLE_ID).sing-box-import
+            CFBundleURLSchemes: [sing-box]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID)
@@ -56,6 +63,9 @@ targets:
       - sdk: Network.framework
       - sdk: SystemConfiguration.framework
       - target: PacketTunnel
+        embed: true
+      # Widget and Control Center toggle (docs/tasks/feat-system-integration.md).
+      - target: ParalluxWidget
         embed: true
       # The root helper (PLAN decision 12): SMAppService.daemon runs the tool
       # named by the plist's BundleProgram, a path inside this bundle.
@@ -109,6 +119,39 @@ targets:
         SKIP_INSTALL: YES
     dependencies:
       - package: ParalluxKit
+  # The widget reads the app's snapshot from the App Group; its Control
+  # Center toggle starts and stops the VPN configuration directly, as SFM's
+  # WidgetExtension does (no Libbox in this process).
+  ParalluxWidget:
+    type: app-extension
+    platform: macOS
+    sources: [ParalluxWidget]
+    entitlements:
+      path: ParalluxWidget/ParalluxWidget.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups: [$(PARALLUX_APP_GROUP)]
+        com.apple.developer.networking.networkextension: [$(PARALLUX_NE_PROVIDER)]
+    info:
+      path: ParalluxWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Parallux
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ParalluxAppGroup: $(PARALLUX_APP_GROUP)
+        ParalluxAppBundleID: $(BUNDLE_ID)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID).widget
+        PRODUCT_NAME: ParalluxWidget
+        ENABLE_HARDENED_RUNTIME: YES
+    dependencies:
+      - package: ParalluxKit
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+      - sdk: NetworkExtension.framework
   PacketTunnel:
     type: system-extension
     platform: macOS

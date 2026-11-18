@@ -32,10 +32,23 @@ public final class NotificationQueue: @unchecked Sendable {
 
     public init() {}
 
-    public func push(_ item: CoreNotification) {}
-    /// Removes and returns everything queued, oldest first.
-    public func drain() -> [CoreNotification] { [] }
+    public func push(_ item: CoreNotification) {
+        lock.withLock {
+            items.append(item)
+            if items.count > Self.capacity { items.removeFirst(items.count - Self.capacity) }
+        }
+    }
 
-    public static func encode(_ items: [CoreNotification]) -> Data { Data() }
-    public static func decode(_ data: Data) -> [CoreNotification] { [] }
+    /// Removes and returns everything queued, oldest first.
+    public func drain() -> [CoreNotification] {
+        lock.withLock {
+            defer { items.removeAll(keepingCapacity: true) }
+            return items
+        }
+    }
+
+    public static func encode(_ items: [CoreNotification]) -> Data { (try? JSONEncoder().encode(items)) ?? Data("[]".utf8) }
+    public static func decode(_ data: Data) -> [CoreNotification] {
+        (try? JSONDecoder().decode([CoreNotification].self, from: data)) ?? []
+    }
 }
