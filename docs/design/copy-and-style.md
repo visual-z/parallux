@@ -2,6 +2,8 @@
 
 作者要求：文案参照竞品，不自行撰写；界面遵循 macOS 26 Apple 设计规范；处理响应式与空态；收紧留白。本表是两者的唯一依据，改界面时对照它，不另起说法。
 
+**2026-11-19 决策 22：设计稿 v0.2 优先。** 设计稿画到的页面，排版与用词照设计稿；下面两节只管设计稿没有画到的地方（路由页的细节、弹窗、错误提示、空态）。§2 里「内容区用 Form(.grouped) 或 List(.inset)，不自己拼卡片」一条由此作废：容器用 `apple/Parallux/Design/` 里的公共部件，控件仍用系统控件。
+
 ## 1. 文案来源
 
 优先级：SFM（sing-box for Apple，`Localizable.xcstrings` zh-Hans）> Clash Verge Rev（`src/locales/zh/*.json`）> macOS 系统用语。三者都没有的 Parallux 自有概念（线路、分流、叠加、主备、聚合服务器）用 `CONTEXT.md` 词表。一句话说明只在必要时出现，且照竞品的句式（「暂无…」「尚未…」「请先…」）。

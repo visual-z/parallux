@@ -136,6 +136,9 @@ public enum SpeedTest {
     /// PLAN §1: two links, one connection ≥ 1.6 × the fastest single link.
     public static let target = 1.6
 
+    /// Each result's bar length (design v0.2, diagnostics).
+    public static func fractions(_ results: [Result]) -> [Double] { [] }
+
     /// "叠加是最快单线路的 1.9 倍（达标）", or nil when it cannot be compared.
     public static func summary(_ results: [Result]) -> String? {
         guard let bond = results.first(where: \.isBond)?.rate, bond > 0,

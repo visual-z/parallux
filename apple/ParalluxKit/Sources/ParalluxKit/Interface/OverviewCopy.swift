@@ -124,3 +124,8 @@ public enum LinkStanding: Equatable, Sendable {
         }
     }
 }
+
+/// Copy of the connections page (design v0.2).
+public enum ConnectionCopy {
+    public static func duration(_ seconds: TimeInterval) -> String { "" }
+}

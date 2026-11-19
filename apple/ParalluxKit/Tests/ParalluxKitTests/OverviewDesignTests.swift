@@ -436,4 +436,43 @@ import Testing
         #expect(PanelNodeList.sections(groups, search: "  jp-01 ", toggled: []).map(\.tag) == ["proxy", "备用"])
         #expect(PanelNodeList.sections(groups, search: "   ", toggled: []) == all)
     }
+
+    // docs/tasks/fix-pages-design-parity.md
+
+    @Test func topRuleLeavesDNSLookupsOut() {
+        func row(_ id: Int, rule: String, destination: String, outbound: String, type: String) -> ConnectionRow {
+            var row = ConnectionRow(id: "\(id)", process: "", destination: destination, rule: rule, outbound: outbound)
+            row.outboundType = type
+            return row
+        }
+        // Six lookups on the DNS rule, three connections on geosite-cn, one on route.final.
+        var rows = (0..<4).map { row($0, rule: "protocol=dns", destination: "1.1.1.1:53", outbound: "dns-out", type: "dns") }
+        rows += (4..<6).map { row($0, rule: "port=53", destination: "8.8.8.8:53", outbound: "direct", type: "direct") }
+        rows += (6..<9).map { row($0, rule: "rule_set=geosite-cn", destination: "example.cn:443", outbound: "direct", type: "direct") }
+        rows.append(row(9, rule: "", destination: "example.com:443", outbound: "Proxy", type: "selector"))
+        #expect(OverviewCopy.topRule(rows) == "命中最多：geosite-cn → 直连（75%）", "3 of the 4 connections that are not DNS")
+        #expect(OverviewCopy.topRule(Array(rows.prefix(6))) == nil, "only DNS lookups matched a rule")
+    }
+
+    @Test func speedTestFractionsAreSharesOfTheFastest() {
+        func result(_ rate: Int64?, bond: Bool = false) -> SpeedTest.Result { .init(label: "x", rate: rate, isBond: bond) }
+        #expect(SpeedTest.fractions([]).isEmpty)
+        #expect(SpeedTest.fractions([result(500)]) == [1])
+        #expect(SpeedTest.fractions([result(nil)]) == [0])
+        #expect(SpeedTest.fractions([result(nil), result(0), result(-5)]) == [0, 0, 0], "nothing measured: no bar, and no division by zero")
+        let mixed = SpeedTest.fractions([result(100), result(nil), result(400), result(0), result(800, bond: true)])
+        #expect(mixed == [0.125, 0, 0.5, 0, 1])
+        #expect(SpeedTest.fractions([result(Int64.max), result(Int64.max / 2)]).allSatisfy { $0 >= 0 && $0 <= 1 })
+    }
+
+    @Test func connectionDurationReadsAsTheDesignWritesIt() {
+        #expect(ConnectionCopy.duration(0) == "0 秒")
+        #expect(ConnectionCopy.duration(-30) == "0 秒")
+        #expect(ConnectionCopy.duration(59.9) == "59 秒")
+        #expect(ConnectionCopy.duration(60) == "1 分 0 秒")
+        #expect(ConnectionCopy.duration(252) == "4 分 12 秒")
+        #expect(ConnectionCopy.duration(3599) == "59 分 59 秒")
+        #expect(ConnectionCopy.duration(3600) == "1 小时 0 分")
+        #expect(ConnectionCopy.duration(93_784) == "26 小时 3 分")
+    }
 }
