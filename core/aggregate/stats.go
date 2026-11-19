@@ -2,6 +2,8 @@ package aggregate
 
 import (
 	"net"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -84,5 +86,7 @@ func Snapshot() []GroupStat {
 		groups = append(groups, group)
 		return true
 	})
+	// sync.Map ranges in random order; the app compares samples group by group.
+	slices.SortFunc(groups, func(a, b GroupStat) int { return strings.Compare(a.Tag, b.Tag) })
 	return groups
 }
