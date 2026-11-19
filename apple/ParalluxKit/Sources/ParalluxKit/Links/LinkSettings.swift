@@ -81,5 +81,7 @@ public enum SharedEgress {
 extension LinkPreferences {
     /// Whether moving from `old` to `new` available links changes the enabled
     /// set the core was composed with (a link plugged in or pulled out).
-    public func needsRecomposition(from old: [LinkInterface], to new: [LinkInterface]) -> Bool { false }
+    public func needsRecomposition(from old: [LinkInterface], to new: [LinkInterface]) -> Bool {
+        Set(enabled(old).map(\.name)) != Set(enabled(new).map(\.name))
+    }
 }

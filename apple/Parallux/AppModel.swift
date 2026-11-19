@@ -42,6 +42,24 @@ final class AppModel {
         Task { await tunnel.load() }
         observeTunnel()
         observeLinkHealth()
+        observeLinkSet(previous: links.links)
+    }
+
+    /// 「自动加入新线路」: a link plugged in or pulled out while connected
+    /// recomposes the profile (fix-new-links-recompose).
+    private func observeLinkSet(previous: [LinkInterface]) {
+        withObservationTracking {
+            _ = links.links
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                let current = self.links.links
+                if self.linkSettings.value.preferences.needsRecomposition(from: previous, to: current) {
+                    await self.applyLinkChanges()
+                }
+                self.observeLinkSet(previous: current)
+            }
+        }
     }
 
     private func observeLinkHealth() {
