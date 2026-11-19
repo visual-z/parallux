@@ -17,6 +17,7 @@
 | INV-7 | 带量程的流向图里，节点、中柱与流带都不超出绘图高度，同列相邻节点间距不小于最小间距，中柱上的流带首尾相接且总和等于中柱 | 代码断言 + property | `aFlowLayoutWithCapacityIsProportionalAndNeverOverflows` |
 | INV-8 | 流向图的粒子数不超过上限，每个粒子都落在一股现存流带的范围内 | property | `flowParticlesStayBoundedAndInsideTheirBands` |
 | INV-9 | 流向图交给 GPU 的每片流带网格面积等于厚度 × 宽度，顶点都在绘图范围内，顶点总数不超过上限 | property | `flowMeshCoversEachBandExactly` |
+| INV-10 | 流向图与路线图里已经显示的节点只在闲置超过保留时长后才离开，离开之前相对顺序不变，节点数不超过上限 | property | `flowSlotsKeepTheirPlaceWhileTrafficComesAndGoes` |
 
 ## 写法提示
 

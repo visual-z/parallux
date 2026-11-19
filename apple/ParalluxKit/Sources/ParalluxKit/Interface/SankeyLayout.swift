@@ -48,6 +48,12 @@ public struct SankeyLayout: Equatable, Sendable {
     public var bands: [Band] = []
     public var total = Span(0, 0)
 
+    /// The least share of the height a node with traffic gets (fix-flow-stability).
+    public static let thinnestShare = 0.02
+
+    /// Width by share (fix-flow-stability): stub.
+    public static func make(leftShares: [Double], rightShares: [Double], height: Double, gap: Double) -> SankeyLayout { SankeyLayout() }
+
     public static func make(left: [Double], right: [Double], height: Double, gap: Double, capacity: Double? = nil) -> SankeyLayout {
         let clean = { (rates: [Double]) in rates.map { $0.isFinite && $0 > 0 ? $0 : 0 } }
         let leftRates = clean(left)
