@@ -115,13 +115,16 @@ final class AppModel {
     }
 
     /// The note under the aggregation picker, when the chosen mode is not the one running.
-    var aggregationNotice: String? { AggregationNotice.text(chosen: linkSettings.value.mode, effective: effectiveMode) }
+    var aggregationNotice: String? {
+        AggregationNotice.text(chosen: linkSettings.value.mode, effective: effectiveMode, proxy: linkSettings.value.switches.proxy)
+    }
 
     /// The aggregation mode actually in effect: needs 聚合 on and two links, and 叠加 needs a server.
     var effectiveMode: AggregationMode? {
         guard linkSettings.value.switches.aggregation, enabledLinks.count >= 2 else { return nil }
         let mode = linkSettings.value.mode
-        if mode == .bond, bondProvider(linkSettings.value) == nil { return .failover }
+        // 叠加 carries only node traffic; with 代理 off there is none (feat-link-view).
+        if mode == .bond, bondProvider(linkSettings.value) == nil || !linkSettings.value.switches.proxy { return .failover }
         return mode
     }
 
@@ -290,7 +293,7 @@ final class AppModel {
         if case .failed = tunnel.phase { return .degraded }
         if session.lastError != nil { return .degraded }
         // A link the aggregate considers down is the design's 「线路异常」.
-        if linkStats.groups.contains(where: { $0.links.contains { !$0.healthy } }) { return .degraded }
+        if linkStats.states.values.contains(where: { !$0.healthy }) { return .degraded }
         switch effectiveMode {
         case .bond: return .bond
         case .failover: return .failover

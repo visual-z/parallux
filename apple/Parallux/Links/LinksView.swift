@@ -106,8 +106,13 @@ private struct LinkRow: View {
                 if let stat {
                     Text(stat.healthy ? "已连接" : "不可用").font(.caption).foregroundStyle(stat.healthy ? .green : .red)
                     Text("\(RateFormat.bitsPerSecond(rate?.total ?? 0)) · 连接 \(stat.active)").font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                } else if app.tunnel.isConnected {
+                    // No aggregate has it: 聚合 is off or the link is not enabled.
+                    let inUse = app.activeLinks.contains { $0.name == link.name }
+                    Text(inUse ? "已连接" : "未使用").font(.caption).foregroundStyle(inUse ? .green : .secondary)
+                    Text(RateFormat.bitsPerSecond(rate?.total ?? 0)).font(.caption).monospacedDigit().foregroundStyle(.secondary)
                 } else {
-                    Text(app.tunnel.isConnected ? "不可用" : "未连接").font(.caption).foregroundStyle(.secondary)
+                    Text("未连接").font(.caption).foregroundStyle(.secondary)
                 }
             }
             Toggle("仅备用", isOn: Binding(
