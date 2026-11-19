@@ -189,6 +189,7 @@ private struct CoreSettings: View {
                 LabeledContent("App Group", value: AppGroup.identifier() ?? "未签名构建，没有 App Group")
             }
             HelperSettingsSection()
+            MemoryLimitSection()
         }
         .formStyle(.grouped)
         .task { await refresh() }
@@ -196,5 +197,23 @@ private struct CoreSettings: View {
 
     private func refresh() async {
         installed = await app.tunnel.installedExtensionVersion()
+    }
+}
+
+/// SFM #105: the extension's memory limit (takes effect on the next connection).
+private struct MemoryLimitSection: View {
+    @Environment(AppModel.self) private var app
+    var body: some View {
+        @Bindable var settings = app.settings
+        Section("内存") {
+            Toggle("限制网络扩展内存", isOn: Binding(
+                get: { settings.value.memoryLimitMB > 0 },
+                set: { settings.value.memoryLimitMB = $0 ? 512 : 0 }
+            ))
+            if settings.value.memoryLimitMB > 0 {
+                Stepper("上限 \(settings.value.memoryLimitMB) MB", value: $settings.value.memoryLimitMB, in: 128...4096, step: 128)
+            }
+            Text("超过上限时内核会关闭部分连接以回收内存；下次连接生效。").font(.caption).foregroundStyle(.secondary)
+        }
     }
 }
