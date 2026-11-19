@@ -66,7 +66,10 @@ final class LinkMonitor {
 @MainActor @Observable
 final class LinkStatsPoller {
     private(set) var groups: [LinkGroupStat] = []
+    /// Bytes per second per link tag, from the interfaces' counters (feat-link-view).
     private(set) var rates: [String: LinkRates.Rate] = [:]
+    /// One state per link tag, merged over every aggregate (feat-link-view).
+    private(set) var states: [String: LinkView.State] = [:]
     @ObservationIgnored private var task: Task<Void, Never>?
 
     /// Why 1 s: matches the status stream; per-link rates are shown at most once a second.
@@ -75,20 +78,23 @@ final class LinkStatsPoller {
     func start() {
         guard task == nil else { return }
         task = Task { [weak self] in
-            var previous: [LinkGroupStat] = []
+            var previous = InterfaceCounters.read()
             var last = ContinuousClock.now
             while !Task.isCancelled {
+                try? await Task.sleep(for: Self.interval)
                 let json = await Task.detached { CommandXPCDialer.linkStats() }.value
-                let current = LinkGroupStat.decode(json)
+                let groups = LinkGroupStat.decode(json)
+                let current = InterfaceCounters.read()
                 let now = ContinuousClock.now
-                let seconds = Double((now - last).components.seconds) + Double((now - last).components.attoseconds) / 1e18
-                let rates = LinkRates.rates(previous: previous, current: current, interval: seconds)
+                let elapsed = now - last
+                let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+                let rates = InterfaceRates.rates(previous: previous, current: current, interval: seconds)
                 previous = current
                 last = now
                 guard let self else { return }
-                self.groups = current
+                self.groups = groups
+                self.states = LinkView.merge(groups)
                 self.rates = rates
-                try? await Task.sleep(for: Self.interval)
             }
         }
     }
@@ -97,14 +103,12 @@ final class LinkStatsPoller {
         task?.cancel()
         task = nil
         groups = []
+        states = [:]
         rates = [:]
     }
 
-    /// Health of a link outbound tag in the first aggregate that has it.
-    func link(_ tag: String) -> LinkGroupStat.Link? {
-        for group in groups { if let link = group.links.first(where: { $0.tag == tag }) { return link } }
-        return nil
-    }
+    /// The merged state of a link outbound tag; nil when no aggregate has it.
+    func link(_ tag: String) -> LinkView.State? { states[tag] }
 }
 
 /// LinkSettings persisted on every change.

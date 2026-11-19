@@ -9,8 +9,8 @@ final class LinkNotifier {
     private var authorized = false
 
     func update(groups: [LinkGroupStat], links: [LinkInterface], enabled: Bool) {
-        var current: [String: Bool] = [:]
-        for group in groups { for link in group.links { current[link.tag] = link.healthy } }
+        // Merged over every aggregate, so group order cannot flip it (feat-link-view).
+        let current = LinkView.merge(groups).mapValues(\.healthy)
         defer { last = current }
         guard enabled, !last.isEmpty else { return }
         for (tag, healthy) in current where last[tag] != nil && last[tag] != healthy {

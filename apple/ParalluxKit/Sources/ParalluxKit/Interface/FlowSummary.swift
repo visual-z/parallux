@@ -22,7 +22,9 @@ public enum FlowSummary {
         for connection in connections {
             let rate = max(0, connection.uplink) &+ max(0, connection.downlink)
             guard rate > 0 else { continue }
-            let name = connection.outboundType == "direct" ? directName : connection.outbound
+            // The user's direct outbounds become aggregates of the same tag
+            // when links are composed in; they are still 直连.
+            let name = connection.outboundType == "direct" || connection.outboundType == "aggregate" ? directName : connection.outbound
             rates[name, default: 0] &+= rate
         }
         let sorted = rates.map { Exit(name: $0.key, rate: $0.value) }

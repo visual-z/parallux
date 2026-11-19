@@ -33,15 +33,7 @@ struct OverviewView: View {
                     if !session.deprecatedNotes.isEmpty, !app.settings.value.hideDeprecatedNotes {
                         DeprecationBanner(notes: session.deprecatedNotes) { app.settings.value.hideDeprecatedNotes = true }
                     }
-                    let columns = FlowModel.columns(app)
-                    Group {
-                        if !columns.links.isEmpty, !columns.exits.isEmpty {
-                            FlowDiagram(links: columns.links, exits: columns.exits,
-                                        centerLabel: "\(app.effectiveMode?.title ?? "") " + RateFormat.bitsPerSecond((session.status?.downlink ?? 0) + (session.status?.uplink ?? 0)))
-                        } else {
-                            ContentUnavailableView("暂无活动连接", systemImage: "point.3.connected.trianglepath.dotted")
-                        }
-                    }
+                    HeldFlowDiagram(app: app)
                     .frame(height: 240)
                     .padding(12)
                     .background(.fill.quinary, in: RoundedRectangle(cornerRadius: 12))
@@ -211,5 +203,40 @@ struct SwitchesForm: View {
         .scrollDisabled(true)
         .scrollContentBackground(.hidden)
         .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// The overview's diagram, held through idle seconds (FlowHold) so it does
+/// not blink between bursts of traffic (feat-link-view).
+private struct HeldFlowDiagram: View {
+    let app: AppModel
+    @State private var held: [FlowNode] = []
+    @State private var heldLinks: [FlowNode] = []
+    @State private var heldAt: Date?
+
+    var body: some View {
+        let session = app.session
+        let columns = FlowModel.columns(app)
+        let hold = FlowHold.next(current: columns.exits, last: held, lastAt: heldAt, now: Date())
+        let links = columns.exits.isEmpty ? heldLinks : columns.links
+        Group {
+            if !links.isEmpty, !hold.shown.isEmpty {
+                FlowDiagram(links: links, exits: hold.shown,
+                            centerLabel: "\(app.effectiveMode?.title ?? "") " + RateFormat.bitsPerSecond((session.status?.downlink ?? 0) + (session.status?.uplink ?? 0)))
+            } else {
+                ContentUnavailableView("暂无流量", systemImage: "point.3.connected.trianglepath.dotted")
+            }
+        }
+        // Once a second while shown, like the status stream it follows.
+        .task {
+            while !Task.isCancelled {
+                let now = FlowModel.columns(app)
+                let next = FlowHold.next(current: now.exits, last: held, lastAt: heldAt, now: Date())
+                held = next.last
+                heldAt = next.lastAt
+                if !now.exits.isEmpty { heldLinks = now.links }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
     }
 }
