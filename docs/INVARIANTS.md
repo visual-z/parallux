@@ -14,6 +14,8 @@
 | INV-4 | 选线顺序是全部线路的排列；有健康的非备用线路时，第一条一定是它 | 代码断言 + property | `TestLinkOrderIsAPermutationThatStartsHealthy` |
 | INV-5 | 组合后的配置保留用户的每个出站 tag，且没有 detour、成员或 links 指向不存在的 tag | property | `composingKeepsEveryTagAndNoDanglingDetour` |
 | INV-6 | 路由覆盖只改写对应规则的出站，其余规则不变，且不产生指向不存在出站的规则 | property | `overridesOnlyTouchTheirRulesAndNeverDangle` |
+| INV-7 | 带量程的流向图里，节点、中柱与流带都不超出绘图高度，同列相邻节点间距不小于最小间距，中柱上的流带首尾相接且总和等于中柱 | 代码断言 + property | `aFlowLayoutWithCapacityIsProportionalAndNeverOverflows` |
+| INV-8 | 流向图的粒子数不超过上限，每个粒子都落在一股现存流带的范围内 | property | `flowParticlesStayBoundedAndInsideTheirBands` |
 
 ## 写法提示
 

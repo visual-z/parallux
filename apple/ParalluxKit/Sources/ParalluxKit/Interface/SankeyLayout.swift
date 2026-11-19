@@ -24,6 +24,7 @@ public struct SankeyLayout: Equatable, Sendable {
         public var left: Span
         public var right: Span
         public var rate: Double
+        public var center = Span(0, 0)
     }
 
     public var left: [Span] = []
@@ -31,7 +32,7 @@ public struct SankeyLayout: Equatable, Sendable {
     public var bands: [Band] = []
     public var total = Span(0, 0)
 
-    public static func make(left: [Double], right: [Double], height: Double, gap: Double) -> SankeyLayout {
+    public static func make(left: [Double], right: [Double], height: Double, gap: Double, capacity: Double? = nil) -> SankeyLayout {
         let clean = { (rates: [Double]) in rates.map { $0.isFinite && $0 > 0 ? $0 : 0 } }
         let leftRates = clean(left)
         var rightRates = clean(right)
