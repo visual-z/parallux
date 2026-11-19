@@ -28,19 +28,28 @@ public enum LinkRates {
         public var total: Int64 { upload &+ download }
     }
 
-    /// Keyed by link outbound tag. Counter resets (a reloaded core) read as 0, not negative.
+    /// Keyed by link outbound tag, summed over every aggregate outbound:
+    /// each group keeps its own counters for the same links, so differences
+    /// are taken per (group, link) and only then added
+    /// (fix-link-rates-across-groups). Counter resets (a reloaded core) and
+    /// groups new in this sample read as 0, not negative.
     public static func rates(previous: [LinkGroupStat], current: [LinkGroupStat], interval: TimeInterval) -> [String: Rate] {
         guard interval > 0 else { return [:] }
-        var before: [String: LinkGroupStat.Link] = [:]
-        for group in previous { for link in group.links { before[link.tag] = link } }
-        var result: [String: Rate] = [:]
+        struct Key: Hashable { let group: String, link: String }
+        var before: [Key: LinkGroupStat.Link] = [:]
+        for group in previous { for link in group.links { before[Key(group: group.tag, link: link.tag)] = link } }
+        var up: [String: Int64] = [:]
+        var down: [String: Int64] = [:]
         for group in current {
             for link in group.links {
-                let old = before[link.tag]
-                let up = max(0, link.upload - (old?.upload ?? link.upload))
-                let down = max(0, link.download - (old?.download ?? link.download))
-                result[link.tag] = Rate(upload: Int64(Double(up) / interval), download: Int64(Double(down) / interval))
+                let old = before[Key(group: group.tag, link: link.tag)]
+                up[link.tag, default: 0] += max(0, link.upload - (old?.upload ?? link.upload))
+                down[link.tag, default: 0] += max(0, link.download - (old?.download ?? link.download))
             }
+        }
+        var result: [String: Rate] = [:]
+        for tag in up.keys {
+            result[tag] = Rate(upload: Int64(Double(up[tag] ?? 0) / interval), download: Int64(Double(down[tag] ?? 0) / interval))
         }
         return result
     }
