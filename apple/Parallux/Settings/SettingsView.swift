@@ -176,6 +176,7 @@ private struct CoreSettings: View {
 
     var body: some View {
         Form {
+            SetupSection()
             Section("系统扩展") {
                 LabeledContent("状态", value: installed.map { "已启用 · \($0)" } ?? "不可用")
                 HStack {

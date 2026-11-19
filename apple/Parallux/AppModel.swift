@@ -19,6 +19,8 @@ final class AppModel {
     let routeOverrides = RouteOverrideStore()
     /// A target the connections inspector asked 路由 › 试一下 to explain; consumed by RoutingView.
     var pendingExplainTarget: String?
+    /// A sidebar page the panel asked the main window to show; consumed by MainWindow.
+    var pendingSidebar: SidebarItem?
 
     /// The multipath outbound for 叠加: the chosen server over the two top links.
     func bondProvider(_ settings: LinkSettings) -> ProfileComposer.Bond? {
@@ -142,6 +144,12 @@ final class AppModel {
             await waitUntilStopped()
         }
         if tunnel.phase != .ready { await tunnel.install() }
+        if tunnel.phase == .awaitingApproval {
+            // Show where to approve, then carry on by itself once the user
+            // switches Parallux on in System Settings (feat-setup-approval).
+            SetupLinks.open(.systemExtension)
+            guard await tunnel.completeApproval() else { return }
+        }
         guard tunnel.phase == .ready else { return }
         var content = SampleProfile.content
         if let overrideContent {

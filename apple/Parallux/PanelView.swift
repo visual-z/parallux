@@ -43,11 +43,18 @@ private struct PanelHome: View {
                 Label("\(server.name) · 远程", systemImage: "desktopcomputer").font(.caption).foregroundStyle(.secondary)
             }
             if app.tunnel.isConnected { miniFlow }
-            section("线路") { links }
-            Divider()
-            section("聚合方式") { aggregation }
-            Divider()
-            section("出口") { exit }
+            // A grouped Form, so rows get the system's label/control layout
+            // (control trailing, subtitle under the title) instead of hand-made HStacks.
+            Form {
+                Section("线路") { links }
+                Section("聚合方式") { aggregation }
+                Section("出口") { exit }
+            }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
+            .scrollContentBackground(.hidden)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, -14)
             footer
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
@@ -60,7 +67,7 @@ private struct PanelHome: View {
                 Text(app.statusLine).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer()
-            Toggle(app.isOn ? "停止" : "启动", isOn: isOn).toggleStyle(.switch).labelsHidden()
+            Toggle(app.isOn ? "停止" : "启动", isOn: isOn).toggleStyle(.switch).labelsHidden().controlSize(.regular)
                 .disabled(app.tunnel.isBusy || !app.controlsLocalCore)
         }
     }
@@ -84,38 +91,36 @@ private struct PanelHome: View {
         .help("打开主窗口")
     }
 
+    /// Each link is a system Toggle row (on = takes part in aggregation).
     @ViewBuilder private var links: some View {
         if app.links.links.isEmpty {
-            Text("不可用").font(.callout).foregroundStyle(.secondary)
+            Text("不可用").foregroundStyle(.secondary)
         }
         ForEach(app.links.links) { link in
             let tag = ProfileComposer.linkTag(link.name)
-            let enabled = !app.linkSettings.value.preferences.disabled.contains(link.name)
-            HStack(spacing: 9) {
-                Button {
-                    if enabled { app.linkSettings.value.preferences.disabled.insert(link.name) } else { app.linkSettings.value.preferences.disabled.remove(link.name) }
+            Toggle(isOn: Binding(
+                get: { !app.linkSettings.value.preferences.disabled.contains(link.name) },
+                set: { on in
+                    if on { app.linkSettings.value.preferences.disabled.remove(link.name) } else { app.linkSettings.value.preferences.disabled.insert(link.name) }
                     Task { await app.applyLinkChanges() }
-                } label: {
-                    Image(systemName: link.kind.symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
-                        .frame(width: 24, height: 24)
-                        .background(enabled ? LinkColors.color(for: link, in: app.links.links) : Color.secondary.opacity(0.4), in: Circle())
                 }
-                .buttonStyle(.plain)
-                .help(enabled ? "已启用" : "已禁用")
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(link.kind.title).font(.callout).foregroundStyle(enabled ? .primary : .secondary)
-                    Text("\(link.displayName) · \(link.name)").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                }
-                Spacer()
-                if let stat = app.linkStats.link(tag), !stat.healthy {
-                    Text("不可用").font(.caption).foregroundStyle(.red)
-                } else if let rate = app.linkStats.rates[tag] {
-                    Text(RateFormat.bitsPerSecond(rate.total)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                } else if app.links.links.count == 1, let status = app.session.status {
-                    Text(RateFormat.bitsPerSecond(status.downlink + status.uplink)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            )) {
+                Label {
+                    Text(link.kind.title)
+                    Text(linkDetail(link, tag: tag))
+                } icon: {
+                    Image(systemName: link.kind.symbol).foregroundStyle(LinkColors.color(for: link, in: app.links.links))
                 }
             }
+            .toggleStyle(.switch)
+            .controlSize(.mini)
         }
+    }
+
+    private func linkDetail(_ link: LinkInterface, tag: String) -> String {
+        if let stat = app.linkStats.link(tag), !stat.healthy { return "\(link.name) · 不可用" }
+        if let rate = app.linkStats.rates[tag] { return "\(link.name) · \(RateFormat.bitsPerSecond(rate.total))" }
+        return "\(link.displayName) · \(link.name)"
     }
 
     @ViewBuilder private var aggregation: some View {
@@ -123,69 +128,66 @@ private struct PanelHome: View {
             ForEach(AggregationMode.allCases) { Text($0.title).tag($0) }
         }
         .pickerStyle(.segmented).labelsHidden()
+        .frame(maxWidth: .infinity)
         .disabled(app.enabledLinks.count < 2)
-        HStack {
-            Text("聚合服务器")
-            Spacer()
-            Text(app.bondServerSummary ?? "无服务器").foregroundStyle(app.bondServerSummary == nil ? .tertiary : .secondary)
-            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+        // A Menu, not a decorative chevron: pick the server or open the page.
+        LabeledContent("聚合服务器") {
+            Menu(app.bondServerSummary ?? "无服务器") {
+                ForEach(app.servers.servers) { server in
+                    Toggle(server.name, isOn: Binding(
+                        get: { app.linkSettings.value.bondServerID == server.id },
+                        set: { on in
+                            app.linkSettings.value.bondServerID = on ? server.id : nil
+                            Task { await app.applyLinkChanges() }
+                        }
+                    ))
+                }
+                if !app.servers.servers.isEmpty { Divider() }
+                Button("新建服务器…") { openMainWindow(); app.pendingSidebar = .aggregationServer }
+            }
+            .menuStyle(.borderlessButton).fixedSize()
         }
-        .font(.callout)
     }
 
     @ViewBuilder private var exit: some View {
         let session = app.session
-        HStack {
-            Text("路由")
-            Spacer()
-            if session.routeModes.isEmpty {
-                Text("—").foregroundStyle(.tertiary)
-            } else {
-                RouteModeMenu().fixedSize()
+        LabeledContent("模式") {
+            Picker("模式", selection: Binding(get: { session.routeMode ?? "" }, set: { session.setRouteMode($0) })) {
+                ForEach(session.routeModes, id: \.self) { Text(RouteMode.title($0)).tag($0) }
             }
+            .labelsHidden().pickerStyle(.menu).fixedSize()
+            .disabled(session.routeModes.isEmpty)
         }
-        .font(.callout)
-        NavigationLink(value: PanelRoute.nodes) {
-            HStack {
-                Text("节点")
-                Spacer()
+        LabeledContent("节点") {
+            NavigationLink(value: PanelRoute.nodes) {
                 if let group = session.groups.first(where: \.selectable) {
                     let delay = group.items.first { $0.tag == group.selected }?.delay ?? 0
-                    Text(group.selected).foregroundStyle(.secondary)
-                    if delay > 0 {
-                        Text("· \(delay) ms").foregroundStyle(DelayGrade(milliseconds: delay).color)
-                    }
+                    Text(delay > 0 ? "\(group.selected) · \(delay) ms" : group.selected)
                 } else {
-                    Text("—").foregroundStyle(.tertiary)
+                    Text("暂无代理")
                 }
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
             }
-            .font(.callout)
-            .contentShape(Rectangle())
+            .disabled(session.groups.isEmpty)
         }
-        .buttonStyle(.plain)
-        .disabled(session.groups.isEmpty)
     }
 
     private var footer: some View {
         HStack {
-            Button("打开主窗口", action: openMainWindow).buttonStyle(.bordered).controlSize(.small)
+            Button("打开主窗口", action: openMainWindow)
             Spacer()
-            Menu {
-                Button("设置", action: openSettings)
+            Menu("更多", systemImage: "ellipsis") {
+                Button("设置…", action: openSettings)
                 Divider()
-                Button("退出") { NSApp.terminate(nil) }
-            } label: {
-                Image(systemName: "ellipsis")
+                Button("退出 Parallux") { NSApp.terminate(nil) }
             }
-            .menuStyle(.button).menuIndicator(.hidden).buttonStyle(.bordered).controlSize(.small).fixedSize()
+            .labelStyle(.iconOnly).menuIndicator(.hidden).menuStyle(.borderlessButton).fixedSize()
         }
-        .padding(.top, 2)
+        .controlSize(.small)
     }
 
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             content()
         }
     }
@@ -197,43 +199,42 @@ private struct PanelNodesView: View {
     @State private var search = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField("搜索", text: $search).textFieldStyle(.roundedBorder)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(session.groups.filter(\.selectable)) { group in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(group.tag).font(.caption.weight(.semibold))
-                                Spacer()
-                                Button("延迟测试", systemImage: "bolt") { session.urlTest(group: group.tag) }
-                                    .labelStyle(.iconOnly).buttonStyle(.borderless)
-                                    .disabled(session.testing.contains(group.tag))
-                            }
-                            ForEach(group.items.filter { search.isEmpty || $0.tag.localizedCaseInsensitiveContains(search) }) { item in
-                                Button {
-                                    session.select(group: group.tag, outbound: item.tag)
-                                } label: {
-                                    HStack {
-                                        Image(systemName: item.tag == group.selected ? "checkmark" : "")
-                                            .frame(width: 14)
-                                        Text(item.tag)
-                                        Spacer()
-                                        let grade = DelayGrade(milliseconds: item.delay)
-                                        Text(grade == .untested ? "—" : "\(item.delay) ms").foregroundStyle(grade.color).monospacedDigit()
-                                    }
-                                    .font(.callout)
-                                    .contentShape(Rectangle())
+        List {
+            ForEach(session.groups.filter(\.selectable)) { group in
+                Section {
+                    ForEach(group.items.filter { search.isEmpty || $0.tag.localizedCaseInsensitiveContains(search) }) { item in
+                        Button {
+                            session.select(group: group.tag, outbound: item.tag)
+                        } label: {
+                            LabeledContent {
+                                let grade = LatencyGrade(milliseconds: item.delay)
+                                Text(verbatim: item.delay > 0 ? "\(item.delay) ms" : "—").monospacedDigit().foregroundStyle(grade.color)
+                            } label: {
+                                // Checkmark only on the pick, blank space elsewhere (menu convention).
+                                Label {
+                                    Text(item.tag)
+                                } icon: {
+                                    Image(systemName: "checkmark").opacity(item.tag == group.selected ? 1 : 0)
                                 }
-                                .buttonStyle(.plain)
+                                .foregroundStyle(item.tag == group.selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                             }
                         }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    HStack {
+                        Text(group.tag)
+                        Spacer()
+                        Button("延迟测试", systemImage: "bolt") { session.urlTest(group: group.tag) }
+                            .labelStyle(.iconOnly).buttonStyle(.borderless)
+                            .disabled(session.testing.contains(group.tag))
                     }
                 }
             }
-            .frame(maxHeight: 360)
         }
-        .padding(.horizontal, 14).padding(.vertical, 12)
+        .listStyle(.inset)
+        .searchable(text: $search, placement: .toolbar, prompt: "搜索")
+        .frame(height: 380)
         .navigationTitle("节点")
     }
 }

@@ -47,18 +47,45 @@ final class TunnelController {
     }
 
     /// Installs (or updates) the system extension and the VPN configuration.
+    /// When macOS asks the user to approve the extension, this returns in
+    /// `.awaitingApproval`; `install(thenConnect:)` keeps going once the user
+    /// switches it on in System Settings.
     func install() async {
+        switch await installer.activate() {
+        case .awaitingApproval:
+            phase = .awaitingApproval
+        case .activated:
+            await saveConfiguration()
+        case .needsReboot:
+            phase = .failed("需要重新启动 Mac 以完成安装")
+        case .failed:
+            phase = .failed(installer.lastError ?? "安装失败")
+        case .idle, .requesting:
+            break
+        }
+    }
+
+    /// The extension finished activating after the user approved it.
+    func completeApproval() async -> Bool {
+        switch await installer.waitForCompletion() {
+        case .activated:
+            await saveConfiguration()
+            return phase == .ready
+        case .needsReboot:
+            phase = .failed("需要重新启动 Mac 以完成安装")
+        case .failed:
+            phase = .failed(installer.lastError ?? "安装失败")
+        default:
+            break
+        }
+        return false
+    }
+
+    var extensionState: ActivationMachine.State { installer.state }
+    var hasConfiguration: Bool { manager != nil }
+
+    private func saveConfiguration() async {
         do {
-            switch try await installer.activate() {
-            case .needsApproval:
-                phase = .awaitingApproval
-                return
-            case .willCompleteAfterReboot:
-                phase = .failed("需要重启后完成安装")
-                return
-            case .activated:
-                break
-            }
             let manager = self.manager ?? NETunnelProviderManager()
             let proto = NETunnelProviderProtocol()
             proto.providerBundleIdentifier = SystemExtensionInstaller.extensionBundleID

@@ -17,7 +17,7 @@ public enum StatusLine {
     public static func text(setup: Setup, tunnel: Tunnel, actionError: String?, coreError: String?, linkKind: String?) -> String {
         if let actionError { return actionError }
         switch setup {
-        case .awaitingApproval: return "请在系统设置中允许网络扩展"
+        case .awaitingApproval: return "需要在系统设置中授权"
         case let .failed(message): return message
         case .ready: break
         }

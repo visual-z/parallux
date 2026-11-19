@@ -14,7 +14,7 @@ import Testing
     }
 
     @Test func setupAndActionErrorsComeFirst() {
-        #expect(StatusLine.text(setup: .awaitingApproval, tunnel: .disconnected, actionError: nil, coreError: nil, linkKind: nil) == "请在系统设置中允许网络扩展")
+        #expect(StatusLine.text(setup: .awaitingApproval, tunnel: .disconnected, actionError: nil, coreError: nil, linkKind: nil) == "需要在系统设置中授权")
         #expect(StatusLine.text(setup: .failed("x"), tunnel: .disconnected, actionError: nil, coreError: nil, linkKind: nil) == "x")
         #expect(StatusLine.text(setup: .ready, tunnel: .connected, actionError: "读不到配置", coreError: nil, linkKind: nil) == "读不到配置")
         #expect(StatusLine.text(setup: .ready, tunnel: .connecting, actionError: nil, coreError: nil, linkKind: nil) == "正在连接…")

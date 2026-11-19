@@ -68,6 +68,9 @@ struct MainWindow: View {
         .frame(minWidth: 760, minHeight: 520)
         .onAppear { onSceneActionsAvailable(SceneActions(openWindow: openWindow, openSettings: openSettings)) }
         .onReceive(NotificationCenter.default.publisher(for: .explainRoute)) { _ in selection = .routing }
+        .onChange(of: app.pendingSidebar) { _, item in
+            if let item { selection = item; app.pendingSidebar = nil }
+        }
     }
 
     private func rows(_ section: SidebarSection) -> some View {

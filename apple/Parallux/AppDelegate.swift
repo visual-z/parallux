@@ -12,6 +12,9 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private let popover = NSPopover()
+    #if DEBUG
+    private var panelPreview: NSWindow?
+    #endif
     /// SwiftUI's scene actions, handed over by MainWindow when it appears.
     /// They stay valid after that window closes, so AppKit code (the status
     /// item and its menu) can reopen the main and settings windows.
@@ -39,6 +42,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusItem = item
         renderStatusItem()
+        #if DEBUG
+        // Screenshots of the panel without the status item, which macOS may
+        // hide behind the notch (`-ParalluxPanelPreview YES`); never in a release.
+        if UserDefaults.standard.bool(forKey: "ParalluxPanelPreview") {
+            let window = NSWindow(contentViewController: NSHostingController(rootView: PanelView(
+                app: app, openMainWindow: {}, openSettings: {}
+            )))
+            window.title = "Panel preview"
+            window.setFrameTopLeftPoint(NSPoint(x: 80, y: (NSScreen.main?.frame.maxY ?? 900) - 80))
+            window.makeKeyAndOrderFront(nil)
+            panelPreview = window
+        }
+        #endif
     }
 
     /// parallux:// and sing-box:// links (URLRoute).

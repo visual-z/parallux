@@ -8,7 +8,15 @@ struct OverviewView: View {
 
     var body: some View {
         let session = app.session
-        if !session.isRunning {
+        if !session.isRunning && !app.tunnel.hasConfiguration {
+            // First run: the checklist replaces the empty state until the
+            // extension and VPN configuration exist.
+            Form { SetupSection() }
+                .formStyle(.grouped)
+                .frame(maxWidth: 560)
+                .frame(maxWidth: .infinity)
+                .navigationSubtitle(app.statusLine)
+        } else if !session.isRunning {
             ContentUnavailableView {
                 Label("未连接", systemImage: "point.3.connected.trianglepath.dotted")
             } description: {
