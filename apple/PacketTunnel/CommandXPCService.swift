@@ -49,6 +49,10 @@ final class CommandXPCService: NSObject, NSXPCListenerDelegate, @unchecked Senda
             }
         }
 
+        func explainRoute(_ target: String, reply: @escaping (String) -> Void) {
+            reply(PxbridgeExplainRoute(target))
+        }
+
         func linkStats(reply: @escaping (String) -> Void) {
             reply(PxbridgeLinkStatsJSON())
         }

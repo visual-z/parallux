@@ -49,7 +49,56 @@ final class CoreSession {
     @ObservationIgnored private var connectionConsumers = 0
     @ObservationIgnored private var logConsumers = 0
 
-    var isRunning: Bool { base != nil }
+    var isRunning: Bool { base != nil || previewing }
+
+    /// DEBUG only: fills the session with fixture data so the routing page can
+    /// be looked at without a running tunnel (`-ParalluxPreview YES`). Never
+    /// compiled into release builds.
+    @ObservationIgnored private var previewing = false
+
+    #if DEBUG
+    func loadPreview() {
+        previewing = true
+        func g(_ tag: String, _ type: String, _ selected: String, _ items: [(String, String, Int32)]) -> OutboundGroupModel {
+            OutboundGroupModel(tag: tag, type: type, selectable: type == "selector", selected: selected,
+                               items: items.map { .init(tag: $0.0, type: $0.1, delay: $0.2) })
+        }
+        groups = [
+            g("proxy", "selector", "DE Auto", [("DE Auto", "URLTest", 368), ("US Auto", "URLTest", 439), ("🇨🇳 CN-1", "URLTest", 167),
+                ("🇩🇪 DE-1 AnyTLS", "AnyTLS", 368), ("🇩🇪 DE-1 HY2", "Hysteria2", 369), ("🇺🇸 US-1 Reality", "VLESS", 439),
+                ("🇺🇸 US-2 AnyTLS", "AnyTLS", 537), ("IPLC · 香港 04 0.5倍率", "AnyTLS", 373), ("IPLC · 狮城 0.5倍率", "AnyTLS", 659),
+                ("Ghelper", "Selector", 3908), ("direct", "Direct", 0)]),
+            g("DE Auto", "urltest", "🇩🇪 DE-1 AnyTLS", [("🇩🇪 DE-1 AnyTLS", "AnyTLS", 368), ("🇩🇪 DE-1 HY2", "Hysteria2", 369), ("🇩🇪 DE-1 Reality", "VLESS", 473)]),
+            g("US Auto", "urltest", "🇺🇸 US-1 Reality", [("🇺🇸 US-1 Reality", "VLESS", 439), ("🇺🇸 US-2 AnyTLS", "AnyTLS", 537), ("🇺🇸 US-1 AnyTLS", "AnyTLS", 688)]),
+            g("流媒体", "selector", "IPLC · 香港 02", [("IPLC · 香港 02", "AnyTLS", 565), ("IPLC · 台湾 0.5倍率", "AnyTLS", 407), ("IPLC · 日本 0.5倍率", "AnyTLS", 482), ("IPLC · 美国 0.5倍率", "AnyTLS", 1051)]),
+        ]
+        routeModes = ["Rule", "Global", "Direct"]
+        routeMode = "Rule"
+        status = CoreStatus(uplink: 6_000_000, downlink: 70_000_000, uplinkTotal: 3 << 30, downlinkTotal: 38 << 30, memory: 38 << 20, connections: 142)
+        func row(_ id: String, _ dest: String, _ rule: String, _ out: String, _ rate: Int64) -> ConnectionRow {
+            ConnectionRow(id: id, process: "", destination: dest, rule: rule, outbound: out, downlinkTotal: rate * 30, downlink: rate)
+        }
+        connections = [
+            row("1", "rr1.googlevideo.com:443", "rule_set=geosite-youtube", "流媒体", 22_000_000),
+            row("2", "github.com:443", "domain_suffix=[github.com githubusercontent.com]", "proxy", 8_000_000),
+            row("3", "steamcdn-a.akamaihd.net:443", "rule_set=geosite-steam@cn", "direct", 30_000_000),
+            row("4", "www.baidu.com:443", "rule_set=[geosite-cn geoip-cn]", "direct", 12_000_000),
+            row("5", "api.openai.com:443", "rule_set=[geosite-openai geosite-anthropic]", "US Auto", 1_500_000),
+            row("6", "example.org:443", "", "proxy", 5_000_000),
+            row("7", "192.168.1.20:445", "ip_is_private=true", "direct", 300_000),
+        ]
+    }
+
+    static let previewProfile = """
+    {"outbounds":[{"type":"selector","tag":"proxy","outbounds":["DE Auto","US Auto"]},{"type":"urltest","tag":"DE Auto","outbounds":["DE-1"]},
+     {"type":"urltest","tag":"US Auto","outbounds":["US-1"]},{"type":"selector","tag":"流媒体","outbounds":["HK-02"]},{"type":"direct","tag":"direct"}],
+     "route":{"rules":[{"action":"sniff"},{"protocol":"dns","action":"hijack-dns"},{"ip_is_private":true,"outbound":"direct"},
+      {"rule_set":"geosite-youtube","outbound":"流媒体"},{"rule_set":"geosite-netflix","outbound":"流媒体"},
+      {"domain_suffix":["github.com","githubusercontent.com"],"outbound":"proxy"},
+      {"rule_set":["geosite-openai","geosite-anthropic"],"outbound":"US Auto"},{"rule_set":"geosite-steam@cn","outbound":"direct"},
+      {"rule_set":["geosite-cn","geoip-cn"],"outbound":"direct"}],"final":"proxy"}}
+    """
+    #endif
 
     func start() {
         guard base == nil else { return }

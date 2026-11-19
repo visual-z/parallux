@@ -2,11 +2,12 @@ import Testing
 @testable import ParalluxKit
 
 @Suite struct SidebarTests {
-    @Test func theSidebarShowsNineItemsInThreeSectionsInDesignOrder() {
+    /// Decision 20 merged 节点 and 规则 into 路由 (design v0.3): eight items.
+    @Test func theSidebarShowsEightItemsInThreeSectionsInDesignOrder() {
         #expect(SidebarSection.allCases.map(\.items) == [
             [.overview, .connections, .logs],
             [.links, .aggregationServer, .diagnostics],
-            [.profiles, .outbounds, .rules],
+            [.profiles, .routing],
         ])
     }
 

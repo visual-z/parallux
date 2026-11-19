@@ -23,6 +23,10 @@ private final class SocketServer: NSObject, NSXPCListenerDelegate, TunnelXPCProt
         if replies { reply(served, nil) }
     }
 
+    func explainRoute(_ target: String, reply: @escaping (String) -> Void) {
+        reply(#"{"target":"\#(target)","rule_index":2,"outbound":"proxy"}"#)
+    }
+
     func linkStats(reply: @escaping (String) -> Void) {
         reply(#"[{"tag":"direct","mode":"balance","links":[]}]"#)
     }
@@ -98,6 +102,16 @@ private func connect(to server: SocketServer) -> (NSXPCListener, NSXPCConnection
         let (listener, connection) = connect(to: server)
         defer { connection.invalidate(); listener.invalidate() }
         #expect(TunnelXPC.drainNotifications(over: connection, timeout: 2).map(\.identifier) == ["core-1"])
+    }
+
+    @Test func routeExplanationsComeBackOverXPC() throws {
+        let server = SocketServer(served: nil)
+        let (listener, connection) = connect(to: server)
+        defer { connection.invalidate(); listener.invalidate() }
+        let step = try #require(RouteExplanation.decode(TunnelXPC.explainRoute("youtube.com", over: connection, timeout: 2)))
+        #expect(step.ruleIndex == 2)
+        #expect(step.outbound == "proxy")
+        #expect(RouteExplanation.decode("") == nil)
     }
 
     @Test func linkStatsComeBackOverXPC() {

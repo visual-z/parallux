@@ -16,6 +16,9 @@ final class AppModel {
     @ObservationIgnored private let notifier = LinkNotifier()
     let servers = AggregationServersModel()
     let remote = RemoteControlModel()
+    let routeOverrides = RouteOverrideStore()
+    /// A target the connections inspector asked 路由 › 试一下 to explain; consumed by RoutingView.
+    var pendingExplainTarget: String?
 
     /// The multipath outbound for 叠加: the chosen server over the two top links.
     func bondProvider(_ settings: LinkSettings) -> ProfileComposer.Bond? {
@@ -38,6 +41,9 @@ final class AppModel {
     var controlsLocalCore: Bool { !remote.isRemote }
 
     func start() {
+        #if DEBUG
+        if UserDefaults.standard.bool(forKey: "ParalluxPreview") { session.loadPreview() }
+        #endif
         profiles.startAutoUpdate()
         Task { await tunnel.load() }
         observeTunnel()
@@ -98,9 +104,11 @@ final class AppModel {
         return mode
     }
 
+    /// Route overrides first (they name the profile's own outbounds), then links.
     func compose(_ content: String) throws -> String {
         let settings = linkSettings.value
-        return try ProfileComposer.compose(content, links: enabledLinks, backup: settings.preferences.backup,
+        let rerouted = RouteOverrides.apply(routeOverrides.overrides(for: profiles.store.selectedID), to: content).config
+        return try ProfileComposer.compose(rerouted, links: enabledLinks, backup: settings.preferences.backup,
                                            mode: settings.mode, bond: bondProvider(settings))
     }
 

@@ -45,118 +45,6 @@ extension DelayGrade {
     }
 }
 
-// MARK: 节点
-
-struct OutboundsView: View {
-    @Environment(CoreSession.self) private var session
-    @State private var search = ""
-
-    var body: some View {
-        Group {
-            if !session.isRunning {
-                NotConnectedView(title: "节点", symbol: "globe")
-            } else if session.groups.isEmpty {
-                ContentUnavailableView("没有出站分组", systemImage: "globe", description: Text("当前配置里没有 selector 或 urltest 分组。"))
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18, pinnedViews: []) {
-                        ForEach(session.groups) { group in
-                            GroupSection(group: group, search: search)
-                        }
-                    }
-                    .padding(20)
-                }
-            }
-        }
-        .navigationSubtitle("\(session.groups.count) 个出站分组")
-        .searchable(text: $search, placement: .toolbar, prompt: "搜索")
-        .toolbar {
-            ToolbarItem { RouteModeMenu() }
-            ToolbarItem {
-                Button("全部测速", systemImage: "bolt") {
-                    for group in session.groups { session.urlTest(group: group.tag) }
-                }
-                .disabled(!session.isRunning || !session.testing.isEmpty)
-                .help("对每个分组测速")
-            }
-        }
-    }
-}
-
-private struct GroupSection: View {
-    let group: OutboundGroupModel
-    let search: String
-    @Environment(CoreSession.self) private var session
-    @AppStorage private var collapsed: Bool
-
-    init(group: OutboundGroupModel, search: String) {
-        self.group = group
-        self.search = search
-        _collapsed = AppStorage(wrappedValue: false, "nodes.collapsed.\(group.tag)")
-    }
-
-    private var items: [OutboundGroupModel.Item] {
-        search.isEmpty ? group.items : group.items.filter { $0.tag.localizedCaseInsensitiveContains(search) }
-    }
-
-    var body: some View {
-        if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Button {
-                        withAnimation(.snappy) { collapsed.toggle() }
-                    } label: {
-                        Image(systemName: "chevron.right").rotationEffect(.degrees(collapsed ? 0 : 90))
-                    }
-                    .buttonStyle(.borderless)
-                    .help(collapsed ? "展开" : "折叠")
-                    Text(group.tag).font(.headline)
-                    if collapsed {
-                        Text(group.selected).font(.caption).foregroundStyle(.secondary)
-                    }
-                    if session.testing.contains(group.tag) { ProgressView().controlSize(.mini) }
-                    Spacer()
-                    Text(group.subtitle).font(.caption).foregroundStyle(.secondary)
-                    Button("测速", systemImage: "bolt") { session.urlTest(group: group.tag) }
-                        .labelStyle(.iconOnly).buttonStyle(.borderless)
-                        .disabled(session.testing.contains(group.tag))
-                }
-                if !collapsed || !search.isEmpty {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 8)], spacing: 8) {
-                        ForEach(items) { item in
-                            NodeCard(item: item, isSelected: item.tag == group.selected)
-                                .onTapGesture {
-                                    if group.selectable { session.select(group: group.tag, outbound: item.tag) }
-                                }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private struct NodeCard: View {
-    let item: OutboundGroupModel.Item
-    let isSelected: Bool
-
-    var body: some View {
-        let grade = DelayGrade(milliseconds: item.delay)
-        VStack(alignment: .leading, spacing: 6) {
-            Text(item.tag).font(.body.weight(.medium)).lineLimit(1)
-            HStack {
-                Text(item.type).font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Text(grade == .untested ? "—" : "\(item.delay) ms").font(.caption.monospacedDigit()).foregroundStyle(grade.color)
-            }
-        }
-        .padding(12)
-        .background(isSelected ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 1.5))
-        .contentShape(Rectangle())
-    }
-}
-
 // MARK: 连接
 
 struct ConnectionsView: View {
@@ -230,6 +118,7 @@ struct ConnectionsView: View {
 private struct ConnectionInspector: View {
     let row: ConnectionRow?
     @Environment(CoreSession.self) private var session
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         if let row {
@@ -243,6 +132,10 @@ private struct ConnectionInspector: View {
                 Section("路由") {
                     LabeledContent("规则", value: row.rule.isEmpty ? "final" : row.rule)
                     LabeledContent("出站链", value: row.chain.isEmpty ? row.outbound : row.chain.joined(separator: " → "))
+                    Button("这条为什么走这里") {
+                        app.pendingExplainTarget = ExplainView.host(row.destination)
+                        NotificationCenter.default.post(name: .explainRoute, object: nil)
+                    }
                 }
                 Section("流量") {
                     LabeledContent("↓ 下行", value: RateFormat.bytes(row.downlinkTotal))
@@ -325,53 +218,5 @@ extension LogsView {
         panel.nameFieldStringValue = "parallux-\(Date().formatted(.iso8601.year().month().day()))-logs.txt"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         try? Data(redacted.utf8).write(to: url, options: .atomic)
-    }
-}
-
-// MARK: 规则
-
-struct RulesView: View {
-    @Environment(CoreSession.self) private var session
-    @Environment(ProfileService.self) private var profiles
-    @State private var rules: [RuleSummary] = []
-    @State private var error: String?
-
-    var body: some View {
-        let hits = RuleSummary.hits(rules, connections: session.connections)
-        Group {
-            if let error {
-                ContentUnavailableView("读不到规则", systemImage: "exclamationmark.triangle", description: Text(error))
-            } else if rules.isEmpty {
-                ContentUnavailableView("没有路由规则", systemImage: "arrow.triangle.branch", description: Text("选中的配置里没有 route.rules。"))
-            } else {
-                Table(rules) {
-                    TableColumn("#") { Text("\($0.id + 1)").monospacedDigit().foregroundStyle(.secondary) }.width(30)
-                    TableColumn("条件") { Text($0.condition).font(.callout.monospaced()).lineLimit(2) }
-                    TableColumn("动作") { Text($0.action) }.width(min: 80, ideal: 120)
-                    TableColumn("命中") { rule in
-                        Text(hits[rule.id].map(String.init) ?? "—").monospacedDigit()
-                    }
-                    .width(50)
-                }
-            }
-        }
-        .navigationSubtitle(profiles.store.selected.map { "来自「\($0.name)」 · 命中数按当前活跃连接统计" } ?? "")
-        .toolbar { ToolbarItem { RouteModeMenu() } }
-        .task(id: profiles.store.selectedID) { await load() }
-        .onAppear { session.retainConnections() }
-        .onDisappear { session.releaseConnections() }
-    }
-
-    private func load() async {
-        guard let profile = profiles.store.selected else {
-            rules = []
-            return
-        }
-        do {
-            rules = RuleSummary.parse(config: try await profiles.content(of: profile))
-            error = nil
-        } catch {
-            self.error = error.localizedDescription
-        }
     }
 }

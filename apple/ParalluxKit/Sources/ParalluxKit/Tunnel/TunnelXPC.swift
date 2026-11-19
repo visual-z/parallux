@@ -14,6 +14,9 @@ import Foundation
     /// Replies with core/pxbridge LinkStatsJSON: per-link counters of every
     /// running aggregate outbound.
     func linkStats(reply: @escaping (String) -> Void)
+    /// Replies with pxbridge.ExplainRoute(target): which rule of the running
+    /// configuration a target matches and where it goes (feat-routing-page).
+    func explainRoute(_ target: String, reply: @escaping (String) -> Void)
     /// Removes and replies with the core's queued notifications
     /// (NotificationQueue.encode); the app posts them, because a system
     /// extension runs outside the user session.
@@ -92,6 +95,21 @@ public enum TunnelXPC {
         }
         guard proxy != nil, done.wait(timeout: .now() + timeout) == .success, case let .success(data)? = box.get() else { return [] }
         return NotificationQueue.decode(data)
+    }
+
+    /// Asks the extension to explain a target's route; "" when it does not answer in time.
+    public static func explainRoute(_ target: String, over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout) -> String {
+        connection.remoteObjectInterface = makeInterface()
+        connection.resume()
+        let done = DispatchSemaphore(value: 0)
+        let box = ReplyBox()
+        let proxy = connection.remoteObjectProxyWithErrorHandler { _ in done.signal() } as? TunnelXPCProtocol
+        proxy?.explainRoute(target) { json in
+            box.set(.success(Data(json.utf8)))
+            done.signal()
+        }
+        guard proxy != nil, done.wait(timeout: .now() + timeout) == .success, case let .success(data)? = box.get() else { return "" }
+        return String(decoding: data, as: UTF8.self)
     }
 
     /// Runs the probes concurrently; used by the extension's XPC handler.

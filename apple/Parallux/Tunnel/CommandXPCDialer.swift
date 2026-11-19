@@ -21,6 +21,13 @@ final class CommandXPCDialer: NSObject, LibboxXPCDialerProtocol, @unchecked Send
     }
 
     /// Per-link counters; "[]" when the extension is unreachable.
+    /// Which rule of the running configuration `target` matches; nil when the extension is unreachable.
+    static func explainRoute(_ target: String) -> RouteExplanation? {
+        guard let connection = try? connection() else { return nil }
+        defer { connection.invalidate() }
+        return RouteExplanation.decode(TunnelXPC.explainRoute(target, over: connection))
+    }
+
     static func linkStats() -> String {
         guard let connection = try? connection() else { return "[]" }
         defer { connection.invalidate() }

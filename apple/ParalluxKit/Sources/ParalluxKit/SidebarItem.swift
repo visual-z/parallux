@@ -1,13 +1,14 @@
 /// The main window's sidebar destinations, in display order.
 ///
-/// Grouping follows the v0.2 design (PLAN decision 7): the unlabeled group is
+/// Grouping follows the v0.2 design (PLAN decision 7); nodes and rules became
+/// one routing page in v0.3 (decision 20): the unlabeled group is
 /// traffic you watch, "聚合" is what Parallux adds to sing-box, "代理" is SFM's
 /// proxy surface. Settings is deliberately absent: it lives in its own window
 /// (⌘,) per the macOS HIG.
 public enum SidebarItem: String, CaseIterable, Identifiable, Sendable {
     case overview, connections, logs
     case links, aggregationServer, diagnostics
-    case profiles, outbounds, rules
+    case profiles, routing
 
     public var id: String { rawValue }
 
@@ -20,12 +21,11 @@ public enum SidebarItem: String, CaseIterable, Identifiable, Sendable {
         case .aggregationServer: "聚合服务器"
         case .diagnostics: "诊断"
         case .profiles: "配置"
-        case .outbounds: "节点"
-        case .rules: "规则"
+        case .routing: "路由"
         }
     }
 
-    /// SF Symbol name. All nine were checked with `NSImage(systemSymbolName:)`
+    /// SF Symbol name. All were checked with `NSImage(systemSymbolName:)`
     /// on macOS 27.2 (2026-11-18); re-check when changing one.
     public var symbol: String {
         switch self {
@@ -36,8 +36,7 @@ public enum SidebarItem: String, CaseIterable, Identifiable, Sendable {
         case .aggregationServer: "server.rack"
         case .diagnostics: "stethoscope"
         case .profiles: "doc.text"
-        case .outbounds: "globe"
-        case .rules: "arrow.triangle.branch"
+        case .routing: "arrow.triangle.branch"
         }
     }
 
@@ -45,7 +44,7 @@ public enum SidebarItem: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .overview, .connections, .logs: .traffic
         case .links, .aggregationServer, .diagnostics: .aggregation
-        case .profiles, .outbounds, .rules: .proxy
+        case .profiles, .routing: .proxy
         }
     }
 }

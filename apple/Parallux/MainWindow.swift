@@ -38,8 +38,7 @@ struct MainWindow: View {
                 case .aggregationServer: AggregationServersView()
                 case .diagnostics: DiagnosticsView()
                 case .profiles: ProfilesView()
-                case .outbounds: OutboundsView()
-                case .rules: RulesView()
+                case .routing: RoutingView()
                 }
             }
             .navigationTitle(item.title)
@@ -66,6 +65,7 @@ struct MainWindow: View {
             }
         }
         .onAppear { onSceneActionsAvailable(SceneActions(openWindow: openWindow, openSettings: openSettings)) }
+        .onReceive(NotificationCenter.default.publisher(for: .explainRoute)) { _ in selection = .routing }
     }
 
     private func rows(_ section: SidebarSection) -> some View {

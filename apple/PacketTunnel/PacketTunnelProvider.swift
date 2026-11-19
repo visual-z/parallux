@@ -71,6 +71,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             throw ExtensionError("create command server: \(error?.localizedDescription ?? "nil")")
         }
         try server.start()
+        // The routing page's 「试一下」 runs the router's own rules (pxbridge.ExplainRoute).
+        PxbridgeSetCommandServer(server)
         commandServer = server
 
         if let service = MachService.name(in: .main) {
@@ -115,6 +117,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     }
 
     private func stopEverything() {
+        PxbridgeSetCommandServer(nil)
         try? commandServer?.closeService()
         commandServer?.close()
         commandServer = nil
