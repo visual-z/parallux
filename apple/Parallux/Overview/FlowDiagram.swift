@@ -268,7 +268,11 @@ final class FlowMotion {
     private var steppedAt: Date?
     private var generator = SystemRandomNumberGenerator()
 
-    /// The layout to draw at `date`. Both layers ask for it; time only moves forward.
+    /// The settled layout last computed, and what it was computed for: between
+    /// samples nothing changes, and the layer asks 60 times a second.
+    private var settled: (target: Target, metrics: FlowDiagram.Metrics, layout: SankeyLayout)?
+
+    /// The layout to draw at `date`; time only moves forward.
     func layout(at date: Date, target: Target, metrics: FlowDiagram.Metrics, easing: Bool) -> SankeyLayout {
         linkEase.retarget(target.links)
         exitEase.retarget(target.exits)
@@ -283,7 +287,11 @@ final class FlowMotion {
             exitEase.finish()
             easedAt = nil
         }
-        return SankeyLayout.make(left: linkEase.value, right: exitEase.value, height: Double(metrics.region), gap: metrics.gap, capacity: target.capacity)
+        let isSettled = linkEase.isSettled && exitEase.isSettled
+        if isSettled, let settled, settled.target == target, settled.metrics == metrics { return settled.layout }
+        let layout = SankeyLayout.make(left: linkEase.value, right: exitEase.value, height: Double(metrics.region), gap: metrics.gap, capacity: target.capacity)
+        settled = isSettled ? (target, metrics, layout) : nil
+        return layout
     }
 
     /// The particles at `date`, on the layout drawn at that moment.

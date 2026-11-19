@@ -37,14 +37,23 @@ public struct FlowParticles: Sendable {
 
     public mutating func step(by seconds: Double, bands: [SankeyLayout.Band], using generator: inout some RandomNumberGenerator) {
         let dt = min(max(seconds.isFinite ? seconds : 0, 0), Self.longestStep)
-        // Advance; drop the ones that arrived or whose band is gone.
-        var kept: [Particle] = []
-        kept.reserveCapacity(particles.count)
-        for var particle in particles {
+        // Which (link, exit) pairs still have a band: a table, not a search
+        // per particle (hundreds of particles, every frame).
+        let exits = (bands.map(\.to).max() ?? -1) + 1
+        var alive = [Bool](repeating: false, count: ((bands.map(\.from).max() ?? -1) + 1) * exits)
+        for band in bands { alive[band.from * exits + band.to] = true }
+        // Advance in place; drop the ones that arrived or whose band is gone.
+        var kept = particles
+        var count = 0
+        for index in kept.indices {
+            var particle = kept[index]
             particle.progress += particle.speed * dt
-            guard particle.progress < 2, bands.contains(where: { $0.from == particle.from && $0.to == particle.to }) else { continue }
-            kept.append(particle)
+            let slot = particle.from * exits + particle.to
+            guard particle.progress < 2, particle.to < exits, slot < alive.count, alive[slot] else { continue }
+            kept[count] = particle
+            count += 1
         }
+        kept.removeSubrange(count...)
         // Spawn in proportion to thickness: the whole part, then one more
         // with the fraction as its probability.
         for band in bands where band.left.length > 0 {

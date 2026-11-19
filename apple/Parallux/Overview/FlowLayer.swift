@@ -354,7 +354,8 @@ final class FlowLayerView: NSView {
     /// stale drawable size shows nothing.
     func resize() {
         let scale = window?.backingScaleFactor ?? 2
-        metalLayer.contentsScale = scale
+        // Only when it changed: setting a layer property opens a transaction, and this runs every frame.
+        if metalLayer.contentsScale != scale { metalLayer.contentsScale = scale }
         let size = CGSize(width: bounds.width * scale, height: bounds.height * scale)
         if size.width >= 1, size.height >= 1, metalLayer.drawableSize != size { metalLayer.drawableSize = size }
     }
