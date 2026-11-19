@@ -81,7 +81,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 button.title = ""
             }
-            button.toolTip = app.statusLine
+            button.setAccessibilityLabel("Parallux " + state.title)
+            let detail = app.statusLine
+            button.toolTip = state.title == detail ? detail : state.title + "\n" + detail
         } onChange: { [weak self] in
             Task { @MainActor in self?.renderStatusItem() }
         }
