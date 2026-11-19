@@ -48,3 +48,12 @@ public enum OverviewCopy {
         return mode.map { "\($0.title) · \(speed)" } ?? speed
     }
 }
+
+/// What a link is doing right now, as the panel and the overview both show it.
+public enum LinkStanding: Equatable, Sendable {
+    case disabled, carrying, primary, standby
+
+    public static func all(enabled: [String], backup: Set<String>, mode: AggregationMode?) -> [String: LinkStanding] { [:] }
+
+    public var badge: String? { nil }
+}

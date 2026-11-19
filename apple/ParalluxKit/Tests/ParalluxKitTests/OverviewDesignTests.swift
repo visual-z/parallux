@@ -206,4 +206,30 @@ import Testing
         #expect(OverviewCopy.centre(mode: .bond, rate: 91_375_000) == "叠加 · 731 Mbps")
         #expect(OverviewCopy.centre(mode: nil, rate: 0) == "0 bps")
     }
+
+    @Test func linkStandingFollowsModeOrderAndBackup() {
+        let three = ["en7", "en0", "en8"]
+        // 主备: the first link that is not backup-only leads, the rest wait.
+        #expect(LinkStanding.all(enabled: three, backup: [], mode: .failover) == ["en7": .primary, "en0": .standby, "en8": .standby])
+        #expect(LinkStanding.all(enabled: three, backup: ["en7"], mode: .failover) == ["en7": .standby, "en0": .primary, "en8": .standby])
+        #expect(LinkStanding.all(enabled: three, backup: Set(three), mode: .failover) == ["en7": .primary, "en0": .standby, "en8": .standby],
+                "with only backup links the first still carries the traffic")
+        // 分流 and 叠加 use every link except the backup-only ones.
+        for mode in [AggregationMode.balance, .bond] {
+            #expect(LinkStanding.all(enabled: three, backup: [], mode: mode) == ["en7": .carrying, "en0": .carrying, "en8": .carrying])
+            #expect(LinkStanding.all(enabled: three, backup: ["en8"], mode: mode) == ["en7": .carrying, "en0": .carrying, "en8": .standby])
+            #expect(LinkStanding.all(enabled: three, backup: Set(three), mode: mode) == ["en7": .carrying, "en0": .standby, "en8": .standby])
+        }
+        // One link, or none: no aggregation mode is in effect.
+        #expect(LinkStanding.all(enabled: ["en0"], backup: [], mode: nil) == ["en0": .carrying])
+        #expect(LinkStanding.all(enabled: ["en0"], backup: ["en0"], mode: nil) == ["en0": .carrying])
+        #expect(LinkStanding.all(enabled: [], backup: ["en0"], mode: .failover).isEmpty)
+        // A link that is not in the enabled list has no entry: the caller shows it as disabled.
+        #expect(LinkStanding.all(enabled: ["en0"], backup: [], mode: nil)["en7"] == nil)
+
+        #expect(LinkStanding.primary.badge == "主")
+        #expect(LinkStanding.standby.badge == "备")
+        #expect(LinkStanding.carrying.badge == nil)
+        #expect(LinkStanding.disabled.badge == nil)
+    }
 }
