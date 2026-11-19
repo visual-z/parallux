@@ -55,3 +55,22 @@ import Testing
         #expect(SharedEgress.warning(links: [links[0]], egress: ["en0": "1.1.1.1"]) == nil)
     }
 }
+
+@Suite struct LinkRecompositionTests {
+    private let wifi = LinkInterface(name: "en0", kind: .wifi, displayName: "Wi‑Fi", address: "10.0.0.2")
+    private let lan = LinkInterface(name: "en7", kind: .ethernet, displayName: "LAN", address: "192.168.1.2")
+    private let iPhone = LinkInterface(name: "en8", kind: .iPhone, displayName: "iPhone USB")
+
+    @Test func linkSetChangesTriggerRecomposition() {
+        var prefs = LinkPreferences()
+        #expect(prefs.needsRecomposition(from: [wifi], to: [wifi, lan]), "plugged in")
+        #expect(prefs.needsRecomposition(from: [wifi, lan], to: [wifi]), "pulled out")
+        var moved = lan
+        moved.address = "192.168.1.99"
+        #expect(!prefs.needsRecomposition(from: [wifi, lan], to: [wifi, moved]), "address change only")
+        #expect(!prefs.needsRecomposition(from: [wifi, lan], to: [lan, wifi]), "order of discovery only")
+        #expect(!prefs.needsRecomposition(from: [], to: []))
+        prefs.disabled = ["en8"]
+        #expect(!prefs.needsRecomposition(from: [wifi, lan], to: [wifi, lan, iPhone]), "a disabled link appearing")
+    }
+}

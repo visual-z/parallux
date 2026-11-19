@@ -77,3 +77,9 @@ public enum SharedEgress {
         return "\(names)走的是同一个公网出口，背后可能是同一条宽带：叠加不会更快，分流也不会多出带宽。"
     }
 }
+
+extension LinkPreferences {
+    /// Whether moving from `old` to `new` available links changes the enabled
+    /// set the core was composed with (a link plugged in or pulled out).
+    public func needsRecomposition(from old: [LinkInterface], to new: [LinkInterface]) -> Bool { false }
+}
