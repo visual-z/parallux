@@ -23,35 +23,33 @@ struct HelperSettingsSection: View {
             HStack {
                 switch helper.state {
                 case .enabled:
-                    Button("重新安装") { Task { await helper.install() } }
+                    Button("更新") { Task { await helper.install() } }
                     Button("卸载", role: .destructive) { Task { await helper.uninstall() } }
                 case .requiresApproval:
-                    Button("打开登录项设置") { helper.openApproval() }
+                    Button("打开设置") { helper.openApproval() }
                     Button("卸载", role: .destructive) { Task { await helper.uninstall() } }
                 case .notInstalled, .failed:
-                    Button("安装") { Task { await helper.install() } }
+                    Button("安装辅助服务") { Task { await helper.install() } }
                 case .unsigned:
                     EmptyView()
                 }
             }
             .disabled(helper.busy)
-            Text("辅助服务以 root 运行，只做按进程分流、读取工作目录与崩溃报告；内核仍在网络扩展里。")
-                .font(.caption).foregroundStyle(.secondary)
             if let error = helper.lastError { Text(error).font(.caption).foregroundStyle(.red) }
         }
         if helper.state == .enabled {
             Section("工作目录") {
                 if let info = helper.workingDirectory {
-                    LabeledContent("路径") {
+                    LabeledContent("工作目录") {
                         Text(info.path).font(.caption.monospaced()).textSelection(.enabled).lineLimit(2)
                     }
-                    LabeledContent("大小", value: info.exists ? RateFormat.bytes(info.sizeBytes) : "目录不存在")
+                    LabeledContent("数据大小", value: info.exists ? RateFormat.bytes(info.sizeBytes) : "空")
                     HStack {
-                        Button("拷贝路径") {
+                        Button("复制") {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(info.path, forType: .string)
                         }
-                        Button("清空工作目录…", role: .destructive) { confirmingDestroy = true }
+                        Button("清理", role: .destructive) { confirmingDestroy = true }
                             .disabled(!info.exists)
                     }
                     .disabled(helper.busy)
@@ -59,7 +57,7 @@ struct HelperSettingsSection: View {
             }
             Section("崩溃报告") {
                 if helper.crashReports.isEmpty {
-                    Text("没有崩溃报告").foregroundStyle(.secondary)
+                    Text("空").foregroundStyle(.secondary)
                 } else {
                     ForEach(helper.crashReports, id: \.name) { entry in
                         Button {
@@ -71,10 +69,10 @@ struct HelperSettingsSection: View {
                     }
                 }
             }
-            .confirmationDialog("清空工作目录？", isPresented: $confirmingDestroy) {
-                Button("清空", role: .destructive) { Task { await helper.destroyWorkingDirectory() } }
+            .confirmationDialog("确认删除", isPresented: $confirmingDestroy) {
+                Button("清理", role: .destructive) { Task { await helper.destroyWorkingDirectory() } }
             } message: {
-                Text("删除内核的规则集缓存与工作文件；隧道下次连接时会重新下载。正在运行的连接可能受影响。")
+                Text("此操作不可逆")
             }
             .sheet(item: Binding(get: { report.map(ReportBox.init) }, set: { report = $0?.report })) { box in
                 CrashReportView(report: box.report)
@@ -84,10 +82,10 @@ struct HelperSettingsSection: View {
 
     private var stateText: String {
         switch helper.state {
-        case .notInstalled: "未安装"
-        case .requiresApproval: "等待在系统设置中批准"
+        case .notInstalled: "已禁用"
+        case .requiresApproval: "需要辅助服务"
         case .enabled: "已启用"
-        case .unsigned: "未签名构建，不能安装辅助服务"
+        case .unsigned: "仅在 macOS 独立版本中可用"
         case let .failed(message): message
         }
     }
@@ -113,7 +111,7 @@ private struct CrashReportView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack {
-                Button("拷贝") {
+                Button("复制") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(report.text, forType: .string)
                 }

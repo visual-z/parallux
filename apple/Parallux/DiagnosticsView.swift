@@ -3,9 +3,10 @@ import Libbox
 import ParalluxKit
 import SwiftUI
 
-/// Diagnostics page: the per-link bind probe in three arms
-/// (research-sysext-bind-interface, feat-probe-arms). Speed tests and
-/// DNS/MTU checks come with M3.
+/// Diagnostics page. User tools first (design v0.2 单线程下载测速; SFM 网络质量,
+/// STUN 测试); the per-link bind probe (research-sysext-bind-interface,
+/// feat-probe-arms) sits in a collapsed 「接口」 group below. Copy follows
+/// docs/design/copy-and-style.md.
 ///
 /// - App 内：the same LinkProbe in the app process. Run it with the tunnel
 ///   off; that is the control showing each link works at all.
@@ -21,6 +22,7 @@ struct DiagnosticsView: View {
     @State private var speed = SpeedTestRunner()
     @State private var tools = NetworkToolsRunner()
     @State private var toolOutbound = ""
+    @State private var showProbe = false
 
     enum Arm<Value> {
         case idle, running, done(Value, tunnelWasOn: Bool), failed(String)
@@ -32,47 +34,32 @@ struct DiagnosticsView: View {
             toolsSection
             EndpointsSection()
             Section {
-                Text("三组结果一起看：App 内检测在隧道关着时跑，作为对照；扩展内与 sing-box 两组在隧道开着时跑。拷贝全部结果贴回研究卡。")
-                    .font(.callout).foregroundStyle(.secondary)
-                Button("拷贝全部结果", action: copyAll)
-            }
-            Section("1 · App 内（对照）") {
-                HStack {
-                    Text("候选网口：\(LinkProbe.candidateInterfaces().joined(separator: "、"))").font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    Button("App 内检测", action: runLocal).disabled(isRunning(local))
-                }
-                if app.tunnel.isConnected {
-                    Label("隧道开着：App 自己的连接也走隧道，这一组不再是对照。", systemImage: "exclamationmark.triangle")
-                        .font(.caption).foregroundStyle(.orange)
-                }
-                results(local)
-            }
-            Section("2 · 扩展内原始绑定") {
-                HStack {
-                    Spacer()
-                    Button("扩展内检测", action: runTunnel).disabled(!app.tunnel.isConnected || isRunning(tunnel))
-                }
-                results(tunnel)
-            }
-            Section("3 · sing-box direct + bind_interface") {
-                HStack {
-                    Text(usingProbeProfile ? "正在使用探测配置" : "会断开当前连接，换成探测配置重连")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    Button("探测配置连接", action: connectProbeProfile).disabled(app.tunnel.isBusy)
-                    Button("测速") { app.session.urlTest(group: LinkProbeProfile.groupTag) }
-                        .disabled(probeGroup == nil || app.session.testing.contains(LinkProbeProfile.groupTag))
-                }
-                if let probeProfileError { Text(probeProfileError).foregroundStyle(.red).font(.caption) }
-                if let group = probeGroup {
-                    ForEach(group.items) { item in
-                        let grade = DelayGrade(milliseconds: item.delay)
-                        LabeledContent(item.tag) {
-                            Text(grade == .untested ? "未测或失败" : "\(item.delay) ms").foregroundStyle(grade.color).monospacedDigit()
+                DisclosureGroup("接口", isExpanded: $showProbe) {
+                    LabeledContent("本机") {
+                        Button("开始测试", action: runLocal).disabled(isRunning(local))
+                    }
+                    results(local)
+                    LabeledContent("系统扩展") {
+                        Button("开始测试", action: runTunnel).disabled(!app.tunnel.isConnected || isRunning(tunnel))
+                    }
+                    results(tunnel)
+                    LabeledContent("出站") {
+                        HStack {
+                            Button(usingProbeProfile ? "已连接" : "连接", action: connectProbeProfile).disabled(app.tunnel.isBusy)
+                            Button("延迟测试") { app.session.urlTest(group: LinkProbeProfile.groupTag) }
+                                .disabled(probeGroup == nil || app.session.testing.contains(LinkProbeProfile.groupTag))
                         }
                     }
-                    Text("失败原因见「日志」页（探测配置的日志级别为 debug）。").font(.caption).foregroundStyle(.secondary)
+                    if let probeProfileError { Text(probeProfileError).foregroundStyle(.red).font(.caption) }
+                    if let group = probeGroup {
+                        ForEach(group.items) { item in
+                            let grade = DelayGrade(milliseconds: item.delay)
+                            LabeledContent(item.tag) {
+                                Text(grade == .untested ? "超时" : "\(item.delay) ms").foregroundStyle(grade.color).monospacedDigit()
+                            }
+                        }
+                    }
+                    Button("复制", action: copyAll)
                 }
             }
         }
@@ -81,13 +68,11 @@ struct DiagnosticsView: View {
 
     /// 单线程下载测速 (design): each link alone, then all links bonded.
     @ViewBuilder private var speedSection: some View {
-        Section("单线程下载测速") {
-            Text("测速依次只用一条线路，再用叠加，看叠加到底多出多少。每条路径一个连接、\(SpeedTestRunner.secondsPerPath) 秒。需要隧道已连接且启用两条以上线路；叠加一项需要聚合服务器。")
-                .font(.callout).foregroundStyle(.secondary)
+        Section {
             HStack {
-                if let current = speed.current { ProgressView().controlSize(.small); Text("正在测 \(current)…").font(.caption) }
+                if let current = speed.current { ProgressView().controlSize(.small); Text(current).font(.caption) }
                 Spacer()
-                Button("开始测试") { speed.run(paths: speedPaths) }
+                Button(speed.isRunning ? "检查中..." : "开始测试") { speed.run(paths: speedPaths) }
                     .disabled(speed.isRunning || !app.tunnel.isConnected || app.enabledLinks.count < 2)
             }
             ForEach(Array(speed.results.enumerated()), id: \.offset) { _, result in
@@ -99,33 +84,40 @@ struct DiagnosticsView: View {
             if let summary = SpeedTest.summary(speed.results) {
                 Text(summary).font(.callout.weight(.medium))
             }
+        } header: {
+            Text("单线程下载测速")
+        } footer: {
+            // Design v0.2, diagnostics page.
+            Text("测速依次只用一条线路，再用全部线路叠加，看叠加到底多出多少。").font(.caption).foregroundStyle(.secondary)
         }
     }
 
     /// SFM #97/#98, through any outbound of the running core.
     @ViewBuilder private var toolsSection: some View {
-        Section("网络质量与 NAT") {
-            Picker("经由出站", selection: $toolOutbound) {
-                Text("默认路由").tag("")
+        Section("网络质量") {
+            Picker("出站", selection: $toolOutbound) {
+                Text("默认").tag("")
                 ForEach(toolOutbounds, id: \.self) { Text($0).tag($0) }
             }
             HStack {
-                if let running = tools.running { ProgressView().controlSize(.small); Text("正在测 \(running)…").font(.caption) }
+                if tools.running != nil { ProgressView().controlSize(.small); Text("检查中...").font(.caption) }
                 Spacer()
                 Button("网络质量") { tools.runQuality(outbound: toolOutbound) }
-                Button("STUN") { tools.runSTUN(outbound: toolOutbound) }
+                Button("STUN 测试") { tools.runSTUN(outbound: toolOutbound) }
             }
             .disabled(!app.tunnel.isConnected || tools.running != nil)
             if let error = tools.error { Text(error).font(.caption).foregroundStyle(.red) }
             if let q = tools.quality {
-                LabeledContent("下行 / 上行", value: "\(RateFormat.bitsPerSecond(q.download / 8)) / \(RateFormat.bitsPerSecond(q.upload / 8))")
-                LabeledContent("响应（RPM）", value: "↓ \(q.downloadRPM) · ↑ \(q.uploadRPM)")
-                LabeledContent("空闲延迟", value: "\(q.idleLatencyMs) ms")
+                LabeledContent("下载", value: RateFormat.bitsPerSecond(q.download / 8))
+                LabeledContent("上传", value: RateFormat.bitsPerSecond(q.upload / 8))
+                LabeledContent("下载 RPM", value: "\(q.downloadRPM)")
+                LabeledContent("上传 RPM", value: "\(q.uploadRPM)")
+                LabeledContent("延迟", value: "\(q.idleLatencyMs) ms")
             }
             if let s = tools.stun {
                 LabeledContent("外部地址", value: s.externalAddress)
                 LabeledContent("延迟", value: "\(s.latencyMs) ms")
-                LabeledContent("NAT 映射 / 过滤", value: "\(s.mapping) / \(s.filtering)")
+                LabeledContent("NAT 类型检测", value: "\(s.mapping) / \(s.filtering)")
             }
         }
     }
@@ -163,12 +155,11 @@ struct DiagnosticsView: View {
         case let .failed(message):
             Text(message).foregroundStyle(.red).font(.caption)
         case let .done(rows, tunnelWasOn):
-            Text(tunnelWasOn ? "跑的时候隧道开着" : "跑的时候隧道关着").font(.caption).foregroundStyle(.secondary)
             ForEach(rows, id: \.interface) { row in
                 HStack {
                     Text("\(row.interface) #\(row.index)").monospaced()
                     Spacer()
-                    Text(row.connected ? "成功" : "失败").foregroundStyle(row.connected ? .green : .red)
+                    Text(row.connected ? "已连接" : "错误").foregroundStyle(row.connected ? .green : .red)
                     Text(row.errno.map { "errno \($0) (\(row.failedCall ?? ""))" } ?? "").monospaced().foregroundStyle(.secondary)
                     Text("\(row.millis) ms").monospacedDigit().foregroundStyle(.secondary)
                     Text(row.egressIP ?? "—").monospaced().textSelection(.enabled)
@@ -203,13 +194,13 @@ struct DiagnosticsView: View {
     private func connectProbeProfile() {
         probeProfileError = nil
         guard let content = LinkProbeProfile.make(interfaces: LinkProbe.candidateInterfaces()) else {
-            probeProfileError = "没有可探测的网口"
+            probeProfileError = "不可用"
             return
         }
         var error: NSError?
         LibboxCheckConfig(content, &error)
         if let error {
-            probeProfileError = "探测配置未通过 libbox 校验：\(error.localizedDescription)"
+            probeProfileError = "错误：\(error.localizedDescription)"
             return
         }
         Task {

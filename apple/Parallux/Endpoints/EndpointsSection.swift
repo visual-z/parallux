@@ -43,7 +43,7 @@ private struct EndpointRow: View {
             }
             if status.kind == .tailscale {
                 if let url = URL(string: status.authURL), !status.authURL.isEmpty {
-                    Link("在浏览器中登录", destination: url).font(.callout)
+                    Link("打开认证链接", destination: url).font(.callout)
                 }
                 let peers = model.peers[status.tag] ?? []
                 let exits = peers.filter(\.exitNodeOption)
@@ -52,17 +52,17 @@ private struct EndpointRow: View {
                         get: { exits.first(where: \.isExitNode)?.id ?? "" },
                         set: { model.setExitNode(endpoint: status.tag, peer: $0) }
                     )) {
-                        Text("不使用").tag("")
-                        ForEach(exits) { Text("\($0.name)\($0.online ? "" : "（离线）")").tag($0.id) }
+                        Text("空").tag("")
+                        ForEach(exits) { Text($0.name).tag($0.id) }
                     }
                 }
                 if let waiting = model.waitingFiles[status.tag], waiting > 0 {
-                    Text("Taildrop：\(waiting) 个文件等待接收（接收功能尚未提供，可在其他 Tailscale 客户端里接收）").font(.caption).foregroundStyle(.secondary)
+                    LabeledContent("Taildrop", value: "\(waiting)")
                 }
             } else if line.needsUser {
                 HStack {
-                    Button("回应认证…", action: answer)
-                    Button("取消认证") { model.cancel(status) }
+                    Button("提交", action: answer)
+                    Button("取消") { model.cancel(status) }
                 }
                 .controlSize(.small)
             }
@@ -88,12 +88,12 @@ private struct ChallengeSheet: View {
     private var fields: [EndpointsModel.FormField] {
         status.kind == .openConnect
             ? (model.forms[status.tag] ?? [])
-            : [.init(key: "username", label: "用户名", secret: false), .init(key: "password", label: "密码或一次性口令", secret: true)]
+            : [.init(key: "username", label: "用户名", secret: false), .init(key: "password", label: "密码", secret: true)]
     }
 
     var body: some View {
         Form {
-            Text("\(status.tag) 需要认证").font(.headline)
+            Text(status.tag).font(.headline)
             ForEach(fields) { field in
                 let binding = Binding(get: { values[field.key] ?? "" }, set: { values[field.key] = $0 })
                 if field.secret { SecureField(field.label, text: binding) } else { TextField(field.label, text: binding) }

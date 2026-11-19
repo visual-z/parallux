@@ -37,10 +37,10 @@ private struct PanelHome: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             header
             if let server = app.remote.active {
-                Label("正在查看「\(server.name)」", systemImage: "desktopcomputer").font(.caption).foregroundStyle(.secondary)
+                Label("\(server.name) · 远程", systemImage: "desktopcomputer").font(.caption).foregroundStyle(.secondary)
             }
             if app.tunnel.isConnected { miniFlow }
             section("线路") { links }
@@ -50,7 +50,7 @@ private struct PanelHome: View {
             section("出口") { exit }
             footer
         }
-        .padding(14)
+        .padding(.horizontal, 14).padding(.vertical, 12)
     }
 
     private var header: some View {
@@ -60,7 +60,7 @@ private struct PanelHome: View {
                 Text(app.statusLine).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer()
-            Toggle("开启 Parallux", isOn: isOn).toggleStyle(.switch).labelsHidden()
+            Toggle(app.isOn ? "停止" : "启动", isOn: isOn).toggleStyle(.switch).labelsHidden()
                 .disabled(app.tunnel.isBusy || !app.controlsLocalCore)
         }
     }
@@ -81,30 +81,30 @@ private struct PanelHome: View {
             .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
-        .help("打开主窗口概览")
+        .help("打开主窗口")
     }
 
     @ViewBuilder private var links: some View {
         if app.links.links.isEmpty {
-            Text("没有可用的网络").font(.callout).foregroundStyle(.secondary)
+            Text("不可用").font(.callout).foregroundStyle(.secondary)
         }
         ForEach(app.links.links) { link in
             let tag = ProfileComposer.linkTag(link.name)
             let enabled = !app.linkSettings.value.preferences.disabled.contains(link.name)
-            HStack(spacing: 10) {
+            HStack(spacing: 9) {
                 Button {
                     if enabled { app.linkSettings.value.preferences.disabled.insert(link.name) } else { app.linkSettings.value.preferences.disabled.remove(link.name) }
                     Task { await app.applyLinkChanges() }
                 } label: {
-                    Image(systemName: link.kind.symbol).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
-                        .frame(width: 26, height: 26)
+                    Image(systemName: link.kind.symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+                        .frame(width: 24, height: 24)
                         .background(enabled ? LinkColors.color(for: link, in: app.links.links) : Color.secondary.opacity(0.4), in: Circle())
                 }
                 .buttonStyle(.plain)
-                .help(enabled ? "停用\(link.kind.title)" : "启用\(link.kind.title)")
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(link.kind.title).foregroundStyle(enabled ? .primary : .secondary)
-                    Text("\(link.displayName) · \(link.name)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                .help(enabled ? "已启用" : "已禁用")
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(link.kind.title).font(.callout).foregroundStyle(enabled ? .primary : .secondary)
+                    Text("\(link.displayName) · \(link.name)").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer()
                 if let stat = app.linkStats.link(tag), !stat.healthy {
@@ -124,14 +124,11 @@ private struct PanelHome: View {
         }
         .pickerStyle(.segmented).labelsHidden()
         .disabled(app.enabledLinks.count < 2)
-        .help(app.enabledLinks.count < 2 ? "启用两条以上线路后可选" : "")
-        if app.linkSettings.value.mode == .bond, app.effectiveMode == .failover {
-            Text("叠加需要聚合服务器；未设置时按主备运行。").font(.caption2).foregroundStyle(.orange)
-        }
         HStack {
             Text("聚合服务器")
             Spacer()
-            Text(app.bondServerSummary ?? "未设置").foregroundStyle(app.bondServerSummary == nil ? .tertiary : .secondary)
+            Text(app.bondServerSummary ?? "无服务器").foregroundStyle(app.bondServerSummary == nil ? .tertiary : .secondary)
+            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
         }
         .font(.callout)
     }
@@ -175,20 +172,19 @@ private struct PanelHome: View {
             Button("打开主窗口", action: openMainWindow).buttonStyle(.bordered).controlSize(.small)
             Spacer()
             Menu {
-                Button("设置…", action: openSettings)
+                Button("设置", action: openSettings)
                 Divider()
-                Button("退出 Parallux") { NSApp.terminate(nil) }
+                Button("退出") { NSApp.terminate(nil) }
             } label: {
                 Image(systemName: "ellipsis")
             }
             .menuStyle(.button).menuIndicator(.hidden).buttonStyle(.bordered).controlSize(.small).fixedSize()
-            .help("更多")
         }
         .padding(.top, 2)
     }
 
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.caption).foregroundStyle(.secondary)
             content()
         }
@@ -202,7 +198,7 @@ private struct PanelNodesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextField("搜索节点", text: $search).textFieldStyle(.roundedBorder)
+            TextField("搜索", text: $search).textFieldStyle(.roundedBorder)
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(session.groups.filter(\.selectable)) { group in
@@ -210,7 +206,7 @@ private struct PanelNodesView: View {
                             HStack {
                                 Text(group.tag).font(.caption.weight(.semibold))
                                 Spacer()
-                                Button("测速", systemImage: "bolt") { session.urlTest(group: group.tag) }
+                                Button("延迟测试", systemImage: "bolt") { session.urlTest(group: group.tag) }
                                     .labelStyle(.iconOnly).buttonStyle(.borderless)
                                     .disabled(session.testing.contains(group.tag))
                             }
@@ -237,7 +233,7 @@ private struct PanelNodesView: View {
             }
             .frame(maxHeight: 360)
         }
-        .padding(14)
+        .padding(.horizontal, 14).padding(.vertical, 12)
         .navigationTitle("节点")
     }
 }

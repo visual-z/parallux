@@ -87,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showMenu() {
         let menu = NSMenu()
         let session = app.session
-        menu.addItem(ActionItem(app.isOn ? "关闭 Parallux" : "开启 Parallux") { [app] in
+        menu.addItem(ActionItem(app.isOn ? "停止" : "启动") { [app] in
             Task { await app.setOn(!app.isOn) }
         })
         menu.addItem(.separator())
@@ -102,10 +102,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if !canAggregate {
             aggregation.addItem(.separator())
-            aggregation.addItem(disabled("启用两条以上线路后可选"))
+            aggregation.addItem(disabled("不可用"))
         }
         aggregation.addItem(.separator())
-        aggregation.addItem(disabled("聚合服务器：\(app.bondServerSummary ?? "未设置")"))
+        aggregation.addItem(disabled("聚合服务器：\(app.bondServerSummary ?? "无服务器")"))
         menu.addItem(submenu("聚合方式", aggregation))
 
         let links = NSMenu()
@@ -118,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.state = enabled ? .on : .off
             links.addItem(item)
         }
-        if app.links.links.isEmpty { links.addItem(disabled("没有可用的网络")) }
+        if app.links.links.isEmpty { links.addItem(disabled("不可用")) }
         menu.addItem(submenu("线路", links))
 
         let modes = NSMenu()
@@ -127,7 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.state = mode == session.routeMode ? .on : .off
             modes.addItem(item)
         }
-        if session.routeModes.isEmpty { modes.addItem(disabled("连接后可选")) }
+        if session.routeModes.isEmpty { modes.addItem(disabled("未连接")) }
         menu.addItem(submenu("路由模式", modes))
 
         let nodes = NSMenu()
@@ -140,10 +140,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 items.addItem(item)
             }
             items.addItem(.separator())
-            items.addItem(ActionItem("测速") { session.urlTest(group: group.tag) })
+            items.addItem(ActionItem("延迟测试") { session.urlTest(group: group.tag) })
             nodes.addItem(submenu("\(group.tag)：\(group.selected)", items))
         }
-        if nodes.items.isEmpty { nodes.addItem(disabled("连接后可选")) }
+        if nodes.items.isEmpty { nodes.addItem(disabled("未连接")) }
         menu.addItem(submenu("节点", nodes))
 
         let profiles = NSMenu()
@@ -152,15 +152,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.state = profile.id == app.profiles.store.selectedID ? .on : .off
             profiles.addItem(item)
         }
-        if profiles.items.isEmpty { profiles.addItem(disabled("还没有配置")) }
+        if profiles.items.isEmpty { profiles.addItem(disabled("无配置")) }
         menu.addItem(submenu("配置", profiles))
 
         menu.addItem(.separator())
-        if UpdaterModel.shared.isConfigured { menu.addItem(ActionItem("检查更新…") { UpdaterModel.shared.checkForUpdates() }) }
+        if UpdaterModel.shared.isConfigured { menu.addItem(ActionItem("检查更新") { UpdaterModel.shared.checkForUpdates() }) }
         menu.addItem(ActionItem("打开主窗口", key: "o") { [weak self] in self?.showMainWindow() })
-        menu.addItem(ActionItem("设置…", key: ",") { [weak self] in self?.showSettings() })
+        menu.addItem(ActionItem("设置", key: ",") { [weak self] in self?.showSettings() })
         menu.addItem(.separator())
-        menu.addItem(withTitle: "退出 Parallux", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         statusItem?.menu = menu
         statusItem?.button?.performClick(nil)

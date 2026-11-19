@@ -14,50 +14,47 @@ struct AggregationServersView: View {
         Form {
             Section("服务器") {
                 if servers.servers.isEmpty {
-                    Text("还没有聚合服务器。叠加需要一台你自己的 VPS 运行 Parallux 服务端，见下方部署步骤。")
-                        .foregroundStyle(.secondary)
+                    Text("无服务器").foregroundStyle(.secondary)
                 }
                 ForEach(servers.servers) { server in
                     ServerRow(server: server)
                 }
-                Button("粘贴导入链接…") {
+            }
+            Section {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("sudo sh install.sh --binary ./parallux-server")
+                        .font(.callout.monospaced()).textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button("复制") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString("sudo sh install.sh --binary ./parallux-server", forType: .string)
+                    }
+                    .controlSize(.small)
+                }
+                Button("粘贴") {
                     link = NSPasteboard.general.string(forType: .string) ?? ""
                     adding = true
                 }
-            }
-            Section("叠加如何工作") {
-                Text("叠加把一条连接拆到两条线路上，在聚合服务器上重组，再转发到订阅节点或直接出网。叠加速度上限取决于服务器带宽；两条线路背后若是同一条宽带，叠加不会更快。")
-                    .font(.callout).foregroundStyle(.secondary)
-                Text("叠加只聚合 TCP，协议本身不加密：只有发往节点的流量走叠加，并且仍由节点的代理协议加密；配置里走「直连」的流量（局域网、国内）不经聚合服务器，按主备在线路之间切换。")
-                    .font(.callout).foregroundStyle(.secondary)
-                if app.enabledLinks.count > 2 {
-                    Text("当前启用了 \(app.enabledLinks.count) 条线路，叠加使用优先级最高的两条（\(app.enabledLinks.prefix(2).map(\.kind.title).joined(separator: "、"))）。")
-                        .font(.callout).foregroundStyle(.orange)
-                }
-            }
-            Section("添加服务器") {
-                Text("在 VPS 上以 root 运行（需要 Linux 与 systemd）：").font(.callout)
-                Text("sudo sh install.sh --binary ./parallux-server --name 东京VPS")
-                    .font(.callout.monospaced()).textSelection(.enabled)
-                    .padding(8).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
-                Text("`install.sh` 与 `parallux-server` 在仓库的 `server/` 目录（`scripts/build-server.sh` 交叉编译）；发布后会有下载地址。脚本结束时打印一条 `parallux://aggregation-server?…` 链接，复制后在这里粘贴。记得在云厂商防火墙放行脚本提示的端口。")
-                    .font(.caption).foregroundStyle(.secondary)
+            } header: {
+                Text("添加服务器")
+            } footer: {
+                Text("在 VPS 上运行，结束后会显示一个导入链接").font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .navigationSubtitle("\(servers.servers.count) 台")
+        .navigationSubtitle(servers.servers.isEmpty ? "" : "\(servers.servers.count)")
         .toolbar {
-            ToolbarItem { Button("测延迟", systemImage: "arrow.clockwise") { servers.pingAll() }.help("重新测量延迟") }
+            ToolbarItem { Button("新建服务器", systemImage: "plus") { link = NSPasteboard.general.string(forType: .string) ?? ""; adding = true }.help("新建服务器") }
+            ToolbarItem { Button("延迟测试", systemImage: "bolt") { servers.pingAll() }.help("延迟测试") }
         }
         .onAppear { servers.pingAll() }
-        .alert("粘贴导入链接", isPresented: $adding) {
+        .alert("新建服务器", isPresented: $adding) {
             TextField("parallux://aggregation-server?…", text: $link)
-            Button("添加") { add() }
+            Button("导入") { add() }
             Button("取消", role: .cancel) {}
         }
-        .alert("无法添加", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-            Button("好") { error = nil }
+        .alert("错误", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button("完成") { error = nil }
         } message: { Text(error ?? "") }
     }
 
@@ -77,13 +74,11 @@ struct AggregationServersView: View {
 
     static func describe(_ failure: AggregationServerLink.Failure) -> String {
         switch failure {
-        case .notAParalluxLink: "这不是 Parallux 链接。"
-        case .notAnAggregationServerLink: "这是 Parallux 链接，但不是聚合服务器链接。"
-        case let .unsupportedVersion(v): "链接版本 \(v ?? "缺失") 不受支持，请更新 Parallux 或服务端。"
-        case let .missing(field): "链接缺少 \(field)。"
-        case let .duplicate(field): "链接里 \(field) 出现了多次。"
-        case let .badPort(port): "端口 \(port) 无效。"
-        case .pskTooShort: "密钥太短，请使用 install.sh 生成的链接。"
+        // Copy from SFM only (docs/design/copy-and-style.md): it has no
+        // per-reason import errors, so every malformed link reads the same.
+        case .unsupportedVersion: "服务器不支持"
+        case let .missing(field) where field == "host" || field == "port": "缺少 URL"
+        default: "不可用"
         }
     }
 }
@@ -94,22 +89,22 @@ private struct ServerRow: View {
 
     var body: some View {
         let inUse = app.linkSettings.value.bondServerID == server.id
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: "server.rack").foregroundStyle(inUse ? Color.accentColor : .secondary).frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
-                Text(server.name).font(.headline)
+                Text(server.name).font(.body.weight(.medium))
                 Text("\(server.host):\(server.port)").font(.caption.monospaced()).foregroundStyle(.secondary)
             }
             Spacer()
             if let ms = app.servers.latency[server.id] {
                 Text("\(ms) ms").font(.caption).monospacedDigit().foregroundStyle(DelayGrade(milliseconds: Int32(ms)).color)
             } else if app.servers.unreachable.contains(server.id) {
-                Text("不可达").font(.caption).foregroundStyle(.red)
+                Text("不可用").font(.caption).foregroundStyle(.red)
             }
             if inUse {
-                Text("叠加使用中").font(.caption).padding(.horizontal, 6).padding(.vertical, 2).background(.tint.opacity(0.2), in: Capsule())
+                Text("在线").font(.caption).foregroundStyle(.green)
             } else {
-                Button("用于叠加") {
+                Button("启用") {
                     app.linkSettings.value.bondServerID = server.id
                     Task { await app.applyLinkChanges() }
                 }

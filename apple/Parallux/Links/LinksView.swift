@@ -17,11 +17,20 @@ struct LinksView: View {
 
     var body: some View {
         let links = ordered
-        List {
-            if links.isEmpty {
-                ContentUnavailableView("没有可用的线路", systemImage: "network.slash",
-                                       description: Text("连上 Wi‑Fi、插上网线或用 USB 连接开着个人热点的 iPhone。"))
+        if links.isEmpty {
+            ContentUnavailableView {
+                Label("不可用", systemImage: "network.slash")
+            } actions: {
+                Button("刷新") { app.links.refresh() }
             }
+            .navigationSubtitle("")
+        } else {
+            content(links)
+        }
+    }
+
+    private func content(_ links: [LinkInterface]) -> some View {
+        List {
             Section {
                 ForEach(links) { link in
                     LinkRow(link: link)
@@ -33,30 +42,25 @@ struct LinksView: View {
                     Task { await app.applyLinkChanges() }
                 }
             } footer: {
-                Text("拖动排序决定主备模式下的优先级。「仅备用」的线路只在其他线路都不可用时使用（比如只让 iPhone 兜底）。改动立即生效：内核重载配置，正在进行的连接会断开重连（隧道本身不断）。")
-                    .font(.caption).foregroundStyle(.secondary)
+                // Design v0.2, links page.
+                Text("拖动排序决定主备模式下的优先级。").font(.caption).foregroundStyle(.secondary)
             }
             if let warning = SharedEgress.warning(links: app.enabledLinks, egress: app.links.egress) {
                 Section {
                     Label(warning, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
                 }
             }
-            if app.enabledLinks.count < 2 {
-                Section {
-                    Text("启用两条以上线路后，分流、主备、叠加才会生效；只有一条线路时按普通代理运行。")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-            }
         }
-        .navigationSubtitle("\(links.count) 个网口 · \(app.enabledLinks.count) 条启用")
+        .listStyle(.inset(alternatesRowBackgrounds: false))
+        .navigationSubtitle("\(links.count) 个网口")
         .toolbar {
             ToolbarItem {
-                Button("刷新", systemImage: "arrow.clockwise") { app.links.refresh() }.help("重新检测网口")
+                Button("刷新", systemImage: "arrow.clockwise") { app.links.refresh() }.help("刷新")
             }
             ToolbarItem {
-                Button("检测出口", systemImage: "stethoscope") { detectEgress() }
+                Button("外部地址", systemImage: "globe") { detectEgress() }
                     .disabled(!app.tunnel.isConnected)
-                    .help("在网络扩展里逐线路探测公网出口，用于「同一出口」提示")
+                    .help("外部地址")
             }
         }
     }
@@ -82,27 +86,28 @@ private struct LinkRow: View {
         let rate = app.linkStats.rates[tag]
         let stat = app.linkStats.link(tag)
         let prefs = app.linkSettings.value.preferences
-        HStack(spacing: 12) {
-            Image(systemName: link.kind.symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
-                .frame(width: 30, height: 30).background(LinkColors.color(for: link, in: app.links.links), in: Circle())
-            VStack(alignment: .leading, spacing: 2) {
-                Text(link.kind.title).font(.headline)
-                Text("\(link.displayName) · \(link.name)").font(.caption).foregroundStyle(.secondary)
-            }
-            .frame(minWidth: 160, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("IP \(link.address ?? "—")").font(.caption.monospaced())
-                if let ip = app.links.egress[link.name] {
-                    Text("出口 \(ip)").font(.caption.monospaced()).foregroundStyle(.secondary)
+        HStack(spacing: 10) {
+            Image(systemName: link.kind.symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+                .frame(width: 26, height: 26).background(LinkColors.color(for: link, in: app.links.links), in: Circle())
+            // Wide windows put the addresses in their own column; narrow ones
+            // stack them under the name instead of overflowing.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    names.frame(minWidth: 150, alignment: .leading)
+                    addresses
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    names
+                    addresses
                 }
             }
-            Spacer()
+            Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
                 if let stat {
-                    Text(stat.healthy ? "可用" : "不可用").font(.caption).foregroundStyle(stat.healthy ? .green : .red)
-                    Text("\(RateFormat.bitsPerSecond(rate?.total ?? 0)) · \(stat.active) 条连接").font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                    Text(stat.healthy ? "已连接" : "不可用").font(.caption).foregroundStyle(stat.healthy ? .green : .red)
+                    Text("\(RateFormat.bitsPerSecond(rate?.total ?? 0)) · 连接 \(stat.active)").font(.caption).monospacedDigit().foregroundStyle(.secondary)
                 } else {
-                    Text(app.tunnel.isConnected ? "未参与聚合" : "未连接").font(.caption).foregroundStyle(.secondary)
+                    Text(app.tunnel.isConnected ? "不可用" : "未连接").font(.caption).foregroundStyle(.secondary)
                 }
             }
             Toggle("仅备用", isOn: Binding(
@@ -123,7 +128,23 @@ private struct LinkRow: View {
             ))
             .toggleStyle(.switch).labelsHidden()
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
+    }
+
+    private var names: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(link.kind.title).font(.body.weight(.medium))
+            Text("\(link.displayName) · \(link.name)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        }
+    }
+
+    private var addresses: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("IP 地址 \(link.address ?? "—")").font(.caption.monospaced()).lineLimit(1)
+            if let ip = app.links.egress[link.name] {
+                Text("外部地址 \(ip)").font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
     }
 }
 
