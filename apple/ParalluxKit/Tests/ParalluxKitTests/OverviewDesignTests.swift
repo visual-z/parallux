@@ -506,4 +506,74 @@ import Testing
             }
         }
     }
+
+    // docs/tasks/perf-flow-animation.md, D5
+
+    @Test func flowMeshCoversEachBandExactly() throws {
+        func area(_ t: [SIMD2<Float>]) -> Double {
+            stride(from: 0, to: t.count - 2, by: 3).reduce(0) { sum, i in
+                let a = t[i], b = t[i + 1], c = t[i + 2]
+                return sum + abs(Double((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y))) / 2
+            }
+        }
+        let frame = FlowMesh.Frame(leftX: 150, centreX: 380, rightX: 600, bar: 8, inset: 34, region: 262)
+        var rng = SplitMix64(seed: 0x3E5)
+        let rateChoices: [Double] = [0, 1, 95, 420, 1e9]
+
+        // No traffic: no bands; every link still has its node and a dashed line to the bar.
+        let idle = FlowMesh.make(SankeyLayout.make(left: [0, 0], right: [], height: 262, gap: 34, capacity: 1000), frame: frame)
+        #expect(!idle.contains { if case .band = $0.paint { true } else { false } })
+        #expect(idle.filter { $0.paint == .idle }.count == 1)
+        #expect(Set(idle.compactMap { if case let .link(i) = $0.paint { i } else { nil } }) == [0, 1])
+        #expect(idle.contains { $0.paint == .centre })
+        #expect(FlowMesh.make(SankeyLayout(), frame: frame).allSatisfy { $0.paint == .centre }, "nothing known yet: only the bar's stub")
+
+        for round in 0..<200 {
+            let left = (0..<(1 + rng.int(5))).map { _ in rateChoices[rng.int(rateChoices.count)] }
+            let right = (0..<(1 + rng.int(5))).map { _ in rateChoices[rng.int(rateChoices.count)] }
+            let layout = SankeyLayout.make(left: left, right: right, height: frame.region, gap: 34, capacity: [1, 1000, 4e9][rng.int(3)])
+            let pieces = FlowMesh.make(layout, frame: frame)
+            let context = Comment(rawValue: "round \(round): left \(left) right \(right)")
+            var vertices = 0
+            for piece in pieces {
+                #expect(piece.triangles.count % 3 == 0, context)
+                vertices += piece.triangles.count
+                for v in piece.triangles {
+                    #expect(v.x.isFinite && v.y.isFinite, context)
+                    #expect(Double(v.x) >= frame.leftX - 0.01 && Double(v.x) <= frame.rightX + frame.bar + 0.01, context)
+                    #expect(Double(v.y) >= frame.inset - 3.01 && Double(v.y) <= frame.inset + frame.region + 3.01, context)
+                }
+            }
+            #expect(vertices <= FlowMesh.maxVertices, context)
+
+            // One piece per drawn band, and it covers exactly the band: a leg's
+            // edges are the same curve one thickness apart, so its area is
+            // thickness times width whatever the curve.
+            let drawn = layout.bands.filter { $0.left.length >= 0.3 }
+            let bandPieces = pieces.filter { if case .band = $0.paint { true } else { false } }
+            try #require(bandPieces.count == drawn.count, context)
+            for (band, piece) in zip(drawn, bandPieces) {
+                #expect(piece.paint == .band(link: band.from), context)
+                let width = (frame.centreX - frame.leftX - frame.bar) + (frame.rightX - frame.centreX - frame.bar)
+                let expected = band.left.length * width
+                #expect(abs(area(piece.triangles) - expected) <= 1e-3 * max(1, expected), "area \(area(piece.triangles)) for \(expected) (\(context))")
+                let low = frame.inset + min(band.left.lower, band.center.lower, band.right.lower)
+                let high = frame.inset + max(band.left.upper, band.center.upper, band.right.upper)
+                for v in piece.triangles { #expect(Double(v.y) >= low - 0.01 && Double(v.y) <= high + 0.01, context) }
+            }
+
+            // Nodes: one per link and exit and the centre bar, each at least 6 pt tall and as wide as the bar.
+            for (index, span) in layout.left.enumerated() {
+                let node = try #require(pieces.first { $0.paint == .link(index) }, context)
+                let ys = node.triangles.map { Double($0.y) }
+                #expect((ys.max() ?? 0) - (ys.min() ?? 0) >= max(6, span.length) - 0.01, context)
+                let xs = node.triangles.map { Double($0.x) }
+                #expect(abs((xs.max() ?? 0) - (xs.min() ?? 0) - frame.bar) <= 0.01, context)
+            }
+            #expect(pieces.filter { if case .exit = $0.paint { true } else { false } }.count == layout.right.count, context)
+            #expect(pieces.filter { $0.paint == .centre }.count == 1, context)
+            // A link that carries nothing gets dashes; one that carries something does not.
+            #expect(pieces.contains { $0.paint == .idle } == layout.left.contains { $0.length < 0.3 }, context)
+        }
+    }
 }

@@ -66,14 +66,6 @@ struct FlowDiagram: View {
     /// 120 fps 4.8% of a core; docs/tasks/perf-flow-animation.md).
     static let frameInterval = 1.0 / 60
 
-    /// Seconds between frames of the band layer while it eases. Why 1/30:
-    /// bands and labels move a few points over the whole ease, under a point a
-    /// frame, so 30 fps is as smooth to the eye as 60, and this layer is the
-    /// expensive one to redraw (large translucent fills and text; measured:
-    /// easing at 60 fps added 3.4–4.2 points of a core whenever the rates
-    /// changed, docs/tasks/perf-flow-animation.md).
-    static let easeFrameInterval = 1.0 / 30
-
     /// PLAN §5: the animation costs nothing while nobody can see it.
     private var animates: Bool { !reduceMotion && windowIsVisible }
 
@@ -81,36 +73,26 @@ struct FlowDiagram: View {
         GeometryReader { proxy in
             let metrics = Metrics(size: proxy.size, isCompact: isCompact)
             let target = FlowMotion.Target(links: links.map(\.rate), exits: exits.map(\.rate), capacity: capacity)
-            let easing = animates && isEasing
             ZStack(alignment: .topLeading) {
-                // Two layers (perf-flow-animation). Bands and nodes change once
-                // a second and ease for a moment, so their Canvas only runs a
-                // timeline while easing and is otherwise drawn once. The dots
-                // are the only thing redrawn on every frame; the GPU draws
-                // them, and their layer does not exist without traffic: an
-                // idle network, a hidden window and reduced motion cost nothing.
-                TimelineView(.animation(minimumInterval: Self.easeFrameInterval, paused: !easing)) { timeline in
-                    Canvas { context, _ in
-                        let layout = motion.layout(at: timeline.date, target: target, metrics: metrics, easing: easing)
-                        drawBandsAndNodes(layout, metrics: metrics, in: &context)
-                        drawLabels(layout, metrics: metrics, in: &context)
-                    } symbols: {
-                        // One ForEach with one id space: Canvas traps on symbols
-                        // whose view identities collide, and two ForEach over
-                        // indices would both start at 0.
-                        ForEach(labels(metrics), id: \.symbol) { item in
-                            item.view.tag(item.symbol)
-                        }
-                    }
-                }
-                if animates, target.hasTraffic, FlowParticlePipeline.shared != nil {
-                    FlowParticleLayer(motion: motion, input: .init(target: target, metrics: metrics, colors: links.map(\.color), easing: easing,
-                                                                   dotSide: isCompact ? 1.6 : 2, additive: scheme == .dark))
+                // Everything that moves is one GPU layer (FlowLayer); SwiftUI
+                // adds the labels on top, placed for the new sample at once.
+                if FlowPipeline.shared != nil {
+                    FlowLayer(motion: motion, input: .init(
+                        target: target, metrics: metrics, linkColors: links.map(\.color), dimmedLinks: links.map(\.isDimmed),
+                        exitColors: exits.map(\.color), easing: animates && isEasing, isVisible: windowIsVisible, reduceMotion: reduceMotion,
+                        dotSide: isCompact ? 1.6 : 2, isDark: scheme == .dark))
                         // An NSView would otherwise take the clicks meant for the panel's strip button.
                         .allowsHitTesting(false)
+                } else {
+                    // No GPU to draw with: a still picture of the current sample.
+                    Canvas { context, _ in
+                        let layout = SankeyLayout.make(left: target.links, right: target.exits, height: Double(metrics.region), gap: metrics.gap, capacity: capacity)
+                        drawBandsAndNodes(layout, metrics: metrics, in: &context)
+                    }
                 }
+                if !isCompact { labels(metrics, target: target) }
             }
-            // A new sample starts an ease; when it is over the band layer stops.
+            // A new sample starts an ease; when it is over the layer stops redrawing the bands.
             .task(id: target) {
                 isEasing = true
                 do {
@@ -124,45 +106,26 @@ struct FlowDiagram: View {
         .accessibilityLabel(accessibilityText)
     }
 
-    private enum Symbol: Hashable { case link(Int), exit(Int), centre }
-
-    /// The text next to the nodes and above the centre bar, as Canvas symbols:
-    /// real views, so long names truncate inside their column, but placed by
-    /// the band layer, so they move with the eased nodes and are only redrawn
-    /// when the bands are. As SwiftUI views with an implicit position
-    /// animation they cost about six points of a core every time the rates
-    /// changed (measured, perf-flow-animation).
-    private func labels(_ m: Metrics) -> [(symbol: Symbol, view: AnyView)] {
-        guard !isCompact else { return [] }
-        var items: [(symbol: Symbol, view: AnyView)] = links.indices.map { index in
-            (.link(index), AnyView(label(links[index], alignment: .trailing).frame(width: m.leftLabelWidth, alignment: .trailing)))
-        }
-        items += exits.indices.map { index in
-            (.exit(index), AnyView(label(exits[index], alignment: .leading).frame(width: m.rightLabelWidth, alignment: .leading)))
-        }
-        if let centerLabel {
-            items.append((.centre, AnyView(Text(centerLabel).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                    .monospacedDigit().lineLimit(1).fixedSize())))
-        }
-        return items
-    }
-
-    /// Design: labels sit 12 pt clear of the bars, centred on their node.
-    private func drawLabels(_ layout: SankeyLayout, metrics m: Metrics, in context: inout GraphicsContext) {
-        guard !isCompact else { return }
+    /// The text next to the nodes and above the centre bar, at the places the
+    /// new sample gives them. They do not ride the 0.4 s ease: moving text
+    /// every frame was the costliest part of the old Canvas, and the nodes'
+    /// centres shift by a few points at most from one second to the next.
+    private func labels(_ m: Metrics, target: FlowMotion.Target) -> some View {
+        let layout = SankeyLayout.make(left: target.links, right: target.exits, height: Double(m.region), gap: m.gap, capacity: target.capacity)
         let mid = { (span: Span) in m.inset + CGFloat((span.lower + span.upper) / 2) }
-        for (index, span) in layout.left.enumerated() {
-            if let symbol = context.resolveSymbol(id: Symbol.link(index)) {
-                context.draw(symbol, at: CGPoint(x: m.leftX - 12, y: mid(span)), anchor: .trailing)
+        return ZStack(alignment: .topLeading) {
+            ForEach(Array(zip(links, layout.left)), id: \.0.id) { node, span in
+                label(node, alignment: .trailing).frame(width: m.leftLabelWidth, alignment: .trailing)
+                    .position(x: m.leftX - 12 - m.leftLabelWidth / 2, y: mid(span))
             }
-        }
-        for (index, span) in layout.right.enumerated() {
-            if let symbol = context.resolveSymbol(id: Symbol.exit(index)) {
-                context.draw(symbol, at: CGPoint(x: m.rightX + m.bar + 12, y: mid(span)), anchor: .leading)
+            ForEach(Array(zip(exits, layout.right)), id: \.0.id) { node, span in
+                label(node, alignment: .leading).frame(width: m.rightLabelWidth, alignment: .leading)
+                    .position(x: m.rightX + m.bar + 12 + m.rightLabelWidth / 2, y: mid(span))
             }
-        }
-        if let symbol = context.resolveSymbol(id: Symbol.centre) {
-            context.draw(symbol, at: CGPoint(x: m.centreX + m.bar / 2, y: max(8, m.centreTop(layout.total) - 12)), anchor: .center)
+            if let centerLabel {
+                Text(centerLabel).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary).monospacedDigit().lineLimit(1).fixedSize()
+                    .position(x: m.centreX + m.bar / 2, y: max(8, m.centreTop(layout.total) - 12))
+            }
         }
     }
 
@@ -173,8 +136,8 @@ struct FlowDiagram: View {
         }
     }
 
-    /// The layer that only changes with the rates: bands, idle links' dashed
-    /// lines, and the three columns of nodes.
+    /// The picture without a GPU: bands, idle links' dashed lines and the
+    /// three columns of nodes, as FlowLayer draws them from FlowMesh.
     private func drawBandsAndNodes(_ layout: SankeyLayout, metrics m: Metrics, in context: inout GraphicsContext) {
         let y = { (value: Double) in m.inset + CGFloat(value) }
         let middle = m.inset + m.region / 2
@@ -261,6 +224,11 @@ struct FlowDiagram: View {
             rightLabelWidth = max(0, size.width - rightX - bar - 12)
         }
 
+        /// The same columns for FlowMesh.
+        var meshFrame: FlowMesh.Frame {
+            FlowMesh.Frame(leftX: Double(leftX), centreX: Double(centreX), rightX: Double(rightX), bar: Double(bar), inset: Double(inset), region: Double(region))
+        }
+
         /// The centre bar's extent; with no traffic it is a stub in the middle.
         func centreSpan(_ total: Span) -> Span {
             total.length > 0 ? total : Span(Double(region) / 2, Double(region) / 2)
@@ -275,10 +243,9 @@ struct FlowDiagram: View {
 }
 
 /// What moves between frames: the rates as currently drawn (FlowEase) and the
-/// particles (FlowParticles). A class held in @State: the canvases advance it
-/// while drawing, which must not invalidate the view. Main thread only: the
-/// band Canvas renders synchronously and the particle layer's display link
-/// fires on the main run loop.
+/// particles (FlowParticles). A class held in @State: FlowLayer advances it
+/// while drawing, which must not invalidate the view. Main thread only (the
+/// layer's display link fires on the main run loop).
 final class FlowMotion {
     /// What the diagram should show once it has settled.
     struct Target: Equatable {
