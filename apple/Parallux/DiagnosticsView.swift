@@ -73,7 +73,7 @@ struct DiagnosticsView: View {
                 if let current = speed.current { ProgressView().controlSize(.small); Text(current).font(.caption) }
                 Spacer()
                 Button(speed.isRunning ? "检查中..." : "开始测试") { speed.run(paths: speedPaths) }
-                    .disabled(speed.isRunning || !app.tunnel.isConnected || app.enabledLinks.count < 2)
+                    .disabled(speed.isRunning || !app.tunnel.isConnected || app.activeLinks.count < 2)
             }
             ForEach(Array(speed.results.enumerated()), id: \.offset) { _, result in
                 LabeledContent(result.label) {
@@ -123,14 +123,14 @@ struct DiagnosticsView: View {
     }
 
     private var toolOutbounds: [String] {
-        var tags = app.enabledLinks.map { ProfileComposer.linkTag($0.name) }
+        var tags = app.activeLinks.map { ProfileComposer.linkTag($0.name) }
         if app.effectiveMode == .bond { tags.append(AggregationServer.bondTag) }
         for group in app.session.groups { tags.append(group.tag) }
         return tags
     }
 
     private var speedPaths: [(label: String, outbound: String, isBond: Bool)] {
-        var paths = app.enabledLinks.map { (label: "\($0.kind.title)（\($0.name)）", outbound: ProfileComposer.linkTag($0.name), isBond: false) }
+        var paths = app.activeLinks.map { (label: "\($0.kind.title)（\($0.name)）", outbound: ProfileComposer.linkTag($0.name), isBond: false) }
         if app.effectiveMode == .bond {
             paths.append((label: "叠加", outbound: AggregationServer.bondTag, isBond: true))
         }

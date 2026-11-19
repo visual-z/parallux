@@ -34,6 +34,8 @@ final class AppModel {
     private(set) var lastError: String?
     /// The profile content the running tunnel was started with, before composing.
     @ObservationIgnored private var runningContent: String?
+    /// The running content is diagnostics' probe profile (never made direct).
+    @ObservationIgnored private var runningProbe = false
 
     var session: CoreSession { tunnel.session }
 
@@ -98,22 +100,43 @@ final class AppModel {
         }
     }
 
-    /// Enabled links in priority order.
+    /// Enabled links in priority order (the links page's choice).
     var enabledLinks: [LinkInterface] { linkSettings.value.preferences.enabled(links.links) }
 
-    /// The aggregation mode actually in effect: needs two links, and 叠加 needs a server.
+    /// 聚合 / 代理 as the switches show them (feat-split-switches).
+    var switches: ConnectionSwitches { ConnectionSwitches.shown(linkSettings.value.switches, running: isOn) }
+
+    /// The links traffic actually uses: the enabled ones with 聚合 on; with it
+    /// off, the one macOS routes through by default.
+    var activeLinks: [LinkInterface] {
+        if linkSettings.value.switches.aggregation { return enabledLinks }
+        let name = defaultLink.link?.name
+        return links.links.first { $0.name == name }.map { [$0] } ?? Array(enabledLinks.prefix(1))
+    }
+
+    /// The note under the aggregation picker, when the chosen mode is not the one running.
+    var aggregationNotice: String? { AggregationNotice.text(chosen: linkSettings.value.mode, effective: effectiveMode) }
+
+    /// The aggregation mode actually in effect: needs 聚合 on and two links, and 叠加 needs a server.
     var effectiveMode: AggregationMode? {
-        guard enabledLinks.count >= 2 else { return nil }
+        guard linkSettings.value.switches.aggregation, enabledLinks.count >= 2 else { return nil }
         let mode = linkSettings.value.mode
         if mode == .bond, bondProvider(linkSettings.value) == nil { return .failover }
         return mode
     }
 
-    /// Route overrides first (they name the profile's own outbounds), then links.
-    func compose(_ content: String) throws -> String {
+    /// 代理 off swaps the profile for its direct form; route overrides next
+    /// (they name the profile's own outbounds), then 聚合 adds the links.
+    /// `probe`: diagnostics' own profile, run as given whatever the switches say.
+    func compose(_ content: String, probe: Bool = false) throws -> String {
         let settings = linkSettings.value
-        let rerouted = RouteOverrides.apply(routeOverrides.overrides(for: profiles.store.selectedID), to: content).config
-        return try ProfileComposer.compose(rerouted, links: enabledLinks, backup: settings.preferences.backup,
+        let proxy = settings.switches.proxy || probe
+        let base = proxy ? content : DirectProfile.make(from: content)
+        let rerouted = proxy
+            ? RouteOverrides.apply(routeOverrides.overrides(for: profiles.store.selectedID), to: base).config
+            : base
+        return try ProfileComposer.compose(rerouted, links: settings.switches.aggregation ? enabledLinks : [],
+                                           backup: settings.preferences.backup,
                                            mode: settings.mode, bond: bondProvider(settings))
     }
 
@@ -121,7 +144,7 @@ final class AppModel {
     func applyLinkChanges() async {
         guard tunnel.isConnected, let runningContent else { return }
         do {
-            try await tunnel.reload(settings.value.startOptions(content: try compose(runningContent)))
+            try await tunnel.reload(settings.value.startOptions(content: try compose(runningContent, probe: runningProbe)))
             lastError = nil
         } catch {
             lastError = "线路设置未生效：\(error.localizedDescription)"
@@ -160,8 +183,27 @@ final class AppModel {
         }
     }
 
+    /// The power button, the menu's 启动 / 停止 and URLs: start with the last
+    /// combination of switches (decision 21).
     func setOn(_ on: Bool) async {
-        if on { await connect() } else { await tunnel.disconnect() }
+        if on {
+            linkSettings.value.switches = ConnectionSwitches.forStart(linkSettings.value.switches)
+            await connect()
+        } else {
+            await tunnel.disconnect()
+        }
+    }
+
+    /// One of the two switches (panel, overview, menu).
+    func setSwitch(_ which: ConnectionSwitches.Which, on: Bool) async {
+        let (next, action) = ConnectionSwitches.toggle(linkSettings.value.switches, running: isOn, which, on: on)
+        linkSettings.value.switches = next
+        switch action {
+        case .connect: await connect()
+        case .reload: await applyLinkChanges()
+        case .disconnect: await tunnel.disconnect()
+        case .nothing: break
+        }
     }
 
     /// Uses the selected profile; before any profile exists, the bundled sample.
@@ -195,11 +237,12 @@ final class AppModel {
             }
         }
         let composed: String
-        do { composed = try compose(content) } catch {
+        do { composed = try compose(content, probe: overrideContent != nil) } catch {
             lastError = "配置不是有效的 JSON，无法加入线路"
             return
         }
         runningContent = content
+        runningProbe = overrideContent != nil
         let settings = settings.value
         await tunnel.connect(settings.startOptions(content: composed),
                              onDemand: (settings.onDemandEnabled, settings.onDemandRules))
@@ -235,8 +278,8 @@ final class AppModel {
         case .disconnecting: .disconnecting
         default: .disconnected
         }
-        let linkText: String? = enabledLinks.count >= 2
-            ? "\(effectiveMode?.title ?? "") · \(enabledLinks.count) 条线路"
+        let linkText: String? = effectiveMode != nil
+            ? "\(effectiveMode?.title ?? "") · \(activeLinks.count) 条线路"
             : defaultLink.link?.kind
         return StatusLine.text(setup: setup, tunnel: state, actionError: lastError ?? tunnel.startError,
                                coreError: session.lastError, linkKind: linkText)

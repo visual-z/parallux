@@ -24,6 +24,7 @@ struct OverviewView: View {
             } actions: {
                 Button("连接") { Task { await app.setOn(true) } }.buttonStyle(.borderedProminent)
                     .disabled(!app.controlsLocalCore || app.tunnel.isBusy)
+                SwitchesForm(app: app).frame(width: 320)
             }
             .navigationSubtitle(app.statusLine)
         } else {
@@ -156,6 +157,13 @@ private struct RouteCard: View {
                 }
                 .pickerStyle(.segmented).labelsHidden()
             }
+            // Decision 21: the two switches sit with the other mode controls.
+            Toggle("聚合", isOn: Binding(get: { app.switches.aggregation }, set: { on in Task { await app.setSwitch(.aggregation, on: on) } }))
+                .toggleStyle(.switch).font(.callout)
+                .disabled(app.tunnel.isBusy || !app.controlsLocalCore || app.enabledLinks.count < 2)
+            Toggle("代理", isOn: Binding(get: { app.switches.proxy }, set: { on in Task { await app.setSwitch(.proxy, on: on) } }))
+                .toggleStyle(.switch).font(.callout)
+                .disabled(app.tunnel.isBusy || !app.controlsLocalCore)
             Toggle("系统代理", isOn: $settings.value.tunnel.systemProxyEnabled)
                 .toggleStyle(.switch).font(.callout)
                 .help("修改操作系统的代理设置")
@@ -178,5 +186,30 @@ private struct ProfileCard: View {
                 LabeledContent("内存", value: RateFormat.bytes(status.memory)).font(.caption)
             }
         }
+    }
+}
+
+/// 聚合 and 代理 on the overview (decision 21): off, both show off and
+/// turning one on connects with just that one.
+struct SwitchesForm: View {
+    let app: AppModel
+
+    private func binding(_ which: ConnectionSwitches.Which) -> Binding<Bool> {
+        Binding(get: { which == .aggregation ? app.switches.aggregation : app.switches.proxy },
+                set: { on in Task { await app.setSwitch(which, on: on) } })
+    }
+
+    var body: some View {
+        let busy = app.tunnel.isBusy || !app.controlsLocalCore
+        Form {
+            Section {
+                Toggle("聚合", isOn: binding(.aggregation)).disabled(busy || app.enabledLinks.count < 2)
+                Toggle("代理", isOn: binding(.proxy)).disabled(busy)
+            }
+        }
+        .formStyle(.grouped)
+        .scrollDisabled(true)
+        .scrollContentBackground(.hidden)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }

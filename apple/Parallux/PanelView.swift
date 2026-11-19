@@ -32,8 +32,9 @@ private struct PanelHome: View {
     let openMainWindow: () -> Void
     let openSettings: () -> Void
 
-    private var isOn: Binding<Bool> {
-        Binding(get: { app.isOn }, set: { on in Task { await app.setOn(on) } })
+    private func switchBinding(_ which: ConnectionSwitches.Which) -> Binding<Bool> {
+        Binding(get: { which == .aggregation ? app.switches.aggregation : app.switches.proxy },
+                set: { on in Task { await app.setSwitch(which, on: on) } })
     }
 
     var body: some View {
@@ -46,6 +47,7 @@ private struct PanelHome: View {
             // A grouped Form, so rows get the system's label/control layout
             // (control trailing, subtitle under the title) instead of hand-made HStacks.
             Form {
+                Section { switches }
                 Section("线路") { links }
                 Section("聚合方式") { aggregation }
                 Section("出口") { exit }
@@ -67,9 +69,30 @@ private struct PanelHome: View {
                 Text(app.statusLine).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer()
-            Toggle(app.isOn ? "停止" : "启动", isOn: isOn).toggleStyle(.switch).labelsHidden().controlSize(.regular)
-                .disabled(app.tunnel.isBusy || !app.controlsLocalCore)
         }
+    }
+
+    /// 聚合 and 代理, the two switches of decision 21; both off disconnects.
+    @ViewBuilder private var switches: some View {
+        let busy = app.tunnel.isBusy || !app.controlsLocalCore
+        Toggle(isOn: switchBinding(.aggregation)) {
+            Label {
+                Text("聚合")
+                Text(app.enabledLinks.count < 2 ? "不可用" : "\(app.linkSettings.value.mode.title) · \(app.enabledLinks.count) 条线路")
+            } icon: {
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+            }
+        }
+        .disabled(busy || app.enabledLinks.count < 2)
+        Toggle(isOn: switchBinding(.proxy)) {
+            Label {
+                Text("代理")
+                Text(app.profiles.store.selected?.name ?? "无配置")
+            } icon: {
+                Image(systemName: "globe")
+            }
+        }
+        .disabled(busy)
     }
 
     private var miniFlow: some View {
@@ -130,6 +153,9 @@ private struct PanelHome: View {
         .pickerStyle(.segmented).labelsHidden()
         .frame(maxWidth: .infinity)
         .disabled(app.enabledLinks.count < 2)
+        if let notice = app.aggregationNotice {
+            Text(notice).font(.caption).foregroundStyle(.secondary)
+        }
         // A Menu, not a decorative chevron: pick the server or open the page.
         LabeledContent("聚合服务器") {
             Menu(app.bondServerSummary ?? "无服务器") {

@@ -119,13 +119,13 @@ private struct Steps: View {
     }
 
     private func lineText(_ outbound: String) -> String {
-        guard app.enabledLinks.count >= 2, let mode = app.effectiveMode else { return app.links.links.first.map { $0.kind.title } ?? "—" }
+        guard app.activeLinks.count >= 2, let mode = app.effectiveMode else { return app.links.links.first.map { $0.kind.title } ?? "—" }
         let bonded = mode == .bond && !outbound.hasPrefix("direct")
-        return "\(bonded ? "叠加" : outbound.hasPrefix("direct") && mode == .bond ? "主备" : mode.title) · \(app.enabledLinks.prefix(bonded ? 2 : 9).map(\.kind.title).joined(separator: " + "))"
+        return "\(bonded ? "叠加" : outbound.hasPrefix("direct") && mode == .bond ? "主备" : mode.title) · \(app.activeLinks.prefix(bonded ? 2 : 9).map(\.kind.title).joined(separator: " + "))"
     }
 
     private func lineWhy(_ outbound: String) -> String {
-        guard app.enabledLinks.count >= 2 else { return "" }
+        guard app.activeLinks.count >= 2 else { return "" }
         if app.effectiveMode == .bond && !outbound.hasPrefix("direct") { return app.bondServerSummary ?? "" }
         return ""
     }

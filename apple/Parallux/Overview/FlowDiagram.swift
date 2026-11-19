@@ -102,7 +102,7 @@ struct FlowDiagram: View {
 enum FlowModel {
     static func columns(_ app: AppModel) -> (links: [FlowNode], exits: [FlowNode]) {
         guard let status = app.session.status else { return ([], []) }
-        let links = app.enabledLinks.isEmpty ? app.links.links.prefix(1).map { $0 } : app.enabledLinks
+        let links = app.activeLinks.isEmpty ? app.links.links.prefix(1).map { $0 } : app.activeLinks
         let columns = LinkFlow.columns(links: links, linkRates: app.linkStats.rates,
                                        totalRate: status.uplink + status.downlink,
                                        exits: FlowSummary.exits(app.session.connections))

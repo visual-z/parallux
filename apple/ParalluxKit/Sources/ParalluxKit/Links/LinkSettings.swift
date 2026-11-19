@@ -6,6 +6,8 @@ public struct LinkSettings: Codable, Equatable, Sendable {
     public var mode: AggregationMode = .bond
     /// The aggregation server used for 叠加 (AggregationServer.id), if any.
     public var bondServerID: UUID?
+    /// 聚合 / 代理 as last run (feat-split-switches); missing in old data = both on.
+    public var switches: ConnectionSwitches = .both
 
     public init() {}
 
@@ -27,6 +29,7 @@ public struct LinkSettings: Codable, Equatable, Sendable {
         preferences = try container.decodeIfPresent(LinkPreferences.self, forKey: .preferences) ?? LinkPreferences()
         mode = try container.decodeIfPresent(AggregationMode.self, forKey: .mode) ?? .bond
         bondServerID = try container.decodeIfPresent(UUID.self, forKey: .bondServerID)
+        switches = try container.decodeIfPresent(ConnectionSwitches.self, forKey: .switches) ?? .both
     }
 }
 
