@@ -12,9 +12,6 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private let popover = NSPopover()
-    #if DEBUG
-    private var panelPreview: NSWindow?
-    #endif
     /// SwiftUI's scene actions, handed over by MainWindow when it appears.
     /// They stay valid after that window closes, so AppKit code (the status
     /// item and its menu) can reopen the main and settings windows.
@@ -43,16 +40,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = item
         renderStatusItem()
         #if DEBUG
-        // Screenshots of the panel without the status item, which macOS may
-        // hide behind the notch (`-ParalluxPanelPreview YES`); never in a release.
+        // Screenshots of the real popover without the status item, which macOS
+        // may hide behind the notch (`-ParalluxPanelPreview YES`): anchor it to
+        // the main window instead. Never compiled into a release.
         if UserDefaults.standard.bool(forKey: "ParalluxPanelPreview") {
-            let window = NSWindow(contentViewController: NSHostingController(rootView: PanelView(
-                app: app, openMainWindow: {}, openSettings: {}
-            )))
-            window.title = "Panel preview"
-            window.setFrameTopLeftPoint(NSPoint(x: 80, y: (NSScreen.main?.frame.maxY ?? 900) - 80))
-            window.makeKeyAndOrderFront(nil)
-            panelPreview = window
+            // Retries once a second, at most 30 times, until the main window is up.
+            Task { [popover] in
+                for _ in 0..<30 {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard NSApp.modalWindow == nil,
+                          let view = NSApp.windows.first(where: { $0.isVisible && $0.frame.width > 400 })?.contentView else { continue }
+                    popover.behavior = .applicationDefined
+                    popover.show(relativeTo: NSRect(x: view.bounds.midX, y: view.bounds.maxY - 40, width: 1, height: 1), of: view, preferredEdge: .minY)
+                    return
+                }
+            }
         }
         #endif
     }

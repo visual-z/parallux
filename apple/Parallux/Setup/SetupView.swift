@@ -9,6 +9,9 @@ struct SetupSection: View {
     @Environment(AppModel.self) private var app
     @State private var helper = HelperServiceManager()
     @State private var notificationsAllowed: Bool?
+    /// What macOS reports for the installed extension; a leftover VPN
+    /// configuration says nothing about whether the extension is enabled.
+    @State private var installedExtension: String?
 
     private var inputs: SetupStep.Inputs {
         let helperState: SetupStep.Inputs.HelperState = switch helper.state {
@@ -16,7 +19,7 @@ struct SetupSection: View {
         case .requiresApproval: .requiresApproval
         default: .notRegistered
         }
-        let extensionState: ActivationMachine.State = app.tunnel.hasConfiguration ? .activated : app.tunnel.extensionState
+        let extensionState: ActivationMachine.State = installedExtension != nil ? .activated : app.tunnel.extensionState
         return SetupStep.Inputs(extensionState: extensionState, vpnConfigured: app.tunnel.hasConfiguration, helper: helperState,
                                 notificationsAllowed: notificationsAllowed, signed: AppGroup.identifier() != nil)
     }
@@ -28,12 +31,14 @@ struct SetupSection: View {
             }
         }
         .task { await refresh() }
+        .onChange(of: app.tunnel.extensionState) { Task { await refresh() } }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await refresh() }
         }
     }
 
     private func refresh() async {
+        installedExtension = await app.tunnel.installedExtensionVersion()
         await helper.refresh()
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         notificationsAllowed = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional

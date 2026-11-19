@@ -8,7 +8,7 @@ struct OverviewView: View {
 
     var body: some View {
         let session = app.session
-        if !session.isRunning && !app.tunnel.hasConfiguration {
+        if !session.isRunning && (!app.tunnel.hasConfiguration || app.tunnel.phase == .awaitingApproval) {
             // First run: the checklist replaces the empty state until the
             // extension and VPN configuration exist.
             Form { SetupSection() }

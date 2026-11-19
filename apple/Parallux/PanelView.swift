@@ -164,7 +164,7 @@ private struct PanelHome: View {
                     let delay = group.items.first { $0.tag == group.selected }?.delay ?? 0
                     Text(delay > 0 ? "\(group.selected) · \(delay) ms" : group.selected)
                 } else {
-                    Text("暂无代理")
+                    Text("暂无可用代理组")
                 }
             }
             .disabled(session.groups.isEmpty)
@@ -197,44 +197,57 @@ private struct PanelHome: View {
 private struct PanelNodesView: View {
     let session: CoreSession
     @State private var search = ""
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        List {
-            ForEach(session.groups.filter(\.selectable)) { group in
-                Section {
-                    ForEach(group.items.filter { search.isEmpty || $0.tag.localizedCaseInsensitiveContains(search) }) { item in
-                        Button {
-                            session.select(group: group.tag, outbound: item.tag)
-                        } label: {
-                            LabeledContent {
-                                let grade = LatencyGrade(milliseconds: item.delay)
-                                Text(verbatim: item.delay > 0 ? "\(item.delay) ms" : "—").monospacedDigit().foregroundStyle(grade.color)
+        VStack(alignment: .leading, spacing: 8) {
+            // A popover has no toolbar, so back, title and search live in the content.
+            HStack(spacing: 6) {
+                Button("返回", systemImage: "chevron.backward") { dismiss() }
+                    .labelStyle(.iconOnly).buttonStyle(.borderless)
+                    .keyboardShortcut(.cancelAction)
+                Text("节点").font(.headline)
+            }
+            TextField("搜索", text: $search, prompt: Text("搜索"))
+                .textFieldStyle(.roundedBorder)
+            List {
+                ForEach(session.groups.filter(\.selectable)) { group in
+                    Section {
+                        ForEach(group.items.filter { search.isEmpty || $0.tag.localizedCaseInsensitiveContains(search) }) { item in
+                            Button {
+                                session.select(group: group.tag, outbound: item.tag)
                             } label: {
-                                // Checkmark only on the pick, blank space elsewhere (menu convention).
-                                Label {
-                                    Text(item.tag)
-                                } icon: {
-                                    Image(systemName: "checkmark").opacity(item.tag == group.selected ? 1 : 0)
+                                LabeledContent {
+                                    let grade = LatencyGrade(milliseconds: item.delay)
+                                    Text(verbatim: item.delay > 0 ? "\(item.delay) ms" : "—").monospacedDigit().foregroundStyle(grade.color)
+                                } label: {
+                                    // Checkmark only on the pick, blank space elsewhere (menu convention).
+                                    Label {
+                                        Text(item.tag)
+                                    } icon: {
+                                        Image(systemName: "checkmark").opacity(item.tag == group.selected ? 1 : 0)
+                                    }
+                                    .foregroundStyle(item.tag == group.selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                                 }
-                                .foregroundStyle(item.tag == group.selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
-                    }
-                } header: {
-                    HStack {
-                        Text(group.tag)
-                        Spacer()
-                        Button("延迟测试", systemImage: "bolt") { session.urlTest(group: group.tag) }
-                            .labelStyle(.iconOnly).buttonStyle(.borderless)
-                            .disabled(session.testing.contains(group.tag))
+                    } header: {
+                        HStack {
+                            Text(group.tag)
+                            Spacer()
+                            Button("延迟测试", systemImage: "bolt") { session.urlTest(group: group.tag) }
+                                .labelStyle(.iconOnly).buttonStyle(.borderless)
+                                .disabled(session.testing.contains(group.tag))
+                        }
                     }
                 }
             }
+            .listStyle(.inset)
+            .frame(height: 360)
         }
-        .listStyle(.inset)
-        .searchable(text: $search, placement: .toolbar, prompt: "搜索")
-        .frame(height: 380)
-        .navigationTitle("节点")
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .navigationBarBackButtonHidden(true)
     }
 }
