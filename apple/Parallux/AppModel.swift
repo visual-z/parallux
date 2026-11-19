@@ -269,35 +269,37 @@ final class AppModel {
         }
     }
 
+    private var displayedTunnel: StatusLine.Tunnel {
+        switch tunnel.vpnStatus {
+        case .connected: .connected
+        case .connecting, .reasserting: .connecting
+        case .disconnecting: .disconnecting
+        default: .disconnected
+        }
+    }
+
     var statusLine: String {
         let setup: StatusLine.Setup = switch tunnel.phase {
         case .awaitingApproval: .awaitingApproval
         case let .failed(message): .failed(message)
         default: .ready
         }
-        let state: StatusLine.Tunnel = switch tunnel.vpnStatus {
-        case .connected: .connected
-        case .connecting, .reasserting: .connecting
-        case .disconnecting: .disconnecting
-        default: .disconnected
-        }
         let linkText: String? = effectiveMode != nil
             ? "\(effectiveMode?.title ?? "") · \(activeLinks.count) 条线路"
             : defaultLink.link?.kind
-        return StatusLine.text(setup: setup, tunnel: state, actionError: lastError ?? tunnel.startError,
+        return StatusLine.text(setup: setup, tunnel: displayedTunnel, actionError: lastError ?? tunnel.startError,
                                coreError: session.lastError, linkKind: linkText)
     }
 
     var menuBarState: MenuBarIcon.State {
-        guard tunnel.isConnected else { return .disconnected }
-        if case .failed = tunnel.phase { return .degraded }
-        if session.lastError != nil { return .degraded }
-        // A link the aggregate considers down is the design's 「线路异常」.
-        if linkStats.states.values.contains(where: { !$0.healthy }) { return .degraded }
-        switch effectiveMode {
-        case .bond: return .bond
-        case .failover: return .failover
-        default: return .balance
+        let state = displayedTunnel
+        let setupFailed = if case .failed = tunnel.phase { true } else { false }
+        // The menu item belongs to this Mac even when the inspector follows a remote core.
+        let localError = state == .connected ? controlsLocalCore && session.lastError != nil : tunnel.startError != nil
+        let unhealthyLink = state == .connected && switches.aggregation && enabledLinks.contains {
+            linkStats.link(ProfileComposer.linkTag($0.name))?.healthy == false
         }
+        return .resolve(tunnel: state, switches: switches, effectiveMode: state == .connected ? effectiveMode : nil,
+                        serviceError: setupFailed || lastError != nil || localError, linkError: unhealthyLink)
     }
 }
