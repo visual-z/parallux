@@ -26,7 +26,8 @@ enum FlowModel {
         let columns = LinkFlow.columns(links: carrying, linkRates: app.linkStats.rates,
                                        totalRate: status.uplink + status.downlink,
                                        exits: FlowSummary.exits(app.session.connections))
-        let standings = LinkStanding.all(enabled: carrying.map(\.name), backup: app.linkSettings.value.preferences.backup, mode: mode)
+        let unhealthy = Set(carrying.map(\.name).filter { app.linkStats.link(ProfileComposer.linkTag($0))?.healthy == false })
+        let standings = LinkStanding.all(enabled: carrying.map(\.name), backup: app.linkSettings.value.preferences.backup, unhealthy: unhealthy, mode: mode)
         var links: [FlowNode] = zip(carrying, columns.left).map { link, node in
             FlowNode(id: link.name, name: node.title,
                      detail: OverviewCopy.linkDetail(enabled: true, standby: standings[link.name] == .standby, rate: node.rate),

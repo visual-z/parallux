@@ -99,7 +99,8 @@ private struct PanelHome: View {
             let ib = prefs.order.firstIndex(of: b.name) ?? Int.max
             return ia != ib ? ia < ib : a.name < b.name
         }
-        let standings = LinkStanding.all(enabled: app.activeLinks.map(\.name), backup: prefs.backup, mode: app.effectiveMode)
+        let unhealthy = Set(app.activeLinks.map(\.name).filter { app.linkStats.link(ProfileComposer.linkTag($0))?.healthy == false })
+        let standings = LinkStanding.all(enabled: app.activeLinks.map(\.name), backup: prefs.backup, unhealthy: unhealthy, mode: app.effectiveMode)
         if ordered.isEmpty {
             Text("不可用").foregroundStyle(.secondary).frame(minHeight: 30)
         }

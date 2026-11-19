@@ -68,6 +68,8 @@ struct RouteModeCard: View {
     /// The clash modes the running configuration offers (often just one).
     let modes: [String]
     @Binding var mode: String
+    /// 「命中最多：…」 (OverviewCopy.topRule); nil before any rule was hit.
+    var topRule: String?
     /// Decision 21: 聚合 and 代理 sit with the other mode controls.
     @Binding var aggregation: Bool
     var aggregationDisabled = false
@@ -85,6 +87,10 @@ struct RouteModeCard: View {
                 ))
                 .accessibilityLabel(DashboardCard.routeMode.title)
                 .padding(.bottom, 4)
+            }
+            if let topRule {
+                Text(topRule).font(.subheadline).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    .padding(.bottom, 4)
             }
             row("聚合", isOn: $aggregation).disabled(aggregationDisabled)
             row("代理", isOn: $proxy).disabled(proxyDisabled)

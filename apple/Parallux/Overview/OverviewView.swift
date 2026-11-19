@@ -50,7 +50,7 @@ struct OverviewView: View {
                 }
                 .padding(.horizontal, 16).padding(.bottom, 16)
             }
-            .navigationSubtitle(OverviewCopy.subtitle(links: app.activeLinks.count, mode: app.effectiveMode, server: bondServerName))
+            .navigationSubtitle(OverviewCopy.subtitle(links: app.activeLinks.count, mode: app.effectiveMode, server: bondServerName, problem: problem))
             .toolbar {
                 // Design v0.2: the aggregation mode is switched from the
                 // overview's toolbar, next to the power button.
@@ -66,6 +66,12 @@ struct OverviewView: View {
             .onAppear { session.retainConnections() }
             .onDisappear { session.releaseConnections() }
         }
+    }
+
+    /// What the status line would say instead of 「已连接 · …」: a failed
+    /// action, or a core the app cannot read.
+    private var problem: String? {
+        app.lastError != nil || app.tunnel.startError != nil || app.session.lastError != nil ? app.statusLine : nil
     }
 
     /// The server 叠加 goes through, when 叠加 is what is in effect.
@@ -87,6 +93,7 @@ struct OverviewView: View {
         let session = app.session
         return RouteModeCard(modes: session.routeModes,
                              mode: Binding(get: { session.routeMode ?? "" }, set: { session.setRouteMode($0) }),
+                             topRule: OverviewCopy.topRule(session.connections),
                              aggregation: Binding(get: { app.switches.aggregation }, set: { on in Task { await app.setSwitch(.aggregation, on: on) } }),
                              aggregationDisabled: app.tunnel.isBusy || !app.controlsLocalCore || app.enabledLinks.count < 2,
                              proxy: Binding(get: { app.switches.proxy }, set: { on in Task { await app.setSwitch(.proxy, on: on) } }),
