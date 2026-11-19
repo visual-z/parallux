@@ -100,10 +100,15 @@ final class CoreSession {
     """
     #endif
 
+    private static let baseCommands: [Int32] = [LibboxCommandStatus, LibboxCommandGroup, LibboxCommandClashMode]
+    /// Reconnect attempts per stream since it last connected.
+    private var retries: [StreamKind: Int] = [:]
+
     func start() {
         guard base == nil else { return }
+        retries = [:]
         startedAt = Date()
-        base = Stream(session: self, commands: [LibboxCommandStatus, LibboxCommandGroup, LibboxCommandClashMode])
+        base = Stream(session: self, commands: Self.baseCommands, kind: .base)
         loadDeprecatedNotes()
         if connectionConsumers > 0 { openConnections() }
         if logConsumers > 0 { openLogs() }
@@ -126,6 +131,7 @@ final class CoreSession {
         connections = []
         connectionStore = nil
         rateHistory.removeAll()
+        retries = [:]
     }
 
     // MARK: on-demand streams (reference counted by the pages showing them)
@@ -158,11 +164,12 @@ final class CoreSession {
 
     private func openConnections() {
         connectionStore = LibboxNewConnections()
-        connectionStream = Stream(session: self, commands: [LibboxCommandConnections])
+        // A fresh store: after a reload the core numbers connections anew.
+        connectionStream = Stream(session: self, commands: [LibboxCommandConnections], kind: .connections)
     }
 
     private func openLogs() {
-        logStream = Stream(session: self, commands: [LibboxCommandLog])
+        logStream = Stream(session: self, commands: [LibboxCommandLog], kind: .logs)
     }
 
     // MARK: actions (one-shot standalone clients, dialed over XPC)
@@ -266,10 +273,42 @@ final class CoreSession {
 
     fileprivate func receiveClearLogs() { logs.removeAll() }
 
-    fileprivate func receive(connected _: Void) { lastError = nil }
+    fileprivate func receive(connected kind: StreamKind) {
+        retries[kind] = 0
+        if retries.values.allSatisfy({ $0 == 0 }) { lastError = nil }
+    }
 
-    fileprivate func receive(disconnected message: String?) {
-        if let message, !message.isEmpty { lastError = message }
+    /// Reconnects a stream the core closed, a bounded number of times
+    /// (StreamRetry); only then is the error shown.
+    fileprivate func receive(lost kind: StreamKind, message: String?) {
+        guard isRunning else { return }
+        let attempt = retries[kind] ?? 0
+        guard let delay = StreamRetry.delay(after: attempt) else {
+            if let message, !message.isEmpty { lastError = message }
+            return
+        }
+        retries[kind] = attempt + 1
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, self.isRunning else { return }
+            self.reopen(kind)
+        }
+    }
+
+    private func reopen(_ kind: StreamKind) {
+        switch kind {
+        case .base:
+            base?.close()
+            base = Stream(session: self, commands: Self.baseCommands, kind: .base)
+        case .connections:
+            guard connectionConsumers > 0 else { return }
+            connectionStream?.close()
+            openConnections()
+        case .logs:
+            guard logConsumers > 0 else { return }
+            logStream?.close()
+            openLogs()
+        }
     }
 
     static func row(_ connection: LibboxConnection) -> ConnectionRow {
@@ -300,12 +339,14 @@ final class CoreSession {
     /// gomobile objects are thread-safe Go handles but not marked Sendable.
     struct StreamValue<T>: @unchecked Sendable { let value: T }
 
+    /// One command-client subscription. A core reload closes it from the
+    /// other side; `onLost` lets the session reconnect (fix-stream-reconnect).
     private final class Stream {
         private let client: LibboxCommandClient?
         private let handler: Handler
 
-        init(session: CoreSession, commands: [Int32]) {
-            handler = Handler(session: session)
+        init(session: CoreSession, commands: [Int32], kind: StreamKind) {
+            handler = Handler(session: session, kind: kind)
             let options = LibboxCommandClientOptions()
             for command in commands { options.addCommand(command) }
             // Why 1 s: the design refreshes rates at most once per second.
@@ -325,14 +366,23 @@ final class CoreSession {
         }
 
         func close() {
+            handler.closed = true
             let box = StreamValue(value: client)
             Task.detached { try? box.value?.disconnect() }
         }
     }
 
+    enum StreamKind { case base, connections, logs }
+
     private final class Handler: NSObject, LibboxCommandClientHandlerProtocol, @unchecked Sendable {
         weak var session: CoreSession?
-        init(session: CoreSession) { self.session = session }
+        let kind: StreamKind
+        /// Set when the app closed the stream itself; its disconnect is not a loss.
+        nonisolated(unsafe) var closed = false
+        init(session: CoreSession, kind: StreamKind) {
+            self.session = session
+            self.kind = kind
+        }
 
         private func main(_ body: @escaping @MainActor (CoreSession) -> Void) {
             Task { @MainActor [weak session] in
@@ -340,8 +390,16 @@ final class CoreSession {
             }
         }
 
-        func connected() { main { $0.receive(connected: ()) } }
-        func disconnected(_ message: String?) { main { $0.receive(disconnected: message) } }
+        func connected() {
+            let kind = kind
+            main { $0.receive(connected: kind) }
+        }
+
+        func disconnected(_ message: String?) {
+            guard !closed else { return }
+            let kind = kind
+            main { $0.receive(lost: kind, message: message) }
+        }
 
         func writeStatus(_ message: LibboxStatusMessage?) {
             guard let message else { return }
