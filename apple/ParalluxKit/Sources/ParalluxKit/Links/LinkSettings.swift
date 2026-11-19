@@ -54,9 +54,11 @@ public enum LinkFlow {
                                exits: [FlowSummary.Exit]) -> (left: [Node], right: [Node]) {
         let left: [Node] = links.map { link in
             let measured = linkRates[ProfileComposer.linkTag(link.name)]
-            // One link and no aggregate counters (fewer than two links leave
-            // the profile alone): everything goes through it.
-            let rate = measured?.total ?? (links.count == 1 ? totalRate : 0)
+            // No counters at all (one link, or the first second before the
+            // aggregate has dialed): split the core's total evenly so the
+            // diagram still shows traffic. Any counter present wins.
+            let anyMeasured = links.contains { linkRates[ProfileComposer.linkTag($0.name)] != nil }
+            let rate = measured?.total ?? (anyMeasured ? 0 : totalRate / Int64(max(links.count, 1)))
             return Node(id: link.name, title: link.kind.title, detail: "\(link.displayName) · \(link.name)", rate: max(0, rate))
         }
         let right = exits.map { Node(id: $0.name, title: $0.name, detail: "", rate: $0.rate) }

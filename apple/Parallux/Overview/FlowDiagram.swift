@@ -27,7 +27,7 @@ struct FlowDiagram: View {
             let centerX = (leftX + rightX) / 2
             let bar: CGFloat = showsLabels ? 6 : 4
             let layout = SankeyLayout.make(left: links.map(\.rate), right: exits.map(\.rate),
-                                           height: Double(size.height), gap: showsLabels ? 18 : 6)
+                                           height: Double(size.height), gap: showsLabels ? 34 : 6)  // ≥ a two-line label, so labels never overlap
             ZStack(alignment: .topLeading) {
                 Canvas { context, _ in
                     for band in layout.bands {
@@ -60,12 +60,12 @@ struct FlowDiagram: View {
                     ForEach(Array(links.enumerated()), id: \.offset) { index, node in
                         label(node, alignment: .trailing)
                             .frame(width: labelWidth, alignment: .trailing)
-                            .position(x: labelWidth / 2, y: mid(layout.left, index, size.height))
+                            .position(x: labelWidth / 2 - 8, y: mid(layout.left, index, size.height))
                     }
                     ForEach(Array(exits.enumerated()), id: \.offset) { index, node in
                         label(node, alignment: .leading)
                             .frame(width: labelWidth, alignment: .leading)
-                            .position(x: size.width - labelWidth / 2, y: mid(layout.right, index, size.height))
+                            .position(x: size.width - labelWidth / 2 + 8, y: mid(layout.right, index, size.height))
                     }
                     if let centerLabel, layout.total.length > 0 {
                         Text(centerLabel).font(.caption).foregroundStyle(.secondary)
