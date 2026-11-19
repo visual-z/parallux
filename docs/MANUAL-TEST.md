@@ -10,7 +10,7 @@ log stream --predicate 'subsystem BEGINSWITH "io.github.visual-z.parallux"'
 
 ## 0. 准备
 
-1. Xcode › 设置 › Accounts 登录团队 ABCDE12345 的 Apple 账号（命令行签名靠它注册小组件的 App ID）。
+1. Xcode › 设置 › Accounts 保持登录团队 ABCDE12345 的 Apple 账号（2026-11-19 已登录，签名构建已装好）。
 2. 断开 SFM 与 Surge 的 VPN（同一时间只能有一个 VPN 连接）。
 3. `scripts/build-signed.sh --install`，打开 /Applications/Parallux.app。
 
