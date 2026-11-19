@@ -177,6 +177,8 @@ targets:
       properties:
         CFBundleDisplayName: Parallux Tunnel
         CFBundlePackageType: SYSX
+        # Required for network system extensions; SFM leaves it empty.
+        NSSystemExtensionUsageDescription: ""
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ParalluxAppGroup: $(PARALLUX_APP_GROUP)
