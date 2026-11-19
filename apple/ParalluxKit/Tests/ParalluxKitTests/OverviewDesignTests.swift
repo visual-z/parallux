@@ -295,4 +295,97 @@ import Testing
         let row = ConnectionRow(id: "1", process: "", destination: "", rule: "rule_set=geosite-cn", outbound: "")
         #expect(OverviewCopy.topRule([row]) == "命中最多：geosite-cn（100%）")
     }
+
+    // docs/tasks/perf-flow-animation.md
+
+    @Test func flowEaseIsFrameRateIndependentAndLandsExactly() throws {
+        var rng = SplitMix64(seed: 0xEA5E)
+        let choices: [Double] = [0, 1, 95, 420, 1e9]
+        func rates(_ count: Int) -> [Double] { (0..<count).map { _ in choices[rng.int(choices.count)] } }
+        #expect(FlowEase.duration > 0)
+
+        // Empty: nothing to ease, nothing to wait for.
+        var empty = FlowEase()
+        empty.retarget([])
+        #expect(empty.value.isEmpty)
+        #expect(empty.isSettled)
+
+        // The first target is taken as it is: there is nothing to come from.
+        var first = FlowEase()
+        first.retarget([7])
+        #expect(first.value == [7])
+        #expect(first.isSettled)
+
+        for round in 0..<300 {
+            let count = 1 + rng.int(5)
+            let from = rates(count), to = rates(count)
+            var ease = FlowEase()
+            ease.retarget(from)
+            ease.retarget(to)
+            #expect(ease.value == from, "retargeting must not jump (round \(round))")
+            #expect(ease.isSettled == (from == to))
+
+            // The same time in one step, or in many uneven ones, ends in the same place.
+            let time = FlowEase.duration * Double(rng.int(101)) / 100
+            var once = ease
+            once.advance(by: time)
+            var many = ease
+            var left = time
+            while left > 0 {
+                let step = min(left, FlowEase.duration * Double(1 + rng.int(20)) / 200)
+                many.advance(by: step)
+                left -= step
+                // Never outside the two ends, at any point on the way. (#require:
+                // a wrong count must fail here, not trap on the subscripts below.)
+                try #require(many.value.count == count, "the eased value lost or gained nodes (round \(round))")
+                for (index, value) in many.value.enumerated() {
+                    #expect(value >= min(from[index], to[index]) && value <= max(from[index], to[index]), "overshoot (round \(round))")
+                }
+            }
+            for (a, b) in zip(once.value, many.value) {
+                #expect(abs(a - b) <= 1e-9 * max(1, abs(a)), "\(a) in one step, \(b) in many (round \(round))")
+            }
+
+            // A changed target carries on from where the value is.
+            let mid = once.value
+            let next = rates(count)
+            once.retarget(next)
+            #expect(once.value == mid, "a new target must continue from the current value (round \(round))")
+
+            // The full duration lands on the target exactly; more time changes nothing.
+            once.advance(by: FlowEase.duration)
+            #expect(once.value == next)
+            #expect(once.isSettled)
+            once.advance(by: 1000)
+            #expect(once.value == next)
+
+            // Odd steps are harmless, and finish() lands at once.
+            var odd = ease
+            for step in [0, -1, Double.nan, -Double.infinity] { odd.advance(by: step) }
+            #expect(odd.value == from, "a zero, negative or NaN step must not move anything")
+            odd.advance(by: .infinity)
+            #expect(odd.value == to)
+            var cut = ease
+            cut.finish()
+            #expect(cut.value == to)
+            #expect(cut.isSettled)
+
+            // A different number of nodes cannot be eased: take the new values.
+            var resized = ease
+            resized.advance(by: time)
+            let other = rates(count + 1)
+            resized.retarget(other)
+            #expect(resized.value == other)
+            #expect(resized.isSettled)
+        }
+
+        // Halfway through, an ease-out has covered more than half the distance and less than all of it.
+        var half = FlowEase()
+        half.retarget([0])
+        half.retarget([100])
+        half.advance(by: FlowEase.duration / 2)
+        let halfway = try #require(half.value.first)
+        #expect(halfway > 50 && halfway < 100)
+        #expect(!half.isSettled)
+    }
 }
