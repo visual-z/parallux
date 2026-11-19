@@ -14,6 +14,8 @@ log stream --predicate 'subsystem BEGINSWITH "io.github.visual-z.parallux"'
 2. 断开 SFM 与 Surge 的 VPN（同一时间只能有一个 VPN 连接）。
 3. `scripts/build-signed.sh --install`，打开 /Applications/Parallux.app。
 
+**在 1.4 通过之前只启用一条线路**（线路页停用其他线路，或拔掉第二条）。两条以上线路时配置会经过组合器、依赖尚未证实的网口绑定；只开一条可以把 M1 的问题和绑定问题分开。
+
 ## 1. 地基与 M1 通路
 
 | # | 操作 | 期望 | 卡 |
@@ -21,7 +23,7 @@ log stream --predicate 'subsystem BEGINSWITH "io.github.visual-z.parallux"'
 | 1.1 | 左键菜单栏图标；右键菜单 | 面板按设计稿；右键菜单有设置…，能把设置窗口打开到最前 | `chore-m0-skeleton` D6、`refactor-m1-foundations` D8 |
 | 1.2 | 面板开关 → 系统设置 › 通用 › 登录项与扩展 › 网络扩展里批准 → 再开 | 2 秒内「已连接」与实时速率；关掉回到「未连接」 | `feat-sysext-xpc` D8 |
 | 1.3 | 再 `build-signed.sh --install`，设置 › 内核 › 重新安装 | `systemextensionsctl list` 版本号变了，仍能连接 | `fix-signed-run-hazards` D5 |
-| 1.4 | 插第二条线路（USB 网卡或 iPhone USB 共享）。隧道关着：诊断 › App 内检测；连上：扩展内检测；「探测配置连接」→「测速」；「拷贝全部结果」贴回 | 三组都有结果。**这一步决定分流与主备是否成立** | `research-sysext-bind-interface` D3、`feat-probe-arms` D3 |
+| 1.4 | 插第二条线路（这一步才启用它）（USB 网卡或 iPhone USB 共享）。隧道关着：诊断 › App 内检测；连上：扩展内检测；「探测配置连接」→「测速」；「拷贝全部结果」贴回 | 三组都有结果。**这一步决定分流与主备是否成立** | `research-sysext-bind-interface` D3、`feat-probe-arms` D3 |
 
 ## 2. M2 基线
 
