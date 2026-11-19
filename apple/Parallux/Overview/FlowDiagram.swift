@@ -55,6 +55,24 @@ struct FlowDiagram: View {
     @Environment(\.colorScheme) private var scheme
     @State private var motion = FlowMotion()
     @State private var windowIsVisible = true
+    /// True for FlowEase.duration after the rates changed: the only time the
+    /// bands and nodes need redrawing.
+    @State private var isEasing = false
+
+    /// Seconds between frames. Why 1/60: the dots travel 80–140 pt a second,
+    /// so 30 fps moved them 3–5 pt a frame (more than their own size) and
+    /// looked stepped; above 60 the eye gains little for dots this small and
+    /// the cost grows with the rate (Metal layer, 900 dots: 60 fps 3.2%,
+    /// 120 fps 4.8% of a core; docs/tasks/perf-flow-animation.md).
+    static let frameInterval = 1.0 / 60
+
+    /// Seconds between frames of the band layer while it eases. Why 1/30:
+    /// bands and labels move a few points over the whole ease, under a point a
+    /// frame, so 30 fps is as smooth to the eye as 60, and this layer is the
+    /// expensive one to redraw (large translucent fills and text; measured:
+    /// easing at 60 fps added 3.4–4.2 points of a core whenever the rates
+    /// changed, docs/tasks/perf-flow-animation.md).
+    static let easeFrameInterval = 1.0 / 30
 
     /// PLAN §5: the animation costs nothing while nobody can see it.
     private var animates: Bool { !reduceMotion && windowIsVisible }
@@ -62,17 +80,43 @@ struct FlowDiagram: View {
     var body: some View {
         GeometryReader { proxy in
             let metrics = Metrics(size: proxy.size, isCompact: isCompact)
+            let target = FlowMotion.Target(links: links.map(\.rate), exits: exits.map(\.rate), capacity: capacity)
+            let easing = animates && isEasing
             ZStack(alignment: .topLeading) {
-                // 30 fps: the dots move about 2 pt a frame, smooth enough, at half
-                // the cost of the display's rate.
-                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !animates)) { timeline in
+                // Two layers (perf-flow-animation). Bands and nodes change once
+                // a second and ease for a moment, so their Canvas only runs a
+                // timeline while easing and is otherwise drawn once. The dots
+                // are the only thing redrawn on every frame; the GPU draws
+                // them, and their layer does not exist without traffic: an
+                // idle network, a hidden window and reduced motion cost nothing.
+                TimelineView(.animation(minimumInterval: Self.easeFrameInterval, paused: !easing)) { timeline in
                     Canvas { context, _ in
-                        let frame = motion.frame(at: timeline.date, links: links.map(\.rate), exits: exits.map(\.rate),
-                                                 capacity: capacity, metrics: metrics, animated: animates)
-                        draw(frame, metrics: metrics, in: &context)
+                        let layout = motion.layout(at: timeline.date, target: target, metrics: metrics, easing: easing)
+                        drawBandsAndNodes(layout, metrics: metrics, in: &context)
+                        drawLabels(layout, metrics: metrics, in: &context)
+                    } symbols: {
+                        // One ForEach with one id space: Canvas traps on symbols
+                        // whose view identities collide, and two ForEach over
+                        // indices would both start at 0.
+                        ForEach(labels(metrics), id: \.symbol) { item in
+                            item.view.tag(item.symbol)
+                        }
                     }
                 }
-                if !isCompact { labels(metrics) }
+                if animates, target.hasTraffic, FlowParticlePipeline.shared != nil {
+                    FlowParticleLayer(motion: motion, input: .init(target: target, metrics: metrics, colors: links.map(\.color), easing: easing,
+                                                                   dotSide: isCompact ? 1.6 : 2, additive: scheme == .dark))
+                        // An NSView would otherwise take the clicks meant for the panel's strip button.
+                        .allowsHitTesting(false)
+                }
+            }
+            // A new sample starts an ease; when it is over the band layer stops.
+            .task(id: target) {
+                isEasing = true
+                do {
+                    try await Task.sleep(for: .seconds(FlowEase.duration))
+                    isEasing = false
+                } catch {}  // superseded by a newer sample, which keeps it on
             }
         }
         .background(WindowVisibility(isVisible: $windowIsVisible))
@@ -80,28 +124,46 @@ struct FlowDiagram: View {
         .accessibilityLabel(accessibilityText)
     }
 
-    /// The text next to the nodes and above the centre bar. Laid out from the
-    /// real rates and kept out of the animated Canvas: drawn there they were
-    /// rasterised again on every frame, which cost more than the particles.
-    /// They glide to a new place in about the time the bands take to ease.
-    private func labels(_ m: Metrics) -> some View {
-        let layout = SankeyLayout.make(left: links.map(\.rate), right: exits.map(\.rate), height: Double(m.region), gap: m.gap, capacity: capacity)
+    private enum Symbol: Hashable { case link(Int), exit(Int), centre }
+
+    /// The text next to the nodes and above the centre bar, as Canvas symbols:
+    /// real views, so long names truncate inside their column, but placed by
+    /// the band layer, so they move with the eased nodes and are only redrawn
+    /// when the bands are. As SwiftUI views with an implicit position
+    /// animation they cost about six points of a core every time the rates
+    /// changed (measured, perf-flow-animation).
+    private func labels(_ m: Metrics) -> [(symbol: Symbol, view: AnyView)] {
+        guard !isCompact else { return [] }
+        var items: [(symbol: Symbol, view: AnyView)] = links.indices.map { index in
+            (.link(index), AnyView(label(links[index], alignment: .trailing).frame(width: m.leftLabelWidth, alignment: .trailing)))
+        }
+        items += exits.indices.map { index in
+            (.exit(index), AnyView(label(exits[index], alignment: .leading).frame(width: m.rightLabelWidth, alignment: .leading)))
+        }
+        if let centerLabel {
+            items.append((.centre, AnyView(Text(centerLabel).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                    .monospacedDigit().lineLimit(1).fixedSize())))
+        }
+        return items
+    }
+
+    /// Design: labels sit 12 pt clear of the bars, centred on their node.
+    private func drawLabels(_ layout: SankeyLayout, metrics m: Metrics, in context: inout GraphicsContext) {
+        guard !isCompact else { return }
         let mid = { (span: Span) in m.inset + CGFloat((span.lower + span.upper) / 2) }
-        return ZStack(alignment: .topLeading) {
-            ForEach(Array(zip(links, layout.left)), id: \.0.id) { node, span in
-                label(node, alignment: .trailing).frame(width: m.leftLabelWidth, alignment: .trailing)
-                    .position(x: m.leftX - 12 - m.leftLabelWidth / 2, y: mid(span))
-            }
-            ForEach(Array(zip(exits, layout.right)), id: \.0.id) { node, span in
-                label(node, alignment: .leading).frame(width: m.rightLabelWidth, alignment: .leading)
-                    .position(x: m.rightX + m.bar + 12 + m.rightLabelWidth / 2, y: mid(span))
-            }
-            if let centerLabel {
-                Text(centerLabel).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary).monospacedDigit().lineLimit(1).fixedSize()
-                    .position(x: m.centreX + m.bar / 2, y: max(8, m.centreTop(layout.total) - 12))
+        for (index, span) in layout.left.enumerated() {
+            if let symbol = context.resolveSymbol(id: Symbol.link(index)) {
+                context.draw(symbol, at: CGPoint(x: m.leftX - 12, y: mid(span)), anchor: .trailing)
             }
         }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.35), value: layout)
+        for (index, span) in layout.right.enumerated() {
+            if let symbol = context.resolveSymbol(id: Symbol.exit(index)) {
+                context.draw(symbol, at: CGPoint(x: m.rightX + m.bar + 12, y: mid(span)), anchor: .leading)
+            }
+        }
+        if let symbol = context.resolveSymbol(id: Symbol.centre) {
+            context.draw(symbol, at: CGPoint(x: m.centreX + m.bar / 2, y: max(8, m.centreTop(layout.total) - 12)), anchor: .center)
+        }
     }
 
     private func label(_ node: FlowNode, alignment: HorizontalAlignment) -> some View {
@@ -111,8 +173,9 @@ struct FlowDiagram: View {
         }
     }
 
-    private func draw(_ frame: FlowMotion.Frame, metrics m: Metrics, in context: inout GraphicsContext) {
-        let layout = frame.layout
+    /// The layer that only changes with the rates: bands, idle links' dashed
+    /// lines, and the three columns of nodes.
+    private func drawBandsAndNodes(_ layout: SankeyLayout, metrics m: Metrics, in context: inout GraphicsContext) {
         let y = { (value: Double) in m.inset + CGFloat(value) }
         let middle = m.inset + m.region / 2
         func mid(_ span: Span) -> CGFloat { y((span.lower + span.upper) / 2) }
@@ -123,7 +186,7 @@ struct FlowDiagram: View {
         }
 
         // Bands, in two legs that meet on the centre bar.
-        for band in layout.bands where band.left.length >= 0.3 {
+        for band in layout.bands where band.left.length >= 0.3 && band.from < links.count {
             let fill = GraphicsContext.Shading.color(links[band.from].color.opacity(FlowPalette.bandOpacity(scheme)))
             context.fill(leg(from: m.leftX + m.bar, band.left, to: m.centreX, band.center, offset: m.inset), with: fill)
             context.fill(leg(from: m.centreX + m.bar, band.center, to: m.rightX, band.right, offset: m.inset), with: fill)
@@ -139,34 +202,6 @@ struct FlowDiagram: View {
             context.stroke(path, with: .style(.tertiary), style: StrokeStyle(lineWidth: 1, dash: [3, 4]))
         }
 
-        // Particles ride the bands; on a dark background they add light instead
-        // of covering. Filled as one path per link and opacity step, not one
-        // fill per dot: a full diagram has hundreds of them every frame.
-        if !frame.particles.isEmpty {
-            let side: CGFloat = isCompact ? 1.6 : 2
-            let steps = 4
-            var paths = [Path](repeating: Path(), count: links.count * steps)
-            for particle in frame.particles {
-                guard particle.from < links.count,
-                      let band = layout.bands.first(where: { $0.from == particle.from && $0.to == particle.to }) else { continue }
-                let first = particle.progress < 1
-                let t = first ? particle.progress : particle.progress - 1
-                let x0 = first ? m.leftX + m.bar : m.centreX + m.bar, x1 = first ? m.centreX : m.rightX
-                let point = CGPoint(x: x0 + (x1 - x0) * CGFloat(FlowParticles.run(t)), y: y(FlowParticles.y(of: particle, in: band)))
-                // Fades in and out over the first and last eighth of a leg.
-                let opacity = min(1, particle.progress * 8, (2 - particle.progress) * 8)
-                let step = min(steps - 1, Int(opacity * Double(steps)))
-                paths[particle.from * steps + step].addRect(CGRect(x: point.x - side / 2, y: point.y - side / 2, width: side, height: side))
-            }
-            var dots = context
-            if scheme == .dark { dots.blendMode = .plusLighter }
-            for (index, path) in paths.enumerated() where !path.isEmpty {
-                dots.opacity = 0.9 * Double(index % steps + 1) / Double(steps)
-                dots.fill(path, with: .color(links[index / steps].color))
-            }
-        }
-
-        // Nodes.
         for (index, span) in layout.left.enumerated() where index < links.count {
             context.fill(Path(roundedRect: nodeRect(x: m.leftX, span, centre: mid(span)), cornerRadius: 2),
                          with: .color(links[index].color.opacity(links[index].isDimmed ? 0.3 : 1)))
@@ -239,43 +274,59 @@ struct FlowDiagram: View {
     }
 }
 
-/// What moves between frames: the rates as currently drawn (they ease towards
-/// the real ones so a new sample does not jump) and the particles. A class
-/// held in @State: the Canvas advances it while drawing, which must not
-/// invalidate the view.
-private final class FlowMotion {
+/// What moves between frames: the rates as currently drawn (FlowEase) and the
+/// particles (FlowParticles). A class held in @State: the canvases advance it
+/// while drawing, which must not invalidate the view. Main thread only: the
+/// band Canvas renders synchronously and the particle layer's display link
+/// fires on the main run loop.
+final class FlowMotion {
+    /// What the diagram should show once it has settled.
+    struct Target: Equatable {
+        var links: [Double]
+        var exits: [Double]
+        var capacity: Double
+        /// Bands exist only with traffic on both sides; without them there is nothing to animate.
+        var hasTraffic: Bool { links.contains { $0 > 0 } && exits.contains { $0 > 0 } }
+    }
+
     struct Frame {
         var layout: SankeyLayout
         var particles: [FlowParticles.Particle]
     }
 
-    private var shownLinks: [Double] = []
-    private var shownExits: [Double] = []
-    private var particles = FlowParticles()
-    private var last: Date?
+    private var linkEase = FlowEase()
+    private var exitEase = FlowEase()
+    private var particleModel = FlowParticles()
+    private var easedAt: Date?
+    private var steppedAt: Date?
     private var generator = SystemRandomNumberGenerator()
 
-    func frame(at date: Date, links: [Double], exits: [Double], capacity: Double, metrics: FlowDiagram.Metrics, animated: Bool) -> Frame {
-        // The Canvas may draw the same instant twice; a zero step changes nothing.
-        let dt = animated ? min(max(last.map { date.timeIntervalSince($0) } ?? 0, 0), FlowParticles.longestStep) : 0
-        last = animated ? date : nil
-        shownLinks = ease(shownLinks, towards: links, dt: dt, animated: animated)
-        shownExits = ease(shownExits, towards: exits, dt: dt, animated: animated)
-        let layout = SankeyLayout.make(left: shownLinks, right: shownExits, height: Double(metrics.region), gap: metrics.gap, capacity: capacity)
-        if animated {
-            particles.step(by: dt, bands: layout.bands, using: &generator)
+    /// The layout to draw at `date`. Both layers ask for it; time only moves forward.
+    func layout(at date: Date, target: Target, metrics: FlowDiagram.Metrics, easing: Bool) -> SankeyLayout {
+        linkEase.retarget(target.links)
+        exitEase.retarget(target.exits)
+        if easing {
+            let dt = max(0, easedAt.map { date.timeIntervalSince($0) } ?? 0)
+            linkEase.advance(by: dt)
+            exitEase.advance(by: dt)
+            easedAt = max(date, easedAt ?? date)
         } else {
-            particles = FlowParticles()
+            // Not animating (or the ease is over): draw the sample itself.
+            linkEase.finish()
+            exitEase.finish()
+            easedAt = nil
         }
-        return Frame(layout: layout, particles: particles.particles)
+        return SankeyLayout.make(left: linkEase.value, right: exitEase.value, height: Double(metrics.region), gap: metrics.gap, capacity: target.capacity)
     }
 
-    /// The design's `shown += (target - shown) * dt * 3`: most of the way in a
-    /// third of a second. Without animation, or when the set of nodes changed,
-    /// the drawn rates are simply the real ones.
-    private func ease(_ shown: [Double], towards target: [Double], dt: Double, animated: Bool) -> [Double] {
-        guard animated, shown.count == target.count else { return target }
-        return zip(shown, target).map { $0 + ($1 - $0) * min(1, dt * 3) }
+    /// The particles at `date`, on the layout drawn at that moment.
+    func particles(at date: Date, target: Target, metrics: FlowDiagram.Metrics, easing: Bool) -> Frame {
+        let layout = layout(at: date, target: target, metrics: metrics, easing: easing)
+        // A long gap (the layer was gone while idle) is clamped inside step(by:).
+        let dt = max(0, steppedAt.map { date.timeIntervalSince($0) } ?? 0)
+        steppedAt = max(date, steppedAt ?? date)
+        particleModel.step(by: dt, bands: layout.bands, using: &generator)
+        return Frame(layout: layout, particles: particleModel.particles)
     }
 }
 
