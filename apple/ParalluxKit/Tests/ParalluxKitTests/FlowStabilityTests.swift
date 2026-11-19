@@ -291,3 +291,26 @@ import Testing
         #expect(ratio > 0.35 && ratio < 0.65, "half the intensity gave \(half.particles.count) of \(full.particles.count) dots")
     }
 }
+
+/// docs/tasks/fix-ui-details.md
+@Suite struct UIDetailTests {
+    @Test func actionFailuresSayWhatFailedNotThatTheCoreIsGone() {
+        #expect(CoreAction.urlTest.failure == "延迟测试失败")
+        #expect(CoreAction.selectOutbound.failure == "切换节点失败")
+        #expect(CoreAction.setRouteMode.failure == "切换路由模式失败")
+        #expect(CoreAction.closeConnection.failure == "关闭连接失败")
+        #expect(CoreAction.clearLogs.failure == "清除日志失败")
+        let all = CoreAction.allCases.map(\.failure)
+        #expect(Set(all).count == all.count, "every action has its own sentence")
+        for text in all {
+            #expect(!text.isEmpty && text.count <= 12, "short enough for a subtitle: \(text)")
+            #expect(!text.contains("内核") && !text.contains("rpc") && !text.contains(":"))
+        }
+        // Shown as the status line's action error: as it is, not as a core the app cannot read.
+        let line = StatusLine.text(setup: .ready, tunnel: .connected, actionError: CoreAction.urlTest.failure, coreError: nil, linkKind: "Wi‑Fi")
+        #expect(line == "延迟测试失败")
+        #expect(!line.contains("读不到内核"))
+        // A core that really cannot be read still says so.
+        #expect(StatusLine.text(setup: .ready, tunnel: .connected, actionError: nil, coreError: "EOF", linkKind: "Wi‑Fi").contains("读不到内核"))
+    }
+}

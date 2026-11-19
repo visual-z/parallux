@@ -33,3 +33,10 @@ public enum StatusLine {
         }
     }
 }
+
+/// A one-shot action sent to the core (docs/tasks/fix-ui-details.md).
+public enum CoreAction: CaseIterable, Sendable {
+    case urlTest, selectOutbound, setRouteMode, closeConnection, clearLogs
+
+    public var failure: String { "" }
+}
