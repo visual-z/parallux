@@ -25,7 +25,10 @@ final class SystemExtensionInstaller: NSObject, OSSystemExtensionRequestDelegate
     @ObservationIgnored private var requests: [ObjectIdentifier: Kind] = [:]
     @ObservationIgnored private var waiters: [UUID: CheckedContinuation<ActivationMachine.State, Never>] = [:]
     @ObservationIgnored private var deactivation: CheckedContinuation<Void, Error>?
-    @ObservationIgnored private var propertiesWaiter: CheckedContinuation<String?, Never>?
+    @ObservationIgnored private var deactivationToken = UUID()
+    /// Every caller of `installed()` while one properties request is out
+    /// shares its answer (Settings › 内核 asks twice on appear).
+    @ObservationIgnored private var propertiesWaiters: [CheckedContinuation<ExtensionVersion?, Never>] = []
     /// Which properties request the pending timeout belongs to.
     @ObservationIgnored private var propertiesToken = UUID()
 
@@ -58,21 +61,42 @@ final class SystemExtensionInstaller: NSObject, OSSystemExtensionRequestDelegate
         return await wait(limit: Self.approvalLimit)
     }
 
+    /// Bounded like every other wait (requestLimit): a lost callback ends in
+    /// an error instead of a hung uninstall.
     func deactivate() async throws {
+        guard deactivation == nil else { throw ExtensionInstallError.busy }
+        let token = UUID()
+        deactivationToken = token
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             deactivation = continuation
             submit(.deactivationRequest(forExtensionWithIdentifier: Self.extensionBundleID, queue: .main), as: .deactivation)
+            Task { [weak self] in
+                try? await Task.sleep(for: Self.requestLimit)
+                guard let self, self.deactivationToken == token, let pending = self.deactivation else { return }
+                self.deactivation = nil
+                pending.resume(throwing: ExtensionInstallError.timedOut)
+            }
         }
         state = .idle
     }
 
-    /// Installed version as macOS reports it, for the Core settings tab.
-    func installedVersion() async -> String? {
-        guard propertiesWaiter == nil else { return nil }
-        let token = UUID()
-        propertiesToken = token
-        let result = await withCheckedContinuation { continuation in
-            propertiesWaiter = continuation
+    /// The bundled extension's version, read from the copy inside this app.
+    static var bundledVersion: ExtensionVersion? {
+        let url = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/SystemExtensions/\(extensionBundleID).systemextension")
+        guard let info = Bundle(url: url)?.infoDictionary,
+              let short = info["CFBundleShortVersionString"] as? String,
+              let build = info["CFBundleVersion"] as? String else { return nil }
+        return ExtensionVersion(short: short, build: build)
+    }
+
+    /// The enabled extension as macOS reports it; nil when none is enabled
+    /// or macOS does not answer within requestLimit.
+    func installed() async -> ExtensionVersion? {
+        await withCheckedContinuation { continuation in
+            propertiesWaiters.append(continuation)
+            guard propertiesWaiters.count == 1 else { return }
+            let token = UUID()
+            propertiesToken = token
             submit(.propertiesRequest(forExtensionWithIdentifier: Self.extensionBundleID, queue: .main), as: .properties)
             Task { [weak self] in
                 try? await Task.sleep(for: Self.requestLimit)
@@ -80,7 +104,11 @@ final class SystemExtensionInstaller: NSObject, OSSystemExtensionRequestDelegate
                 self.finishProperties(nil)
             }
         }
-        return result
+    }
+
+    /// Installed version as text, for the Core settings tab.
+    func installedVersion() async -> String? {
+        await installed().map { "\($0.short) (\($0.build))" }
     }
 
     private func submit(_ request: OSSystemExtensionRequest, as kind: Kind) {
@@ -112,10 +140,11 @@ final class SystemExtensionInstaller: NSObject, OSSystemExtensionRequestDelegate
         for waiter in ready { waiter.resume(returning: state) }
     }
 
-    private func finishProperties(_ version: String?) {
-        propertiesWaiter?.resume(returning: version)
-        propertiesWaiter = nil
+    private func finishProperties(_ version: ExtensionVersion?) {
+        let waiting = propertiesWaiters
+        propertiesWaiters.removeAll()
         propertiesToken = UUID()
+        for waiter in waiting { waiter.resume(returning: version) }
     }
 
     /// Ends bookkeeping for a request; returns what kind it was.
@@ -159,7 +188,7 @@ final class SystemExtensionInstaller: NSObject, OSSystemExtensionRequestDelegate
     nonisolated func request(_ request: OSSystemExtensionRequest, foundProperties properties: [OSSystemExtensionProperties]) {
         let id = ObjectIdentifier(request)
         let enabled = properties.first { $0.isEnabled && !$0.isUninstalling }
-        let version = enabled.map { "\($0.bundleShortVersion) (\($0.bundleVersion))" }
+        let version = enabled.map { ExtensionVersion(short: $0.bundleShortVersion, build: $0.bundleVersion) }
         Task { @MainActor in
             guard self.take(id) == .properties else { return }
             self.finishProperties(version)
@@ -187,6 +216,16 @@ final class SystemExtensionInstaller: NSObject, OSSystemExtensionRequestDelegate
                 self.apply(.failed(code: nsError.code))
             case nil: break
             }
+        }
+    }
+}
+
+enum ExtensionInstallError: LocalizedError {
+    case busy, timedOut
+    var errorDescription: String? {
+        switch self {
+        case .busy: "正在卸载"
+        case .timedOut: "系统没有响应"
         }
     }
 }

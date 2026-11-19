@@ -27,6 +27,8 @@ has "$app" "com\.apple\.developer\.system-extension\.install" true
 has "$app" "com\.apple\.developer\.networking\.networkextension.0" '$(PARALLUX_NE_PROVIDER)'
 has "$app" "com\.apple\.security\.application-groups.0" '$(PARALLUX_APP_GROUP)'
 has "$ext" "com\.apple\.security\.app-sandbox" true
+has "$ext" "com\.apple\.security\.network\.client" true
+has "$ext" "com\.apple\.security\.network\.server" true
 has "$ext" "com\.apple\.developer\.networking\.networkextension.0" '$(PARALLUX_NE_PROVIDER)'
 has "$ext" "com\.apple\.security\.application-groups.0" '$(PARALLUX_APP_GROUP)'
 

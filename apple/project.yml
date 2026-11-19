@@ -170,6 +170,10 @@ targets:
       path: PacketTunnel/PacketTunnel.entitlements
       properties:
         com.apple.security.app-sandbox: true
+        # sing-box dials and listens (DNS over UDP, rule-set downloads, tun
+        # inbound) inside the sandbox; SFM's signed extension carries both.
+        com.apple.security.network.client: true
+        com.apple.security.network.server: true
         com.apple.developer.networking.networkextension: [$(PARALLUX_NE_PROVIDER)]
         com.apple.security.application-groups: [$(PARALLUX_APP_GROUP)]
     info:

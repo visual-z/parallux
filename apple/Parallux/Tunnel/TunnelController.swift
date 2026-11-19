@@ -21,6 +21,15 @@ final class TunnelController {
     private(set) var phase: Phase = .unknown
     private(set) var vpnStatus: NEVPNStatus = .invalid
     private(set) var connectedDate: Date?
+    /// Why the last start failed, as the extension reported it (summary);
+    /// cleared by the next connect.
+    private(set) var startError: String?
+    @ObservationIgnored private var startWatch: Task<Void, Never>?
+    /// Why 90 s: sing-box downloads remote rule-sets before it reports ready;
+    /// a slow link takes tens of seconds. Past this a start is treated as lost
+    /// (a dropped callback, a hung provider) and stopped. Assumed value; measure
+    /// with the "core … started" log line against startVPNTunnel.
+    static let startLimit: Duration = .seconds(90)
     let session = CoreSession()
 
     @ObservationIgnored private var manager: NETunnelProviderManager?
@@ -103,8 +112,17 @@ final class TunnelController {
         }
     }
 
+    /// True when macOS has no extension enabled or one from another build;
+    /// the app only talks to the Mach service of its own build (decision 11).
+    func needsActivation() async -> Bool {
+        let installed = await installer.installed()
+        guard let bundled = SystemExtensionInstaller.bundledVersion else { return installed == nil }
+        return ExtensionVersion.needsActivation(installed: installed, bundled: bundled)
+    }
+
     func connect(_ options: TunnelStartOptions, onDemand: (enabled: Bool, rules: [OnDemandRuleModel])? = nil) async {
         guard let manager else { return }
+        startError = nil
         do {
             if let onDemand {
                 manager.onDemandRules = onDemand.rules.filter { $0.problem == nil }.map(Self.rule)
@@ -123,6 +141,7 @@ final class TunnelController {
                 try await manager.saveToPreferences()
             }
             try manager.connection.startVPNTunnel(options: options.encoded())
+            watchStart()
         } catch {
             phase = .failed(error.localizedDescription)
         }
@@ -197,8 +216,35 @@ final class TunnelController {
         }
     }
 
+    /// Stops a start that neither connects nor fails within startLimit.
+    private func watchStart() {
+        startWatch?.cancel()
+        startWatch = Task { [weak self] in
+            try? await Task.sleep(for: Self.startLimit)
+            guard !Task.isCancelled, let self, self.vpnStatus == .connecting else { return }
+            self.log.error("start did not finish within the limit; stopping")
+            self.startError = "连接超时"
+            self.manager?.connection.stopVPNTunnel()
+        }
+    }
+
+    /// The extension's start error reaches the app only through this call.
+    private func readStartError(_ connection: NEVPNConnection) {
+        connection.fetchLastDisconnectError { [weak self] error in
+            guard let error else { return }
+            let text = ProviderError.summary(error.localizedDescription)
+            Task { @MainActor in
+                guard let self, self.startError == nil else { return }
+                self.startError = text
+            }
+        }
+    }
+
     private func apply(_ connection: NEVPNConnection) {
         let wasConnected = vpnStatus == .connected
+        let wasConnecting = vpnStatus == .connecting
+        if connection.status != .connecting { startWatch?.cancel() }
+        if wasConnecting, connection.status == .disconnected { readStartError(connection) }
         vpnStatus = connection.status
         connectedDate = connection.connectedDate
         // While a remote device is being viewed, the session follows it, not this Mac's tunnel.

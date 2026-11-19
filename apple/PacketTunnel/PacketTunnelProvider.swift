@@ -36,7 +36,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             } catch {
                 log.error("start failed: \(String(describing: error), privacy: .public)")
                 stopEverything()
-                completionHandler(error)
+                // Never the raw error: nesessionmanager cannot decode gomobile's
+                // error class and would leave the session connecting forever.
+                completionHandler(ProviderError.portable(error))
             }
         }
     }

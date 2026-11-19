@@ -143,7 +143,11 @@ final class AppModel {
             await tunnel.disconnect()
             await waitUntilStopped()
         }
-        if tunnel.phase != .ready { await tunnel.install() }
+        // Every connect checks the extension's version, not just the first:
+        // a new build must replace the old extension (fix-tunnel-start-sandbox).
+        var stale = false
+        if tunnel.phase == .ready, AppGroup.identifier() != nil { stale = await tunnel.needsActivation() }
+        if tunnel.phase != .ready || stale { await tunnel.install() }
         if tunnel.phase == .awaitingApproval {
             // Show where to approve, then carry on by itself once the user
             // switches Parallux on in System Settings (feat-setup-approval).
@@ -204,7 +208,7 @@ final class AppModel {
         let linkText: String? = enabledLinks.count >= 2
             ? "\(effectiveMode?.title ?? "") · \(enabledLinks.count) 条线路"
             : defaultLink.link?.kind
-        return StatusLine.text(setup: setup, tunnel: state, actionError: lastError,
+        return StatusLine.text(setup: setup, tunnel: state, actionError: lastError ?? tunnel.startError,
                                coreError: session.lastError, linkKind: linkText)
     }
 
