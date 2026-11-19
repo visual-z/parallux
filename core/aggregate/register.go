@@ -217,8 +217,14 @@ func (o *Outbound) DialContext(ctx context.Context, network string, destination 
 			return newCountedConn(conn, o.counters[index]), nil
 		}
 		lastErr = err
-		o.markFailed(index)
+		retry, down := dialFailure(err)
+		if down {
+			o.markFailed(index)
+		}
 		o.logger.DebugContext(ctx, "link ", o.tags[index], " failed: ", err)
+		if !retry {
+			return nil, err
+		}
 	}
 	return nil, everyLinkFailed(lastErr)
 }
@@ -239,17 +245,25 @@ func (o *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 			return conn, nil
 		}
 		lastErr = err
-		o.markFailed(index)
+		retry, down := dialFailure(err)
+		if down {
+			o.markFailed(index)
+		}
 		o.logger.DebugContext(ctx, "link ", o.tags[index], " failed: ", err)
+		if !retry {
+			return nil, err
+		}
 	}
 	return nil, everyLinkFailed(lastErr)
 }
 
-// A failed dial is stronger evidence than a probe: mark it at once, and let
-// the prober bring it back after recoverAfter successes.
+// A link-level dial failure (dialFailure) is stronger evidence than a probe:
+// mark it at once, and let the prober bring it back after recoverAfter
+// successes. The prober's streak restarts so one lucky tick cannot undo it.
 func (o *Outbound) markFailed(index int) {
 	if index < len(o.health) && o.health[index] != nil {
 		o.health[index].healthy.Store(false)
+		o.health[index].dialFailed.Store(true)
 	}
 }
 

@@ -29,8 +29,11 @@ var defaultProbeTargets = []M.Socksaddr{
 
 // linkHealth tracks one link. Only its prober goroutine writes `successes`.
 type linkHealth struct {
-	healthy   atomic.Bool
-	successes int
+	healthy atomic.Bool
+	// dialFailed is set by markFailed; the prober clears it and restarts its
+	// streak, so recovery needs recoverAfter fresh successes.
+	dialFailed atomic.Bool
+	successes  int
 }
 
 // probeLoop probes `dialer` until ctx ends. One probe at a time, so a slow
@@ -43,6 +46,9 @@ func probeLoop(ctx context.Context, dialer N.Dialer, targets []M.Socksaddr, heal
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+		}
+		if health.dialFailed.Swap(false) {
+			health.successes = 0
 		}
 		if probeOnce(ctx, dialer, targets) {
 			health.successes++
