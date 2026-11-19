@@ -74,3 +74,28 @@ import Testing
         #expect(!prefs.needsRecomposition(from: [wifi, lan], to: [wifi, lan, iPhone]), "a disabled link appearing")
     }
 }
+
+@Suite struct FlowFallbackTests {
+    private let links = [
+        LinkInterface(name: "en0", kind: .wifi, displayName: "Wi‑Fi"),
+        LinkInterface(name: "en7", kind: .ethernet, displayName: "LAN"),
+    ]
+
+    @Test func linkRatesFallBackToAnEvenSplitWithoutCounters() {
+        let none = LinkFlow.columns(links: links, linkRates: [:], totalRate: 1000, exits: [])
+        #expect(none.left.map(\.rate) == [500, 500])
+        let one = LinkFlow.columns(links: links, linkRates: ["link-en0": .init(upload: 0, download: 300)], totalRate: 1000, exits: [])
+        #expect(one.left.map(\.rate) == [300, 0], "measured counters win")
+        #expect(LinkFlow.columns(links: links, linkRates: [:], totalRate: 0, exits: []).left.map(\.rate) == [0, 0])
+    }
+
+    @Test func zeroRateNodesAreSpacedEvenly() {
+        let layout = SankeyLayout.make(left: [0, 0], right: [0, 0, 0], height: 240, gap: 8)
+        #expect(layout.bands.isEmpty)
+        #expect(layout.right.count == 3)
+        let mids = layout.right.map { ($0.lower + $0.upper) / 2 }
+        #expect(Set(mids).count == 3, "labels would stack at one y")
+        #expect(mids == mids.sorted())
+        #expect(layout.right.allSatisfy { $0.lower >= 0 && $0.upper <= 240 })
+    }
+}
