@@ -174,3 +174,18 @@ extension LinkCompositionTests {
         #expect(LinkGroupStat.decode("garbage").isEmpty)
     }
 }
+
+extension LinkCompositionTests {
+    /// Direct traffic (LAN, domestic) must not go to the aggregation server:
+    /// the transport is unencrypted and the design draws 直连 as its own exit.
+    @Test func bondModeKeepsDirectTrafficOffTheServer() throws {
+        let composed = try ProfileComposer.compose(userProfile, links: twoLinks, backup: [], mode: .bond, bond: Self.bondFixture)
+        let after = try outbounds(composed)
+        let direct = try #require(after.first { $0["tag"] as? String == "direct" })
+        #expect(direct["bond"] == nil, "the direct replacement must not use the bond")
+        #expect(direct["mode"] as? String == "failover")
+        let links = try #require(after.first { $0["tag"] as? String == ProfileComposer.aggregateTag })
+        #expect(links["bond"] as? String == "parallux-bond")
+        #expect(links["mode"] as? String == "bond")
+    }
+}
