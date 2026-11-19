@@ -31,8 +31,11 @@ struct OverviewCard<Content: View>: View {
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
         // Why 190: the narrowest a card can be before 「本次会话 ↓ … · ↑ …」
-        // truncates; below three of these the row stacks.
-        .frame(minWidth: 190, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // truncates; below three of these the row stacks. The ideal width is
+        // pinned to it as well: left to the content, one long line (a rule
+        // name, a profile name) made the whole row stack in a window with
+        // plenty of room; the line truncates instead.
+        .frame(minWidth: 190, idealWidth: 190, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .quaternarySystemFill), in: RoundedRectangle(cornerRadius: 14))
     }
 }
@@ -90,6 +93,7 @@ struct RouteModeCard: View {
             }
             if let topRule {
                 Text(topRule).font(.subheadline).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    .help(topRule)
                     .padding(.bottom, 4)
             }
             row("聚合", isOn: $aggregation).disabled(aggregationDisabled)
