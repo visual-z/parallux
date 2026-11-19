@@ -8,42 +8,53 @@ struct OverviewView: View {
 
     var body: some View {
         let session = app.session
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if !session.deprecatedNotes.isEmpty, !app.settings.value.hideDeprecatedNotes {
-                    DeprecationBanner(notes: session.deprecatedNotes) { app.settings.value.hideDeprecatedNotes = true }
-                }
-                Text("宽度 = 实时速率。左边每条线路一股，中间是汇总，右边是流量的去向。")
-                    .font(.caption).foregroundStyle(.secondary)
-                Group {
-                    let columns = FlowModel.columns(app)
-                    if session.isRunning, !columns.links.isEmpty, !columns.exits.isEmpty {
-                        FlowDiagram(links: columns.links, exits: columns.exits,
-                                    centerLabel: "\(app.effectiveMode?.title ?? "汇总") · " + RateFormat.bitsPerSecond((session.status?.downlink ?? 0) + (session.status?.uplink ?? 0)))
-                    } else {
-                        ContentUnavailableView(session.isRunning ? "暂无流量" : "未连接", systemImage: "point.3.connected.trianglepath.dotted",
-                                               description: Text(session.isRunning ? "有连接产生流量时显示流向。" : "开启 Parallux 后显示实时流向。"))
+        if !session.isRunning {
+            ContentUnavailableView {
+                Label("未连接", systemImage: "point.3.connected.trianglepath.dotted")
+            } description: {
+                Text(app.profiles.store.selected?.name ?? "")
+            } actions: {
+                Button("连接") { Task { await app.setOn(true) } }.buttonStyle(.borderedProminent)
+                    .disabled(!app.controlsLocalCore || app.tunnel.isBusy)
+            }
+            .navigationSubtitle(app.statusLine)
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    if !session.deprecatedNotes.isEmpty, !app.settings.value.hideDeprecatedNotes {
+                        DeprecationBanner(notes: session.deprecatedNotes) { app.settings.value.hideDeprecatedNotes = true }
                     }
-                }
-                .frame(height: 280)
-                .frame(maxWidth: .infinity)
-
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(app.settings.value.dashboard.visible) { card in
-                        switch card {
-                        case .traffic: TrafficCard(session: session)
-                        case .routeMode: RouteCard(app: app)
-                        case .profile: ProfileCard(app: app)
+                    let columns = FlowModel.columns(app)
+                    Group {
+                        if !columns.links.isEmpty, !columns.exits.isEmpty {
+                            FlowDiagram(links: columns.links, exits: columns.exits,
+                                        centerLabel: "\(app.effectiveMode?.title ?? "") " + RateFormat.bitsPerSecond((session.status?.downlink ?? 0) + (session.status?.uplink ?? 0)))
+                        } else {
+                            ContentUnavailableView("暂无活动连接", systemImage: "point.3.connected.trianglepath.dotted")
                         }
                     }
+                    .frame(height: 240)
+                    .padding(12)
+                    .background(.fill.quinary, in: RoundedRectangle(cornerRadius: 12))
+
+                    // Cards wrap to fewer columns in a narrow window.
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12, alignment: .top)], spacing: 12) {
+                        ForEach(app.settings.value.dashboard.visible) { card in
+                            switch card {
+                            case .traffic: TrafficCard(session: session)
+                            case .routeMode: RouteCard(app: app)
+                            case .profile: ProfileCard(app: app)
+                            }
+                        }
+                    }
+                    .contextMenu { DashboardMenu(app: app) }
                 }
-                .contextMenu { DashboardMenu(app: app) }
+                .padding(16)
             }
-            .padding(20)
+            .navigationSubtitle(app.statusLine)
+            .onAppear { session.retainConnections() }
+            .onDisappear { session.releaseConnections() }
         }
-        .navigationSubtitle(app.statusLine)
-        .onAppear { session.retainConnections() }
-        .onDisappear { session.releaseConnections() }
     }
 }
 
@@ -62,11 +73,11 @@ private struct DashboardMenu: View {
         Divider()
         ForEach(Array(app.settings.value.dashboard.order.enumerated()), id: \.element) { index, card in
             if index > 0 {
-                Button("把「\(card.title)」左移") { app.settings.value.dashboard.move(fromOffsets: [index], toOffset: index - 1) }
+                Button("上移「\(card.title)」") { app.settings.value.dashboard.move(fromOffsets: [index], toOffset: index - 1) }
             }
         }
         Divider()
-        Button("恢复默认卡片") { app.settings.value.dashboard.reset() }
+        Button("重置为默认值") { app.settings.value.dashboard.reset() }
     }
 }
 
@@ -76,9 +87,9 @@ private struct DeprecationBanner: View {
     let hide: () -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("当前配置用到了 sing-box 弃用的写法", systemImage: "exclamationmark.triangle").font(.callout.weight(.medium))
+            Label("弃用警告", systemImage: "exclamationmark.triangle").font(.callout.weight(.medium))
             ForEach(notes, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
-            Button("不再提示", action: hide).controlSize(.small)
+            Button("禁用弃用警告", action: hide).controlSize(.small)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -90,24 +101,25 @@ private struct Card<Content: View>: View {
     let title: String
     @ViewBuilder var content: Content
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             content
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(.fill.quinary, in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
 private struct TrafficCard: View {
     let session: CoreSession
     var body: some View {
-        Card(title: "流量") {
+        Card(title: "速率") {
             let status = session.status
             Text(RateFormat.bitsPerSecond((status?.downlink ?? 0) + (status?.uplink ?? 0)))
                 .font(.title2.weight(.semibold)).monospacedDigit()
             let points = Array(session.rateHistory.elements.enumerated())
+            if points.count > 1 {
             Chart(points, id: \.offset) { index, point in
                 AreaMark(x: .value("t", index), y: .value("速率", point.downlink + point.uplink))
                     .foregroundStyle(.blue.opacity(0.25))
@@ -117,7 +129,8 @@ private struct TrafficCard: View {
             .chartXAxis(.hidden).chartYAxis(.hidden)
             .chartXScale(domain: 0...max(CoreSession.rateHistoryCapacity - 1, 1))
             .frame(height: 44)
-            Text("本次会话 ↓ \(RateFormat.bytes(status?.downlinkTotal ?? 0)) · ↑ \(RateFormat.bytes(status?.uplinkTotal ?? 0))")
+            }
+            Text("流量 ↓ \(RateFormat.bytes(status?.downlinkTotal ?? 0)) · ↑ \(RateFormat.bytes(status?.uplinkTotal ?? 0))")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -128,18 +141,16 @@ private struct RouteCard: View {
     var body: some View {
         @Bindable var settings = app.settings
         let session = app.session
-        Card(title: "路由模式") {
-            if session.routeModes.isEmpty {
-                Text(session.isRunning ? "配置没有定义路由模式" : "连接后可选").font(.callout).foregroundStyle(.secondary)
-            } else {
+        Card(title: "模式") {
+            if !session.routeModes.isEmpty {
                 Picker("路由模式", selection: Binding(get: { session.routeMode ?? "" }, set: { session.setRouteMode($0) })) {
                     ForEach(session.routeModes, id: \.self) { Text(RouteMode.title($0)).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden()
             }
-            Toggle("系统 HTTP 代理", isOn: $settings.value.tunnel.systemProxyEnabled)
+            Toggle("系统代理", isOn: $settings.value.tunnel.systemProxyEnabled)
                 .toggleStyle(.switch).font(.callout)
-                .help("只在配置的 tun 入站开了 platform.http_proxy 时有效；下次连接生效")
+                .help("修改操作系统的代理设置")
         }
     }
 }
@@ -152,11 +163,11 @@ private struct ProfileCard: View {
                 Text(profile.name).font(.headline)
                 Text(ProfileDescription.detail(profile, now: Date())).font(.caption).foregroundStyle(.secondary)
             } else {
-                Text("示例配置").font(.headline)
-                Text("还没有配置；在「配置」页添加").font(.caption).foregroundStyle(.secondary)
+                Text("无配置").font(.headline).foregroundStyle(.secondary)
             }
             if let status = app.session.status {
-                Text("连接 \(status.connections) · 内存 \(RateFormat.bytes(status.memory))").font(.caption).foregroundStyle(.secondary)
+                LabeledContent("连接", value: "\(status.connections)").font(.caption)
+                LabeledContent("内存", value: RateFormat.bytes(status.memory)).font(.caption)
             }
         }
     }

@@ -8,7 +8,7 @@ struct NotConnectedView: View {
     let title: String
     let symbol: String
     var body: some View {
-        ContentUnavailableView(title, systemImage: symbol, description: Text("连接后显示运行中内核的数据。"))
+        ContentUnavailableView(title, systemImage: symbol, description: Text("服务未启动"))
     }
 }
 
@@ -17,7 +17,7 @@ struct RouteModeMenu: View {
     @Environment(CoreSession.self) private var session
     var body: some View {
         if !session.routeModes.isEmpty {
-            Menu("路由：\(RouteMode.title(session.routeMode ?? ""))") {
+            Menu(RouteMode.title(session.routeMode ?? "")) {
                 ForEach(session.routeModes, id: \.self) { mode in
                     Button {
                         session.setRouteMode(mode)
@@ -63,30 +63,45 @@ struct ConnectionsView: View {
     var body: some View {
         Group {
             if !session.isRunning {
-                NotConnectedView(title: "连接", symbol: "arrow.left.arrow.right")
-            } else {
-                Table(rows, selection: $selection) {
-                    TableColumn("进程") { Text($0.process.isEmpty ? "—" : $0.process) }
-                        .width(min: 60, ideal: 90)
-                    TableColumn("目标") { Text($0.destination).lineLimit(1) }
-                        .width(min: 120, ideal: 220)
-                    TableColumn("规则") { row in
-                        Text(row.rule.isEmpty ? "final" : row.rule)
-                            .font(.caption.monospaced()).lineLimit(1)
-                            .padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
-                    }
-                    .width(min: 80, ideal: 160)
-                    TableColumn("出站") { Text($0.outbound) }.width(min: 60, ideal: 100)
-                    TableColumn("↓") { row in
-                        Text(RateFormat.bytes(row.downlinkTotal)).monospacedDigit().foregroundStyle(row.isClosed ? .secondary : .primary)
-                    }
-                    .width(min: 50, ideal: 70)
+                NotConnectedView(title: "未连接", symbol: "arrow.left.arrow.right")
+            } else if rows.isEmpty {
+                if !search.isEmpty {
+                    ContentUnavailableView.search(text: search)
+                } else {
+                    ContentUnavailableView(state == .closed ? "暂无已关闭连接" : state == .active ? "暂无活动连接" : "暂无连接",
+                                           systemImage: "arrow.left.arrow.right")
                 }
+            } else {
+                // Column titles: Clash Verge Rev connections.fields.*
+                Table(rows, selection: $selection) {
+                    TableColumn("主机") { row in
+                        Text(row.destination).lineLimit(1).truncationMode(.middle).foregroundStyle(row.isClosed ? .secondary : .primary)
+                    }
+                    .width(min: 140, ideal: 240)
+                    TableColumn("进程") { Text($0.process.isEmpty ? "—" : $0.process).lineLimit(1) }
+                        .width(min: 60, ideal: 90)
+                    TableColumn("规则") { row in
+                        Text(row.rule.isEmpty ? "MATCH" : row.rule).font(.callout.monospaced()).lineLimit(1).truncationMode(.middle)
+                    }
+                    .width(min: 80, ideal: 180)
+                    TableColumn("链路") { row in
+                        Text(row.chain.isEmpty ? row.outbound : row.chain.joined(separator: " › ")).lineLimit(1)
+                    }
+                    .width(min: 70, ideal: 140)
+                    TableColumn("下载速度") { row in
+                        Text(row.isClosed ? "—" : RateFormat.bitsPerSecond(row.downlink)).monospacedDigit()
+                    }
+                    .width(min: 60, ideal: 80)
+                    TableColumn("流量") { row in
+                        Text(RateFormat.bytes(row.downlinkTotal + row.uplinkTotal)).monospacedDigit()
+                    }
+                    .width(min: 56, ideal: 72)
+                }
+                .tableStyle(.inset(alternatesRowBackgrounds: false))
                 .onChange(of: selection) { _, new in if new != nil { showInspector = true } }
             }
         }
-        .navigationSubtitle("\(session.connections.filter { !$0.isClosed }.count) 条活跃")
+        .navigationSubtitle(session.isRunning ? "\(session.connections.filter { !$0.isClosed }.count) 个活跃" : "")
         .searchable(text: $search, placement: .toolbar, prompt: "搜索")
         .inspector(isPresented: $showInspector) {
             ConnectionInspector(row: session.connections.first { $0.id == selection })
@@ -94,17 +109,17 @@ struct ConnectionsView: View {
         }
         .toolbar {
             ToolbarItem {
-                Menu("筛选", systemImage: "line.3.horizontal.decrease") {
+                Menu("排序", systemImage: "line.3.horizontal.decrease") {
                     Picker("状态", selection: $state) { ForEach(ConnectionState.allCases) { Text($0.title).tag($0) } }
                     Picker("排序", selection: $sort) { ForEach(ConnectionSort.allCases) { Text($0.title).tag($0) } }
-                    Toggle("隐藏 DNS 连接", isOn: $hideDNS)
+                    Toggle("隐藏 DNS", isOn: $hideDNS)
                 }
-                .help("筛选与排序")
+                .help("排序")
             }
             ToolbarItem {
-                Button("全部关闭", systemImage: "xmark.circle") { session.closeAllConnections() }
+                Button("关闭所有连接", systemImage: "xmark.circle") { session.closeAllConnections() }
                     .disabled(session.connections.isEmpty)
-                    .help("关闭全部连接")
+                    .help("关闭所有连接")
             }
             ToolbarItem {
                 Button("检查器", systemImage: "sidebar.trailing") { showInspector.toggle() }
@@ -123,29 +138,29 @@ private struct ConnectionInspector: View {
     var body: some View {
         if let row {
             Form {
-                Section("连接") {
-                    LabeledContent("目标", value: row.destination)
+                Section {
+                    LabeledContent("目标地址", value: row.destination)
                     LabeledContent("进程", value: row.process.isEmpty ? "—" : row.process)
                     LabeledContent("网络", value: row.network.uppercased())
-                    LabeledContent("开始", value: row.createdAt.formatted(date: .omitted, time: .standard))
+                    LabeledContent("连接时间", value: row.createdAt.formatted(date: .omitted, time: .standard))
                 }
-                Section("路由") {
-                    LabeledContent("规则", value: row.rule.isEmpty ? "final" : row.rule)
-                    LabeledContent("出站链", value: row.chain.isEmpty ? row.outbound : row.chain.joined(separator: " → "))
-                    Button("这条为什么走这里") {
+                Section {
+                    LabeledContent("规则", value: row.rule.isEmpty ? "MATCH" : row.rule)
+                    LabeledContent("链路", value: row.chain.isEmpty ? row.outbound : row.chain.joined(separator: " › "))
+                    Button("评估连接") {
                         app.pendingExplainTarget = ExplainView.host(row.destination)
                         NotificationCenter.default.post(name: .explainRoute, object: nil)
                     }
                 }
-                Section("流量") {
-                    LabeledContent("↓ 下行", value: RateFormat.bytes(row.downlinkTotal))
-                    LabeledContent("↑ 上行", value: RateFormat.bytes(row.uplinkTotal))
+                Section {
+                    LabeledContent("下载", value: RateFormat.bytes(row.downlinkTotal))
+                    LabeledContent("上传", value: RateFormat.bytes(row.uplinkTotal))
                 }
                 Button("关闭连接", role: .destructive) { session.closeConnection(row.id) }
             }
             .formStyle(.grouped)
         } else {
-            ContentUnavailableView("选择一条连接", systemImage: "sidebar.trailing")
+            ContentUnavailableView("无数据", systemImage: "sidebar.trailing")
         }
     }
 }
@@ -162,7 +177,9 @@ struct LogsView: View {
         let entries = LogQuery.filter(session.logs.elements, level: level, text: search)
         Group {
             if !session.isRunning && session.logs.isEmpty {
-                NotConnectedView(title: "日志", symbol: "doc.plaintext")
+                NotConnectedView(title: "未连接", symbol: "doc.plaintext")
+            } else if entries.isEmpty {
+                if search.isEmpty { ContentUnavailableView("无日志", systemImage: "doc.plaintext") } else { ContentUnavailableView.search(text: search) }
             } else {
                 ScrollViewReader { proxy in
                     List(entries) { entry in
@@ -173,35 +190,38 @@ struct LogsView: View {
                             Text(entry.message).font(.callout.monospaced()).textSelection(.enabled)
                         }
                         .id(entry.id)
+                        .listRowSeparator(.hidden)
                     }
+                    .listStyle(.plain)
+                    .environment(\.defaultMinListRowHeight, 18)
                     .onChange(of: entries.last?.id) { _, last in
                         if let last, !session.logsPaused { proxy.scrollTo(last, anchor: .bottom) }
                     }
                 }
             }
         }
-        .navigationSubtitle("\(entries.count) 行")
+        .navigationSubtitle(entries.isEmpty ? "" : "\(entries.count)")
         .searchable(text: $search, placement: .toolbar, prompt: "搜索")
         .toolbar {
             ToolbarItem {
-                Picker("级别", selection: $level) {
+                Picker("日志级别", selection: $level) {
                     ForEach(LogLevel.allCases.filter { $0 >= .error }) { Text($0.title).tag($0) }
                 }
-                .help("显示不低于此级别的日志")
+                .help("日志级别")
             }
             ToolbarItem {
                 Toggle(isOn: $session.logsPaused) {
-                    Label(session.logsPaused ? "继续" : "暂停", systemImage: session.logsPaused ? "play" : "pause")
+                    Label(session.logsPaused ? "恢复" : "暂停", systemImage: session.logsPaused ? "play" : "pause")
                 }
-                .help(session.logsPaused ? "继续" : "暂停")
+                .help(session.logsPaused ? "恢复" : "暂停")
             }
             ToolbarItem {
                 Button("导出", systemImage: "square.and.arrow.up") { export(entries) }
                     .disabled(entries.isEmpty)
-                    .help("导出当前显示的日志，订阅地址里的 token 与密码会被脱敏")
+                    .help("导出")
             }
             ToolbarItem {
-                Button("清空", systemImage: "trash") { session.clearLogs() }.help("清空日志")
+                Button("清除日志", systemImage: "trash") { session.clearLogs() }.help("清除日志")
             }
         }
         .onAppear { session.retainLogs() }

@@ -17,8 +17,13 @@ struct RoutingView: View {
     var body: some View {
         Group {
             if !app.session.isRunning {
-                ContentUnavailableView("未连接", systemImage: "arrow.triangle.branch",
-                                       description: Text("连接后显示路由、分组与实时流量。"))
+                ContentUnavailableView {
+                    Label("未连接", systemImage: "arrow.triangle.branch")
+                } description: {
+                    Text("内核暂不可用")
+                } actions: {
+                    Button("连接") { Task { await app.setOn(true) } }.buttonStyle(.borderedProminent)
+                }
             } else {
                 switch view {
                 case .map:
@@ -31,7 +36,7 @@ struct RoutingView: View {
             }
         }
         .navigationSubtitle(subtitle)
-        .searchable(text: $search, placement: .toolbar, prompt: "搜索规则、分组或节点")
+        .searchable(text: $search, placement: .toolbar, prompt: "搜索")
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("视图", selection: $view) {
@@ -42,15 +47,15 @@ struct RoutingView: View {
             }
             ToolbarItem { RouteModeMenu() }
             ToolbarItem {
-                Button("全部测速", systemImage: "bolt") {
+                Button("延迟测试", systemImage: "bolt") {
                     for group in app.session.groups { app.session.urlTest(group: group.tag) }
                 }
                 .disabled(!app.session.isRunning || !app.session.testing.isEmpty)
-                .help("对每个分组测速")
+                .help("延迟测试")
             }
             if view == .map {
                 ToolbarItem {
-                    Button("检查器", systemImage: "sidebar.trailing") { showInspector.toggle() }
+                    Button("检查器", systemImage: "sidebar.trailing") { showInspector.toggle() }.help("显示检查器")
                 }
             }
         }
@@ -75,7 +80,8 @@ struct RoutingView: View {
 
     private var subtitle: String {
         let profile = model.profile
-        return "\(RouteMode.title(app.session.routeMode ?? "")) · \(profile.rules.filter { $0.outbound != nil }.count) 条路由规则 · \(app.session.groups.count) 个分组"
+        guard app.session.isRunning else { return "" }
+        return "\(RouteMode.title(app.session.routeMode ?? "")) · \(profile.rules.filter { $0.outbound != nil }.count) 条规则 · \(app.session.groups.count) 个代理组"
     }
 }
 
@@ -99,30 +105,31 @@ private struct RouteMapView: View {
         let map = model.map(app: app)
         let classes = map.classes.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.condition.localizedCaseInsensitiveContains(search) || $0.exit.localizedCaseInsensitiveContains(search) }
         let focus = classes.first { $0.id == selectedClass }
+        if map.classes.isEmpty {
+            ContentUnavailableView {
+                Label("暂无规则", systemImage: "arrow.triangle.branch")
+            } description: {
+                Text(model.profileError ?? "所有流量走默认出口")
+            }
+        } else if classes.isEmpty {
+            ContentUnavailableView.search(text: search)
+        } else {
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 14) {
-                    Label("宽度 = 实时速率", systemImage: "line.3.horizontal")
-                    Label("点一类流量只看它的路径", systemImage: "hand.tap")
-                    LatencyLegend()
-                }
-                .font(.caption).foregroundStyle(.secondary).labelStyle(.titleOnly)
-                if map.classes.isEmpty {
-                    ContentUnavailableView("没有路由规则", systemImage: "arrow.triangle.branch",
-                                           description: Text(model.profileError ?? "当前配置没有 route.rules，所有流量走默认出口。"))
-                } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Group {
                     RouteColumns(classes: classes, exits: map.exits, focus: focus, selectedExit: $selectedExit,
                                  select: { item in
                                      selectedClass = selectedClass == item.id ? nil : item.id
                                      if selectedClass != nil { selectedExit = item.exit }
                                  }, reroute: reroute, chain: { model.chain($0, app: app) })
                     if map.hiddenCount > 0 {
-                        Text("另有 \(map.hiddenCount) 类流量 · \(RateFormat.bitsPerSecond(map.hiddenRate))（在「试一下」或规则表里查看）")
-                            .font(.caption).foregroundStyle(.secondary)
+                        Text("其他 \(map.hiddenCount) 条规则 · \(RateFormat.bitsPerSecond(map.hiddenRate))")
+                            .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
             }
-            .padding(20)
+            .padding(.horizontal, 16).padding(.vertical, 12)
+        }
         }
     }
 }
@@ -131,9 +138,9 @@ private struct LatencyLegend: View {
     var body: some View {
         HStack(spacing: 6) {
             Text("延迟")
-            Text("<400").foregroundStyle(LatencyGrade.fast.color)
-            Text("<800").foregroundStyle(LatencyGrade.medium.color)
-            Text("≥800 ms").foregroundStyle(LatencyGrade.slow.color)
+            Circle().fill(LatencyGrade.fast.color).frame(width: 6, height: 6).help("延迟良好 · 400 ms 以内")
+            Circle().fill(LatencyGrade.medium.color).frame(width: 6, height: 6).help("延迟中等 · 400–800 ms")
+            Circle().fill(LatencyGrade.slow.color).frame(width: 6, height: 6).help("延迟较高 · 800 ms 以上")
         }
     }
 }
@@ -207,23 +214,33 @@ private struct RouteColumns: View {
                 }
             }
             .allowsHitTesting(false)
+            ViewThatFits(in: .horizontal) {
             HStack(alignment: .top, spacing: 0) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("流量类别").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("规则").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                        Spacer()
+                        Text("下载速度").font(.caption).foregroundStyle(.tertiary)
+                    }
                     ForEach(classes) { item in
                         TrafficRow(item: item, tint: color(item), selected: focus?.id == item.id, dimmed: focus != nil && focus?.id != item.id)
                             .reportFrame("c-" + item.id, in: "routes")
                             .onTapGesture { select(item) }
                             .contextMenu {
-                                Button("改走…") { reroute(item) }
-                                Button("查看出口") { selectedExit = item.exit }
+                                Button("编辑规则…") { reroute(item) }
+                                Button("当前节点") { selectedExit = item.exit }
                             }
                     }
                 }
-                .frame(minWidth: 220, maxWidth: 320)
-                Spacer(minLength: 96)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("出口").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                .frame(minWidth: 200, maxWidth: .infinity)
+                // The bands need room to curve; fixed so both columns can grow.
+                Color.clear.frame(width: 72)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("代理组").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                        Spacer()
+                        LatencyLegend().font(.caption).foregroundStyle(.tertiary)
+                    }
                     ForEach(exits, id: \.self) { exit in
                         ExitRow(exit: exit, chain: chain(exit), selected: selectedExit == exit,
                                 dimmed: focus != nil && focus?.exit != exit)
@@ -231,7 +248,19 @@ private struct RouteColumns: View {
                             .onTapGesture { selectedExit = exit }
                     }
                 }
-                .frame(minWidth: 220, maxWidth: 300)
+                .frame(minWidth: 200, maxWidth: .infinity)
+            }
+            // Too narrow for two columns and the bands: a plain list, the exit under each rule.
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(classes) { item in
+                    VStack(alignment: .leading, spacing: 4) {
+                        TrafficRow(item: item, tint: color(item), selected: focus?.id == item.id, dimmed: false)
+                        ChainView(chain: chain(item.exit)).padding(.leading, 12)
+                    }
+                    .onTapGesture { selectedExit = item.exit }
+                    .contextMenu { Button("编辑规则…") { reroute(item) } }
+                }
+            }
             }
         }
         .coordinateSpace(name: "routes")
@@ -247,31 +276,29 @@ private struct TrafficRow: View {
     let dimmed: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 2).fill(tint).frame(width: 4)
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 1.5).fill(tint).frame(width: 3)
+            VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
-                    Text(item.name).font(.callout.weight(.medium)).lineLimit(1)
+                    Text(item.name).font(.body).lineLimit(1)
                     if item.overridden {
-                        Text("已覆盖").font(.caption2.weight(.semibold)).foregroundStyle(.tint)
+                        Text("已覆写").font(.caption2.weight(.semibold)).foregroundStyle(.tint)
                             .padding(.horizontal, 5).padding(.vertical, 1).background(.tint.opacity(0.15), in: Capsule())
                     }
                 }
-                Text(item.condition).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                Text(item.condition).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             }
             Spacer(minLength: 4)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(item.rate > 0 ? RateFormat.bitsPerSecond(item.rate) : "—").font(.caption).monospacedDigit()
-                if item.connections > 0 { Text("\(item.connections) 条").font(.caption2).foregroundStyle(.secondary) }
-            }
+            Text(item.rate > 0 ? RateFormat.bitsPerSecond(item.rate) : "—").font(.callout).monospacedDigit()
+                .foregroundStyle(item.rate > 0 ? .primary : .tertiary)
         }
-        .padding(.horizontal, 10).padding(.vertical, 8)
-        .background(.background, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: selected ? 2 : 1))
+        .padding(.horizontal, 8).padding(.vertical, 6)
+        .background(selected ? AnyShapeStyle(.selection.opacity(0.35)) : AnyShapeStyle(.fill.quinary), in: RoundedRectangle(cornerRadius: 8))
+        .help("\(item.connections) 个连接 · \(item.exit)")
         .opacity(dimmed ? 0.35 : 1)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityHint("走 \(item.exit)")
+        .accessibilityHint(item.exit)
     }
 }
 
@@ -285,9 +312,9 @@ private struct ExitRow: View {
     var body: some View {
         let group = app.session.groups.first { $0.tag == exit }
         let last = chain.last.flatMap { tag in app.session.groups.flatMap(\.items).first { $0.tag == tag } }
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                Text(exit).font(.callout.weight(.semibold))
+                Text(exit).font(.body.weight(.medium))
                 if let group { KindBadge(type: group.type) }
                 Spacer()
                 if let last, last.delay > 0 {
@@ -295,11 +322,14 @@ private struct ExitRow: View {
                         .foregroundStyle(LatencyGrade(milliseconds: last.delay).color)
                 }
             }
-            if chain.hops.count > 1 || chain.ending != .node { ChainView(chain: chain) }
+            if chain.hops.count > 1 || chain.ending != .node {
+                ChainView(chain: chain)
+            } else if exit.hasPrefix("direct") {
+                Text("直接连接 (DIRECT)").font(.caption).foregroundStyle(.secondary)
+            }
         }
-        .padding(10)
-        .background(.background, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: selected ? 2 : 1))
+        .padding(.horizontal, 8).padding(.vertical, 6)
+        .background(selected ? AnyShapeStyle(.selection.opacity(0.35)) : AnyShapeStyle(.fill.quinary), in: RoundedRectangle(cornerRadius: 8))
         .opacity(dimmed ? 0.35 : 1)
         .contentShape(Rectangle())
     }
@@ -308,7 +338,8 @@ private struct ExitRow: View {
 struct KindBadge: View {
     let type: String
     var body: some View {
-        Text(type == "urltest" ? "自动" : type == "selector" ? "手动" : type == "direct" ? "直连" : type)
+        // CVR strategies: select = 手动选择代理, url-test = 根据 URL 测试延迟选择代理 (short forms).
+        Text(type == "urltest" ? "URLTest" : type == "selector" ? "Selector" : type == "direct" ? "Direct" : type)
             .font(.caption2).foregroundStyle(.secondary)
             .padding(.horizontal, 5).padding(.vertical, 1)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))

@@ -45,9 +45,9 @@ struct MainWindow: View {
             .safeAreaInset(edge: .top) {
                 if let server = app.remote.active {
                     HStack {
-                        Label("正在查看远程设备「\(server.name)」", systemImage: "desktopcomputer")
+                        Label("远程 · \(server.name)", systemImage: "desktopcomputer")
                         Spacer()
-                        Button("切回本机") { app.remote.activate(nil, session: app.session, localConnected: app.tunnel.isConnected) }.controlSize(.small)
+                        Button("本机") { app.remote.activate(nil, session: app.session, localConnected: app.tunnel.isConnected) }.controlSize(.small)
                     }
                     .font(.callout)
                     .padding(.horizontal, 16).padding(.vertical, 8)
@@ -64,6 +64,8 @@ struct MainWindow: View {
                 }
             }
         }
+        // copy-and-style.md: minimum 760×520; pages fold to one column below that.
+        .frame(minWidth: 760, minHeight: 520)
         .onAppear { onSceneActionsAvailable(SceneActions(openWindow: openWindow, openSettings: openSettings)) }
         .onReceive(NotificationCenter.default.publisher(for: .explainRoute)) { _ in selection = .routing }
     }

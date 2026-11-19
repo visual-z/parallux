@@ -16,13 +16,13 @@ struct ExitInspector: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("出口").font(.caption).foregroundStyle(.secondary)
+                        Text("代理组").font(.caption).foregroundStyle(.secondary)
                         Text(exit).font(.title3.weight(.semibold))
                         ChainView(chain: model.chain(exit, app: app))
                     }
                     if !users.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("走这里的流量").font(.caption).foregroundStyle(.secondary)
+                            Text("规则").font(.caption).foregroundStyle(.secondary)
                             ForEach(users) { item in
                                 HStack {
                                     VStack(alignment: .leading, spacing: 1) {
@@ -30,7 +30,7 @@ struct ExitInspector: View {
                                         Text(item.rate > 0 ? RateFormat.bitsPerSecond(item.rate) : "暂无流量").font(.caption).foregroundStyle(.secondary)
                                     }
                                     Spacer()
-                                    Button("改走…") { reroute(item) }.controlSize(.small)
+                                    Button("编辑规则…") { reroute(item) }.controlSize(.small)
                                 }
                                 .padding(.vertical, 3)
                             }
@@ -40,7 +40,7 @@ struct ExitInspector: View {
                         NodePicker(group: group)
                     } else if exit.hasPrefix("direct") {
                         GroupBox {
-                            Text("直连流量按「线路」页的设置在线路之间分配（\(app.effectiveMode?.title ?? "单线路")）。")
+                            Text("\(app.effectiveMode?.title ?? "直接连接") · \(app.enabledLinks.map(\.kind.title).joined(separator: " + "))")
                                 .font(.callout).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
@@ -82,7 +82,7 @@ struct NodePicker: View {
                 if session.testing.contains(group.tag) { ProgressView().controlSize(.mini) }
                 Spacer()
                 Button("测速", systemImage: "bolt") { session.urlTest(group: group.tag) }
-                    .labelStyle(.iconOnly).disabled(session.testing.contains(group.tag)).help("测速")
+                    .labelStyle(.iconOnly).disabled(session.testing.contains(group.tag)).help("延迟测试")
             }
             if group.type == "urltest" { AutoExplanation(group: group) }
             if regions.count > 1 {
@@ -97,11 +97,11 @@ struct NodePicker: View {
             }
             LatencyHistogram(delays: nodes.map(\.delay))
             if !subgroups.isEmpty {
-                Text("子分组").font(.caption).foregroundStyle(.secondary)
+                Text("代理组").font(.caption).foregroundStyle(.secondary)
                 ForEach(subgroups) { item in
                     let sub = groupsByTag[item.tag]!
                     let current = sub.items.first { $0.tag == sub.selected }
-                    NodeRow(title: item.tag, detail: "\(sub.type == "urltest" ? "自动" : "手动") · 现在是 \(sub.selected)",
+                    NodeRow(title: item.tag, detail: sub.selected,
                             delay: current?.delay ?? 0, selected: item.tag == group.selected, chevron: expanded == item.tag ? .down : .right)
                         .onTapGesture { if group.selectable { session.select(group: group.tag, outbound: item.tag) } }
                         .contextMenu { Button(expanded == item.tag ? "收起" : "在这里展开") { expanded = expanded == item.tag ? nil : item.tag } }
@@ -109,7 +109,7 @@ struct NodePicker: View {
                         NodePicker(group: sub).padding(.leading, 12)
                     }
                 }
-                if !nodes.isEmpty { Text("节点（按延迟）").font(.caption).foregroundStyle(.secondary) }
+                if !nodes.isEmpty { Text("按延迟排序").font(.caption).foregroundStyle(.secondary) }
             }
             LazyVStack(spacing: 2) {
                 ForEach(shown) { item in
@@ -151,9 +151,8 @@ private struct AutoExplanation: View {
         let current = group.items.first { $0.tag == group.selected }
         GroupBox {
             VStack(alignment: .leading, spacing: 4) {
-                Text("自动选中 \(group.selected)\(current.map { $0.delay > 0 ? " · \($0.delay) ms" : "" } ?? "")").font(.callout.weight(.medium))
-                Text("延迟最低的节点；测速后在容差内不切换，避免来回跳。要固定某个节点，请在上一级手动分组里选它。")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text("当前节点：\(group.selected)\(current.map { $0.delay > 0 ? " · \($0.delay) ms" : "" } ?? "")").font(.callout.weight(.medium))
+                Text("根据 URL 测试延迟选择代理").font(.caption).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

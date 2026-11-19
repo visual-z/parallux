@@ -29,14 +29,14 @@ struct ExplainView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    TextField("域名、IP 或 主机:端口", text: $target)
+                    TextField("主机", text: $target, prompt: Text("example.com"))
                         .textFieldStyle(.roundedBorder).font(.body.monospaced())
                         .onSubmit(run)
-                    Button("查看路由", action: run).buttonStyle(.borderedProminent).disabled(target.trimmingCharacters(in: .whitespaces).isEmpty || running)
+                    Button("评估连接", action: run).buttonStyle(.borderedProminent).disabled(target.trimmingCharacters(in: .whitespaces).isEmpty || running)
                 }
                 if !recentTargets.isEmpty {
                     HStack(spacing: 6) {
-                        Text("最近连接").font(.caption).foregroundStyle(.secondary)
+                        Text("连接").font(.caption).foregroundStyle(.secondary)
                         ForEach(recentTargets, id: \.self) { host in
                             Button(host) { target = host; run() }.controlSize(.small)
                         }
@@ -44,8 +44,7 @@ struct ExplainView: View {
                 }
                 if running { ProgressView() }
                 if let result { Steps(result: result, model: model, reroute: reroute) }
-                Text("不发起连接，只让内核按当前配置匹配一遍。依赖嗅探的规则（如按协议）按端口推断：443 视为 TLS，80 视为 HTTP。")
-                    .font(.caption).foregroundStyle(.secondary)
+
             }
             .padding(20)
             .frame(maxWidth: 720, alignment: .leading)
@@ -67,7 +66,7 @@ struct ExplainView: View {
         Task.detached {
             let explanation = CommandXPCDialer.explainRoute(value)
             await MainActor.run {
-                result = explanation ?? RouteExplanation(target: value, ruleIndex: -1, error: "网络扩展没有应答")
+                result = explanation ?? RouteExplanation(target: value, ruleIndex: -1, error: "内核暂不可用")
                 running = false
             }
         }
@@ -91,24 +90,24 @@ private struct Steps: View {
             let chain = result.outbound.map { model.chain($0, app: app) }
             VStack(alignment: .leading, spacing: 0) {
                 Step(number: 1, title: "规则",
-                     value: result.final == true ? "没有规则命中 · route.final" : "第 \(result.ruleIndex + 1) 条 · \(rule.map(TrafficLabel.name) ?? "")",
-                     why: result.final == true ? "逐条检查了 \(result.skipped ?? 0) 条规则都不匹配" : "\(result.rule ?? "")\((result.skipped ?? 0) > 0 ? "；前面 \(result.skipped ?? 0) 条不匹配或只附加选项" : "")")
+                     value: result.final == true ? TrafficLabel.finalName : "#\(result.ruleIndex + 1) · \(rule.map(TrafficLabel.name) ?? "")",
+                     why: result.final == true ? "匹配所有请求 (MATCH)" : (result.rule ?? ""))
                 if let outbound = result.outbound, let chain {
                     let group = app.session.groups.first { $0.tag == outbound }
-                    Step(number: 2, title: "出口", value: outbound,
-                         why: group.map { $0.type == "urltest" ? "自动选择延迟最低的成员" : "手动选择" } ?? "非分组出站")
+                    Step(number: 2, title: "代理策略", value: outbound,
+                         why: group.map { $0.type == "urltest" ? "根据 URL 测试延迟选择代理" : "手动选择代理" } ?? "")
                     if chain.hops.count > 1 {
-                        Step(number: 3, title: "节点", value: chain.hops.joined(separator: " › "),
-                             why: "沿每个分组当前选中的成员展开")
+                        Step(number: 3, title: "链路", value: chain.hops.joined(separator: " › "),
+                             why: "")
                     }
                     Step(number: chain.hops.count > 1 ? 4 : 3, title: "线路", value: lineText(outbound), why: lineWhy(outbound), last: true)
                 } else {
-                    Step(number: 2, title: "动作", value: actionTitle(result.action), why: "这类流量不经任何出口", last: true)
+                    Step(number: 2, title: "代理策略", value: actionTitle(result.action), why: "", last: true)
                 }
                 if let item, result.outbound != nil {
                     HStack {
-                        Button("改走…") { reroute(item) }
-                        if item.connections > 0 { Text("这类流量现在有 \(item.connections) 条连接").font(.caption).foregroundStyle(.secondary) }
+                        Button("编辑规则…") { reroute(item) }
+                        if item.connections > 0 { Text("\(item.connections) 个活跃连接").font(.caption).foregroundStyle(.secondary) }
                     }
                     .padding(.top, 8)
                 }
@@ -120,23 +119,22 @@ private struct Steps: View {
     }
 
     private func lineText(_ outbound: String) -> String {
-        guard app.enabledLinks.count >= 2, let mode = app.effectiveMode else { return app.links.links.first.map { $0.kind.title } ?? "默认网口" }
+        guard app.enabledLinks.count >= 2, let mode = app.effectiveMode else { return app.links.links.first.map { $0.kind.title } ?? "—" }
         let bonded = mode == .bond && !outbound.hasPrefix("direct")
         return "\(bonded ? "叠加" : outbound.hasPrefix("direct") && mode == .bond ? "主备" : mode.title) · \(app.enabledLinks.prefix(bonded ? 2 : 9).map(\.kind.title).joined(separator: " + "))"
     }
 
     private func lineWhy(_ outbound: String) -> String {
-        guard app.enabledLinks.count >= 2 else { return "只有一条线路" }
-        if app.effectiveMode == .bond && !outbound.hasPrefix("direct") { return "经聚合服务器重组后到节点" }
-        if outbound.hasPrefix("direct") && app.linkSettings.value.mode == .bond { return "直连不经聚合服务器" }
-        return "按连接在线路之间分配"
+        guard app.enabledLinks.count >= 2 else { return "" }
+        if app.effectiveMode == .bond && !outbound.hasPrefix("direct") { return app.bondServerSummary ?? "" }
+        return ""
     }
 
     private func actionTitle(_ action: String?) -> String {
         switch action {
-        case "reject": "拒绝"
-        case "hijack-dns": "交给内置 DNS"
-        case "bypass": "绕过"
+        case "reject": "拦截请求 (REJECT)"
+        case "hijack-dns": "DNS"
+        case "bypass": "直接连接 (DIRECT)"
         default: action ?? "—"
         }
     }
@@ -186,16 +184,16 @@ struct RerouteSheet: View {
             }
             if let rule {
                 Section {
-                    Picker("改走", selection: $target) {
-                        Text("配置里的原出站（\(rule.outbound ?? "")）").tag("")
+                    Picker("代理策略", selection: $target) {
+                        Text("默认（\(rule.outbound ?? "")）").tag("")
                         ForEach(model.rerouteTargets(groups: app.session.groups).filter { $0 != rule.outbound }, id: \.self) { Text($0).tag($0) }
                     }
                     TextField("名称", text: $name, prompt: Text(TrafficLabel.name(for: rule)))
                 } footer: {
-                    Text("改动存在 Parallux 里，配置文件不变，订阅更新也不会冲掉；如果这条规则被订阅改掉，覆盖会自动失效。连接中会立即重载内核，正在进行的连接会断开重连。")
+                    Text("覆写保存在本机，不修改配置文件")
                 }
             } else {
-                Text("「其余流量」由配置的 route.final 决定，暂不支持改走。").foregroundStyle(.secondary)
+                Text("匹配所有请求 (MATCH)").foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

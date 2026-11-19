@@ -12,8 +12,7 @@ struct GroupsView: View {
     var body: some View {
         let session = app.session
         if session.groups.isEmpty {
-            ContentUnavailableView("没有出站分组", systemImage: "square.grid.2x2",
-                                   description: Text("当前配置里没有 selector 或 urltest 分组。"))
+            ContentUnavailableView("暂无可用代理组", systemImage: "square.grid.2x2")
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
@@ -72,7 +71,7 @@ private struct ClassicGroup: View {
                     if collapsed && search.isEmpty { ChainView(chain: chain) }
                     Button("测速", systemImage: "bolt") { session.urlTest(group: group.tag) }
                         .labelStyle(.iconOnly).buttonStyle(.borderless)
-                        .disabled(session.testing.contains(group.tag)).help("测速")
+                        .disabled(session.testing.contains(group.tag)).help("延迟测试")
                 }
                 if collapsed && search.isEmpty {
                     LatencySummary(items: group.items)
@@ -103,7 +102,7 @@ private struct LatencySummary: View {
                         .help(Self.title(grade))
                 }
             }
-            Text("<400 · <800 · ≥800 ms · 未测").font(.caption2).foregroundStyle(.tertiary)
+
         }
     }
 
