@@ -48,11 +48,82 @@ public struct SankeyLayout: Equatable, Sendable {
     public var bands: [Band] = []
     public var total = Span(0, 0)
 
-    /// The least share of the height a node with traffic gets (fix-flow-stability).
+    /// The least share of a side's height a node with traffic gets
+    /// (fix-flow-stability). Why 2%: on the overview's 262 pt that is about
+    /// 4.5 pt (less when many exits share the height), enough to see a band
+    /// and its colour; without a floor an exit carrying a thousandth of the
+    /// traffic showed a rate and no band at all. Chosen by eye.
     public static let thinnestShare = 0.02
 
-    /// Width by share (fix-flow-stability): stub.
-    public static func make(leftShares: [Double], rightShares: [Double], height: Double, gap: Double) -> SankeyLayout { SankeyLayout() }
+    /// Width by share (docs/tasks/fix-flow-stability.md): each side always
+    /// fills the height the gaps leave, a node as tall as its share of its
+    /// own side. Absolute rates do not matter, and the two sides need not
+    /// agree (links are measured on the interface, exits from connections).
+    /// Links are spread over the height, exits opened around the middle, as
+    /// in the capacity layout.
+    public static func make(leftShares: [Double], rightShares: [Double], height: Double, gap: Double) -> SankeyLayout {
+        let clean = { (rates: [Double]) in rates.map { $0.isFinite && $0 > 0 ? $0 : 0 } }
+        let leftRates = clean(leftShares), rightRates = clean(rightShares)
+        var layout = SankeyLayout()
+        guard leftRates.contains(where: { $0 > 0 }), rightRates.contains(where: { $0 > 0 }) else {
+            layout.left = spread(leftRates.map { _ in 0 }, height: height)
+            layout.right = open(rightRates.map { _ in 0 }, gap: gap, height: height)
+            return layout
+        }
+        // The column with more nodes spends more on gaps, so it sets the room.
+        let room = max(0, height - gap * Double(max(leftRates.count, rightRates.count) - 1))
+        let leftParts = shares(leftRates), rightParts = shares(rightRates)
+        layout.left = spread(leftParts.map { $0 * room }, height: height)
+        layout.right = open(rightParts.map { $0 * room }, gap: gap, height: height)
+        let start = (height - room) / 2
+        layout.total = Span(start, start + room)
+        var leftCursor = layout.left.map(\.lower)
+        var centerCursor = layout.total.lower
+        for (j, exit) in rightParts.enumerated() where exit > 0 {
+            var rightCursor = layout.right[j].lower
+            for (i, link) in leftParts.enumerated() where link > 0 {
+                let thickness = link * exit * room
+                layout.bands.append(Band(from: i, to: j, left: Span(leftCursor[i], leftCursor[i] + thickness),
+                                         right: Span(rightCursor, rightCursor + thickness), rate: leftRates[i] * exit,
+                                         center: Span(centerCursor, centerCursor + thickness)))
+                leftCursor[i] += thickness
+                rightCursor += thickness
+                centerCursor += thickness
+            }
+        }
+        layout.checkInvariants(height: height)
+        return layout
+    }
+
+    /// Each rate's share of the total, with every non-zero one raised to at
+    /// least `thinnestShare`; what the small ones gain the others give up in
+    /// proportion, so the shares still add up to one and keep their order.
+    static func shares(_ rates: [Double]) -> [Double] {
+        let total = rates.reduce(0, +)
+        guard total > 0 else { return rates.map { _ in 0 } }
+        let positive = rates.filter { $0 > 0 }.count
+        let floor = min(thinnestShare, 1 / Double(positive))
+        var parts = rates.map { $0 / total }
+        var floored = Set<Int>()
+        // Raising one node shrinks the rest, which may push another under the
+        // floor: repeat until nothing moves (at most once per node).
+        while true {
+            let free = 1 - floor * Double(floored.count)
+            let rest = parts.indices.filter { rates[$0] > 0 && !floored.contains($0) }.map { rates[$0] }.reduce(0, +)
+            var changed = false
+            for index in parts.indices where rates[index] > 0 && !floored.contains(index) {
+                let part = rest > 0 ? rates[index] / rest * free : 0
+                if part < floor {
+                    floored.insert(index)
+                    changed = true
+                } else {
+                    parts[index] = part
+                }
+            }
+            for index in floored { parts[index] = floor }
+            if !changed { return parts }
+        }
+    }
 
     public static func make(left: [Double], right: [Double], height: Double, gap: Double, capacity: Double? = nil) -> SankeyLayout {
         let clean = { (rates: [Double]) in rates.map { $0.isFinite && $0 > 0 ? $0 : 0 } }

@@ -51,6 +51,21 @@ public struct FlowEase: Equatable, Sendable {
         }
     }
 
+    /// A new sample for a changed set of nodes: `start` is where each of the
+    /// new nodes is drawn now (zero for one that just appeared), so the
+    /// picture eases into the new set instead of jumping. A `start` of the
+    /// wrong length cannot be eased and the target is taken as it is.
+    public mutating func retarget(_ target: [Double], from start: [Double]) {
+        to = target
+        if start.count == target.count, start != target {
+            from = start
+            elapsed = 0
+        } else {
+            from = target
+            elapsed = Self.duration
+        }
+    }
+
     /// Zero, negative and NaN steps move nothing.
     public mutating func advance(by seconds: Double) {
         guard seconds > 0 else { return }

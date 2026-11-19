@@ -82,6 +82,36 @@ final class RoutingModel {
         return groupTags + others
     }
 
+    /// The route map as it is drawn: every traffic class in the profile's
+    /// order, the ones with traffic first, steadied so rows do not jump with
+    /// the rates (docs/tasks/fix-flow-stability.md).
+    struct SteadyMap: Equatable {
+        /// Classes that carried traffic within FlowSlots.retention, then the rest.
+        var active: [TrafficClass] = []
+        var idle: [TrafficClass] = []
+        /// Each class's share of the smoothed traffic, 0...1, by class id.
+        var shares: [String: Double] = [:]
+        var isEmpty: Bool { active.isEmpty && idle.isEmpty }
+    }
+
+    @ObservationIgnored private var rows = RouteRows()
+    @ObservationIgnored private var rates = FlowSlots(limit: 1)
+
+    /// `time`: seconds on a clock that does not jump (system uptime).
+    func steadyMap(app: AppModel, at time: TimeInterval) -> SteadyMap {
+        let overrides = app.routeOverrides.overrides(for: app.profiles.store.selectedID)
+        let classes = RouteMap.classes(profile: effectiveProfile(app: app), connections: app.session.connections,
+                                       labels: overrides.names(for: profile), overridden: overrides.reroutedIndices(for: profile))
+        let byID = Dictionary(uniqueKeysWithValues: classes.map { ($0.id, $0) })
+        rows.update(order: classes.map(\.id), rates: Dictionary(uniqueKeysWithValues: classes.map { ($0.id, Double($0.rate)) }), at: time)
+        // Every class has a seat: this FlowSlots only smooths.
+        rates.limit = max(classes.count, 1)
+        rates.update(classes.map { (id: $0.id, rate: Double($0.rate)) }, at: time)
+        let total = rates.slots.map(\.rate).reduce(0, +)
+        let shares = total > 0 ? Dictionary(uniqueKeysWithValues: rates.slots.map { ($0.id, $0.rate / total) }) : [:]
+        return SteadyMap(active: rows.active.compactMap { byID[$0] }, idle: rows.idle.compactMap { byID[$0] }, shares: shares)
+    }
+
     func map(app: AppModel) -> RouteMap {
         let overrides = app.routeOverrides.overrides(for: app.profiles.store.selectedID)
         return RouteMap.build(profile: effectiveProfile(app: app), connections: app.session.connections,

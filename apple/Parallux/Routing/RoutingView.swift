@@ -60,7 +60,7 @@ struct RoutingView: View {
             }
         }
         .inspector(isPresented: Binding(get: { showInspector && view == .map && app.session.isRunning }, set: { showInspector = $0 })) {
-            ExitInspector(model: model, exit: selectedExit ?? model.map(app: app).exits.first, reroute: { rerouting = $0 })
+            ExitInspector(model: model, exit: selectedExit ?? model.profile.final ?? model.profile.rules.compactMap(\.outbound).first, reroute: { rerouting = $0 })
                 .inspectorColumnWidth(min: 300, ideal: 340, max: 420)
         }
         .sheet(item: $rerouting) { item in RerouteSheet(model: model, item: item) }
@@ -92,7 +92,9 @@ extension Notification.Name {
 
 // MARK: route map
 
-/// Traffic classes → exits, band width = live rate (same language as the overview).
+/// Traffic classes → exits, band width = share of the traffic (same language
+/// as the overview). Sampled once a second from RoutingModel.steadyMap, so
+/// rows keep their place while connections come and go.
 private struct RouteMapView: View {
     let model: RoutingModel
     let search: String
@@ -100,36 +102,55 @@ private struct RouteMapView: View {
     let reroute: (TrafficClass) -> Void
     @Environment(AppModel.self) private var app
     @State private var selectedClass: String?
+    @State private var map = RoutingModel.SteadyMap()
+    /// Shows the rules folded away past RouteMap.maxClasses.
+    @State private var showsAll = false
+
+    private func matches(_ item: TrafficClass) -> Bool {
+        search.isEmpty || item.name.localizedCaseInsensitiveContains(search) || item.condition.localizedCaseInsensitiveContains(search)
+            || item.exit.localizedCaseInsensitiveContains(search)
+    }
 
     var body: some View {
-        let map = model.map(app: app)
-        let classes = map.classes.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.condition.localizedCaseInsensitiveContains(search) || $0.exit.localizedCaseInsensitiveContains(search) }
+        let active = map.active.filter(matches), idle = map.idle.filter(matches)
+        // Everything with traffic, then idle rules up to the limit; a search shows every match.
+        let room = showsAll || !search.isEmpty ? idle.count : max(0, RouteMap.maxClasses - active.count)
+        let classes = active + idle.prefix(room)
+        let hidden = idle.count - min(room, idle.count)
         let focus = classes.first { $0.id == selectedClass }
-        if map.classes.isEmpty {
-            ContentUnavailableView {
-                Label("暂无规则", systemImage: "arrow.triangle.branch")
-            } description: {
-                Text(model.profileError ?? "所有流量走默认出口")
-            }
-        } else if classes.isEmpty {
-            ContentUnavailableView.search(text: search)
-        } else {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
-                Group {
-                    RouteColumns(classes: classes, exits: map.exits, focus: focus, selectedExit: $selectedExit,
-                                 select: { item in
-                                     selectedClass = selectedClass == item.id ? nil : item.id
-                                     if selectedClass != nil { selectedExit = item.exit }
-                                 }, reroute: reroute, chain: { model.chain($0, app: app) })
-                    if map.hiddenCount > 0 {
-                        Text("其他 \(map.hiddenCount) 条规则 · \(RateFormat.bitsPerSecond(map.hiddenRate))")
-                            .font(.footnote).foregroundStyle(.secondary)
+        Group {
+            if map.isEmpty {
+                ContentUnavailableView {
+                    Label("暂无规则", systemImage: "arrow.triangle.branch")
+                } description: {
+                    Text(model.profileError ?? "所有流量走默认出口")
+                }
+            } else if classes.isEmpty {
+                ContentUnavailableView.search(text: search)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        RouteColumns(classes: classes, idle: Set(idle.map(\.id)), shares: map.shares, focus: focus, selectedExit: $selectedExit,
+                                     select: { item in
+                                         selectedClass = selectedClass == item.id ? nil : item.id
+                                         if selectedClass != nil { selectedExit = item.exit }
+                                     }, reroute: reroute, chain: { model.chain($0, app: app) })
+                        if hidden > 0 || showsAll, search.isEmpty {
+                            Button(showsAll ? "只显示有流量的规则" : "显示其余 \(hidden) 条规则") { showsAll.toggle() }
+                                .buttonStyle(.bordered).buttonBorderShape(.capsule)
+                        }
                     }
+                    .padding(.horizontal, DesignMetrics.pageInset).padding(.vertical, 12)
                 }
             }
-            .padding(.horizontal, 16).padding(.vertical, 12)
         }
+        // Once a second, like the connections stream it follows; again at once when the profile or its overrides change.
+        .task(id: model.profile) {
+            while !Task.isCancelled {
+                let next = model.steadyMap(app: app, at: ProcessInfo.processInfo.systemUptime)
+                if next != map { map = next }
+                try? await Task.sleep(for: .seconds(1))
+            }
         }
     }
 }
@@ -177,7 +198,10 @@ private extension View {
 
 private struct RouteColumns: View {
     let classes: [TrafficClass]
-    let exits: [String]
+    /// Classes without traffic lately: drawn quieter.
+    let idle: Set<String>
+    /// Share of the smoothed traffic by class id.
+    let shares: [String: Double]
     let focus: TrafficClass?
     @Binding var selectedExit: String?
     let select: (TrafficClass) -> Void
@@ -186,14 +210,29 @@ private struct RouteColumns: View {
     @State private var frames: [RowFrame] = []
     private static let palette: [Color] = [.red, .purple, .blue, .teal, .orange, .pink, .indigo, .mint, .brown, .cyan, .green, .yellow]
 
+    /// By the rule's place in the profile, not its place on screen: a class
+    /// keeps its colour when rows come and go.
     private func color(_ item: TrafficClass) -> Color {
         if item.exit.hasPrefix("direct") || item.exit == "直连" { return .gray }
-        let index = classes.firstIndex(of: item) ?? 0
-        return Self.palette[index % Self.palette.count]
+        return Self.palette[(item.ruleIndex ?? Self.palette.count - 1) % Self.palette.count]
+    }
+
+    /// Exits of the rows shown, in the order the rows first use them.
+    private var exits: [String] {
+        var result: [String] = []
+        for item in classes where !result.contains(item.exit) { result.append(item.exit) }
+        return result
+    }
+
+    /// Why 22 and 2: a band as thick as a row would hide its neighbours; one
+    /// thinner than 2 pt cannot be seen. The square root keeps a class with a
+    /// tenth of the traffic at a third of the width, still readable.
+    private func width(_ item: TrafficClass) -> CGFloat {
+        guard let share = shares[item.id], share > 0 else { return 1 }
+        return max(2, 22 * CGFloat(share.squareRoot()))
     }
 
     var body: some View {
-        let maxRate = max(classes.map(\.rate).max() ?? 1, 1)
         ZStack(alignment: .topLeading) {
             Canvas { context, _ in
                 for item in classes {
@@ -205,12 +244,11 @@ private struct RouteColumns: View {
                     var path = Path()
                     path.move(to: start)
                     path.addCurve(to: end, control1: CGPoint(x: mid, y: start.y), control2: CGPoint(x: mid, y: end.y))
-                    // Width grows with the square root of the rate so one heavy
-                    // download does not flatten every other band.
-                    let width = item.rate > 0 ? max(2, 22 * sqrt(Double(item.rate) / Double(maxRate))) : 1
                     let dimmed = focus != nil && focus?.id != item.id
-                    let shade = item.rate > 0 ? color(item) : Color.secondary
-                    context.stroke(path, with: .color(shade.opacity(dimmed ? 0.08 : 0.5)), style: StrokeStyle(lineWidth: width, lineCap: .round))
+                    let carries = (shares[item.id] ?? 0) > 0
+                    let shade = carries ? color(item) : Color.secondary
+                    context.stroke(path, with: .color(shade.opacity(dimmed ? 0.08 : carries ? 0.5 : 0.25)),
+                                   style: StrokeStyle(lineWidth: width(item), lineCap: .round))
                 }
             }
             .allowsHitTesting(false)
@@ -218,12 +256,13 @@ private struct RouteColumns: View {
             HStack(alignment: .top, spacing: 0) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text("规则").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                        Text("流量类别").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                         Spacer()
-                        Text("下载速度").font(.caption).foregroundStyle(.tertiary)
+                        Text("宽度 = 流量占比").font(.caption).foregroundStyle(.tertiary)
                     }
                     ForEach(classes) { item in
-                        TrafficRow(item: item, tint: color(item), selected: focus?.id == item.id, dimmed: focus != nil && focus?.id != item.id)
+                        TrafficRow(item: item, tint: color(item), selected: focus?.id == item.id,
+                                   dimmed: focus != nil && focus?.id != item.id, quiet: idle.contains(item.id))
                             .reportFrame("c-" + item.id, in: "routes")
                             .onTapGesture { select(item) }
                             .contextMenu {
@@ -232,12 +271,16 @@ private struct RouteColumns: View {
                             }
                     }
                 }
-                .frame(minWidth: 200, maxWidth: .infinity)
+                // Why 150: the narrowest a row reads at (name, rate). With the
+                // inspector open the default window leaves the map about 450 pt;
+                // at the old 200 + 72 + 200 the two columns never fitted and
+                // the page fell back to a plain list without any bands.
+                .frame(minWidth: 150, maxWidth: .infinity)
                 // The bands need room to curve; fixed so both columns can grow.
-                Color.clear.frame(width: 72)
+                Color.clear.frame(width: 56)
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text("代理组").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                        Text("出口").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                         Spacer()
                         LatencyLegend().font(.caption).foregroundStyle(.tertiary)
                     }
@@ -248,13 +291,13 @@ private struct RouteColumns: View {
                             .onTapGesture { selectedExit = exit }
                     }
                 }
-                .frame(minWidth: 200, maxWidth: .infinity)
+                .frame(minWidth: 150, maxWidth: .infinity)
             }
             // Too narrow for two columns and the bands: a plain list, the exit under each rule.
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(classes) { item in
                     VStack(alignment: .leading, spacing: 4) {
-                        TrafficRow(item: item, tint: color(item), selected: focus?.id == item.id, dimmed: false)
+                        TrafficRow(item: item, tint: color(item), selected: focus?.id == item.id, dimmed: false, quiet: idle.contains(item.id))
                         ChainView(chain: chain(item.exit)).padding(.leading, 12)
                     }
                     .onTapGesture { selectedExit = item.exit }
@@ -266,6 +309,8 @@ private struct RouteColumns: View {
         .coordinateSpace(name: "routes")
         .onPreferenceChange(RowFrameKey.self) { frames = $0 }
         .animation(.snappy, value: focus?.id)
+        // Rows that change section slide to their new place instead of jumping.
+        .animation(.easeInOut(duration: 0.35), value: classes.map(\.id))
     }
 }
 
@@ -274,6 +319,8 @@ private struct TrafficRow: View {
     let tint: Color
     let selected: Bool
     let dimmed: Bool
+    /// No traffic lately (design: 没流量的类别淡显).
+    var quiet = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -295,7 +342,7 @@ private struct TrafficRow: View {
         .padding(.horizontal, 8).padding(.vertical, 6)
         .background(selected ? AnyShapeStyle(.selection.opacity(0.35)) : AnyShapeStyle(.fill.quinary), in: RoundedRectangle(cornerRadius: 8))
         .help("\(item.connections) 个连接 · \(item.exit)")
-        .opacity(dimmed ? 0.35 : 1)
+        .opacity(dimmed ? 0.35 : quiet ? 0.6 : 1)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(item.exit)

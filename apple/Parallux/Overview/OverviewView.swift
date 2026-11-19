@@ -34,7 +34,7 @@ struct OverviewView: View {
                     }
                     // Design v0.2: the diagram sits straight on the content
                     // layer, 330 pt tall, no box around it.
-                    HeldFlowDiagram(app: app)
+                    SteadyFlowDiagram(app: app)
                         .frame(height: 330)
                     OverviewCardRow {
                         ForEach(app.settings.value.dashboard.visible) { card in
@@ -176,32 +176,5 @@ struct SwitchesForm: View {
         .scrollDisabled(true)
         .scrollContentBackground(.hidden)
         .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-/// The overview's diagram, held through idle seconds (FlowHold) so it does
-/// not fall back to bare nodes between bursts of traffic (feat-link-view).
-/// The whole last picture is kept: links, exits, label and scale together.
-private struct HeldFlowDiagram: View {
-    let app: AppModel
-    @State private var held: FlowModel.Diagram?
-    @State private var heldAt: Date?
-
-    var body: some View {
-        let current = FlowModel.diagram(app)
-        let hold = FlowHold.next(current: current.exits, last: held?.exits ?? [], lastAt: heldAt, now: Date())
-        let shown = current.exits.isEmpty && !hold.shown.isEmpty ? held ?? current : current
-        FlowDiagram(links: shown.links, exits: shown.exits, centerLabel: shown.centre, capacity: shown.capacity)
-            // Once a second while shown, like the status stream it follows.
-            .task {
-                while !Task.isCancelled {
-                    let now = FlowModel.diagram(app)
-                    if !now.exits.isEmpty {
-                        held = now
-                        heldAt = Date()
-                    }
-                    try? await Task.sleep(for: .seconds(1))
-                }
-            }
     }
 }

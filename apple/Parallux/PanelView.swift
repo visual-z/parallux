@@ -83,10 +83,9 @@ private struct PanelHome: View {
     }
 
     private var strip: some View {
-        let diagram = FlowModel.diagram(app)
-        return PanelStrip(download: RateFormat.bitsPerSecond(app.session.status?.downlink ?? 0),
-                          upload: RateFormat.bitsPerSecond(app.session.status?.uplink ?? 0), action: openMainWindow) {
-            FlowDiagram(links: diagram.links, exits: diagram.exits, capacity: diagram.capacity, isCompact: true)
+        PanelStrip(download: RateFormat.bitsPerSecond(app.session.status?.downlink ?? 0),
+                   upload: RateFormat.bitsPerSecond(app.session.status?.uplink ?? 0), action: openMainWindow) {
+            SteadyFlowDiagram(app: app, isCompact: true)
         }
     }
 

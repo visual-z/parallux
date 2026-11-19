@@ -35,7 +35,24 @@ public struct FlowParticles: Sendable {
 
     public init() {}
 
-    public mutating func step(by seconds: Double, bands: [SankeyLayout.Band], using generator: inout some RandomNumberGenerator) {
+    /// How busy the dots are for a total rate, 0...1: the one thing in the
+    /// diagram that still says how much traffic there is, now that widths are
+    /// shares (docs/tasks/fix-flow-stability.md). Logarithmic, because rates
+    /// span five orders of magnitude and a thousand times the traffic should
+    /// look clearly busier, not a thousand times as dense.
+    /// Why these ends: under 10 kbit/s is background chatter (a few dots, so
+    /// the picture is not dead); 100 Mbit/s fills the bands as the design's
+    /// demo does. Assumed; to revisit, watch a download of known speed.
+    public static func intensity(bytesPerSecond rate: Double) -> Double {
+        guard rate.isFinite, rate > 0 else { return 0 }
+        let quiet = 1250.0, full = 12_500_000.0, least = 0.08
+        guard rate > quiet else { return least }
+        guard rate < full else { return 1 }
+        return least + (1 - least) * log10(rate / quiet) / log10(full / quiet)
+    }
+
+
+    public mutating func step(by seconds: Double, bands: [SankeyLayout.Band], intensity: Double = 1, using generator: inout some RandomNumberGenerator) {
         let dt = min(max(seconds.isFinite ? seconds : 0, 0), Self.longestStep)
         // Which (link, exit) pairs still have a band: a table, not a search
         // per particle (hundreds of particles, every frame).
@@ -57,7 +74,7 @@ public struct FlowParticles: Sendable {
         // Spawn in proportion to thickness: the whole part, then one more
         // with the fraction as its probability.
         for band in bands where band.left.length > 0 {
-            var expected = band.left.length * Self.density * dt
+            var expected = band.left.length * Self.density * dt * min(max(intensity.isFinite ? intensity : 0, 0), 1)
             while expected > 0 {
                 if expected >= 1 || Double.random(in: 0..<1, using: &generator) < expected {
                     kept.append(Particle(from: band.from, to: band.to, progress: 0,

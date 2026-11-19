@@ -38,16 +38,17 @@ enum FlowPalette {
     }
 }
 
-/// Links → centre bar → exits, band width = live rate against `capacity`
-/// (design v0.2). Geometry comes from SankeyLayout (INV-3, INV-7) and the dots
+/// Links → centre bar → exits, band width = share of the traffic (design
+/// v0.2; by share since docs/tasks/fix-flow-stability.md). Geometry comes from SankeyLayout (INV-3, INV-7) and the dots
 /// from FlowParticles (INV-8); this view only paints them. It takes plain
 /// values, so it can be rendered on its own with any numbers.
 struct FlowDiagram: View {
     let links: [FlowNode]
     let exits: [FlowNode]
     var centerLabel: String?
-    /// The rate that fills the height (FlowScale).
-    var capacity: Double
+    /// How busy the dots are, 0...1 (FlowParticles.intensity): widths are
+    /// shares, so this is what shows how much traffic there is.
+    var intensity = 1.0
     /// The menu bar panel's strip: no labels, thinner bars.
     var isCompact = false
 
@@ -72,7 +73,7 @@ struct FlowDiagram: View {
     var body: some View {
         GeometryReader { proxy in
             let metrics = Metrics(size: proxy.size, isCompact: isCompact)
-            let target = FlowMotion.Target(links: links.map(\.rate), exits: exits.map(\.rate), capacity: capacity)
+            let target = FlowMotion.Target(linkIDs: links.map(\.id), links: links.map(\.rate), exitIDs: exits.map(\.id), exits: exits.map(\.rate), intensity: intensity)
             ZStack(alignment: .topLeading) {
                 // Everything that moves is one GPU layer (FlowLayer); SwiftUI
                 // adds the labels on top, placed for the new sample at once.
@@ -86,7 +87,7 @@ struct FlowDiagram: View {
                 } else {
                     // No GPU to draw with: a still picture of the current sample.
                     Canvas { context, _ in
-                        let layout = SankeyLayout.make(left: target.links, right: target.exits, height: Double(metrics.region), gap: metrics.gap, capacity: capacity)
+                        let layout = SankeyLayout.make(leftShares: target.links, rightShares: target.exits, height: Double(metrics.region), gap: metrics.gap)
                         drawBandsAndNodes(layout, metrics: metrics, in: &context)
                     }
                 }
@@ -111,7 +112,7 @@ struct FlowDiagram: View {
     /// every frame was the costliest part of the old Canvas, and the nodes'
     /// centres shift by a few points at most from one second to the next.
     private func labels(_ m: Metrics, target: FlowMotion.Target) -> some View {
-        let layout = SankeyLayout.make(left: target.links, right: target.exits, height: Double(m.region), gap: m.gap, capacity: target.capacity)
+        let layout = SankeyLayout.make(leftShares: target.links, rightShares: target.exits, height: Double(m.region), gap: m.gap)
         let mid = { (span: Span) in m.inset + CGFloat((span.lower + span.upper) / 2) }
         return ZStack(alignment: .topLeading) {
             ForEach(Array(zip(links, layout.left)), id: \.0.id) { node, span in
@@ -247,11 +248,15 @@ struct FlowDiagram: View {
 /// while drawing, which must not invalidate the view. Main thread only (the
 /// layer's display link fires on the main run loop).
 final class FlowMotion {
-    /// What the diagram should show once it has settled.
+    /// What the diagram should show once it has settled. Rates are only
+    /// compared within a side (widths are shares); the ids say which node a
+    /// rate belongs to when the set changes.
     struct Target: Equatable {
+        var linkIDs: [String]
         var links: [Double]
+        var exitIDs: [String]
         var exits: [Double]
-        var capacity: Double
+        var intensity = 1.0
         /// Bands exist only with traffic on both sides; without them there is nothing to animate.
         var hasTraffic: Bool { links.contains { $0 > 0 } && exits.contains { $0 > 0 } }
     }
@@ -272,10 +277,22 @@ final class FlowMotion {
     /// samples nothing changes, and the layer asks 60 times a second.
     private var settled: (target: Target, metrics: FlowDiagram.Metrics, layout: SankeyLayout)?
 
+    private var linkIDs: [String] = []
+    private var exitIDs: [String] = []
+
+    /// A node that just appeared grows from nothing and the others make room,
+    /// rather than the whole picture jumping to the new set.
+    private func retarget(_ ease: inout FlowEase, ids: inout [String], to target: [Double], _ newIDs: [String]) {
+        guard ids != newIDs else { return ease.retarget(target) }
+        let drawn = Dictionary(zip(ids, ease.value), uniquingKeysWith: { first, _ in first })
+        ease.retarget(target, from: newIDs.map { drawn[$0] ?? 0 })
+        ids = newIDs
+    }
+
     /// The layout to draw at `date`; time only moves forward.
     func layout(at date: Date, target: Target, metrics: FlowDiagram.Metrics, easing: Bool) -> SankeyLayout {
-        linkEase.retarget(target.links)
-        exitEase.retarget(target.exits)
+        retarget(&linkEase, ids: &linkIDs, to: target.links, target.linkIDs)
+        retarget(&exitEase, ids: &exitIDs, to: target.exits, target.exitIDs)
         if easing {
             let dt = max(0, easedAt.map { date.timeIntervalSince($0) } ?? 0)
             linkEase.advance(by: dt)
@@ -289,7 +306,7 @@ final class FlowMotion {
         }
         let isSettled = linkEase.isSettled && exitEase.isSettled
         if isSettled, let settled, settled.target == target, settled.metrics == metrics { return settled.layout }
-        let layout = SankeyLayout.make(left: linkEase.value, right: exitEase.value, height: Double(metrics.region), gap: metrics.gap, capacity: target.capacity)
+        let layout = SankeyLayout.make(leftShares: linkEase.value, rightShares: exitEase.value, height: Double(metrics.region), gap: metrics.gap)
         settled = isSettled ? (target, metrics, layout) : nil
         return layout
     }
@@ -300,7 +317,7 @@ final class FlowMotion {
         // A long gap (the layer was gone while idle) is clamped inside step(by:).
         let dt = max(0, steppedAt.map { date.timeIntervalSince($0) } ?? 0)
         steppedAt = max(date, steppedAt ?? date)
-        particleModel.step(by: dt, bands: layout.bands, using: &generator)
+        particleModel.step(by: dt, bands: layout.bands, intensity: target.intensity, using: &generator)
         return Frame(layout: layout, particles: particleModel.particles)
     }
 }

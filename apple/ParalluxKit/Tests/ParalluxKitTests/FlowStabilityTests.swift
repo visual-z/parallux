@@ -257,4 +257,37 @@ import Testing
         rows.update(order: [], rates: ["r2": 3], at: 41)
         #expect(rows.active.isEmpty && rows.idle.isEmpty)
     }
+
+    @Test func particleDensityFollowsTheAbsoluteRate() {
+        // Widths are shares now, so how busy the dots are is what tells a trickle from a download.
+        #expect(FlowParticles.intensity(bytesPerSecond: 0) == 0, "no traffic, no dots")
+        #expect(FlowParticles.intensity(bytesPerSecond: -5) == 0)
+        #expect(FlowParticles.intensity(bytesPerSecond: .nan) == 0)
+        let trickle = FlowParticles.intensity(bytesPerSecond: 1)
+        #expect(trickle > 0 && trickle <= 0.2, "any traffic shows a few dots: \(trickle)")
+        #expect(FlowParticles.intensity(bytesPerSecond: 1e12) == 1)
+        #expect(FlowParticles.intensity(bytesPerSecond: 12_500_000) == 1, "100 Mbit/s is the full picture")
+        var previous = 0.0
+        for exponent in stride(from: 0.0, through: 9, by: 0.25) {
+            let value = FlowParticles.intensity(bytesPerSecond: pow(10, exponent))
+            #expect(value >= previous && value <= 1, "not monotone at 1e\(exponent)")
+            previous = value
+        }
+        // A thousand times the traffic is clearly busier, not a thousand times as many dots.
+        let slow = FlowParticles.intensity(bytesPerSecond: 12_500), fast = FlowParticles.intensity(bytesPerSecond: 12_500_000)
+        #expect(fast / slow >= 3 && fast / slow <= 20, "100 Kbit/s \(slow) against 100 Mbit/s \(fast)")
+
+        // The spawn rate follows it: half the intensity, about half the dots.
+        var rng = SplitMix64(seed: 0xD075)
+        let layout = SankeyLayout.make(leftShares: [1], rightShares: [1], height: 262, gap: 34)
+        var full = FlowParticles(), half = FlowParticles(), none = FlowParticles()
+        for _ in 0..<600 {
+            full.step(by: 1.0 / 60, bands: layout.bands, intensity: 1, using: &rng)
+            half.step(by: 1.0 / 60, bands: layout.bands, intensity: 0.5, using: &rng)
+            none.step(by: 1.0 / 60, bands: layout.bands, intensity: 0, using: &rng)
+        }
+        #expect(none.particles.isEmpty)
+        let ratio = Double(half.particles.count) / Double(max(full.particles.count, 1))
+        #expect(ratio > 0.35 && ratio < 0.65, "half the intensity gave \(half.particles.count) of \(full.particles.count) dots")
+    }
 }

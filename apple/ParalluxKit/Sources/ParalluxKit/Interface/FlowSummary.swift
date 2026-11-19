@@ -23,7 +23,17 @@ public enum FlowSummary {
     /// through one.
     static let directTypes: Set<String> = ["direct", "aggregate"]
 
+    /// The busiest exits right now: `rates` cut to `maxExits`, the rest merged
+    /// into 其他. A snapshot; FlowSlots gives the overview its memory.
     public static func exits(_ connections: [ConnectionRow]) -> [Exit] {
+        let sorted = rates(connections)
+        guard sorted.count > maxExits else { return sorted }
+        let rest = sorted[maxExits...].map(\.rate).reduce(0, &+)
+        return Array(sorted.prefix(maxExits)) + [Exit(name: otherName, rate: rest)]
+    }
+
+    /// Every exit that carries traffic right now, the busiest first.
+    public static func rates(_ connections: [ConnectionRow]) -> [Exit] {
         var rates: [String: Int64] = [:]
         for connection in connections {
             let rate = max(0, connection.uplink) &+ max(0, connection.downlink)
@@ -31,10 +41,7 @@ public enum FlowSummary {
             let name = directTypes.contains(connection.outboundType) ? directName : connection.outbound
             rates[name, default: 0] &+= rate
         }
-        let sorted = rates.map { Exit(name: $0.key, rate: $0.value) }
+        return rates.map { Exit(name: $0.key, rate: $0.value) }
             .sorted { $0.rate != $1.rate ? $0.rate > $1.rate : $0.name < $1.name }
-        guard sorted.count > maxExits else { return sorted }
-        let rest = sorted[maxExits...].map(\.rate).reduce(0, &+)
-        return Array(sorted.prefix(maxExits)) + [Exit(name: otherName, rate: rest)]
     }
 }

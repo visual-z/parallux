@@ -129,8 +129,24 @@ public struct RouteMap: Equatable, Sendable {
 
     public static func build(profile: RouteProfile, connections: [ConnectionRow], labels: [Int: String] = [:],
                              overridden: Set<Int> = []) -> RouteMap {
+        var classes = self.classes(profile: profile, connections: connections, labels: labels, overridden: overridden)
+        guard !classes.isEmpty else { return RouteMap(classes: [], hiddenCount: 0, hiddenRate: 0, exits: []) }
+        let order = Dictionary(uniqueKeysWithValues: classes.enumerated().map { ($1.id, $0) })
+        classes.sort { a, b in a.rate != b.rate ? a.rate > b.rate : order[a.id]! < order[b.id]! }
+        let visible = Array(classes.prefix(maxClasses))
+        let hidden = classes.dropFirst(maxClasses)
+        var exits: [String] = []
+        for item in visible where !exits.contains(item.exit) { exits.append(item.exit) }
+        return RouteMap(classes: visible, hiddenCount: hidden.count, hiddenRate: hidden.map(\.rate).reduce(0, &+), exits: exits)
+    }
+
+    /// Every traffic class in the profile's order (route.final last) with its
+    /// live rate: one per routing rule. `build` sorts and cuts this snapshot;
+    /// the route map keeps the order and steadies it (RouteRows).
+    public static func classes(profile: RouteProfile, connections: [ConnectionRow], labels: [Int: String] = [:],
+                               overridden: Set<Int> = []) -> [TrafficClass] {
         let routed = profile.rules.filter { $0.outbound != nil }
-        guard !routed.isEmpty || profile.final != nil else { return RouteMap(classes: [], hiddenCount: 0, hiddenRate: 0, exits: []) }
+        guard !routed.isEmpty || profile.final != nil else { return [] }
         // Connections name their rule in sing-box's print format; the rule's
         // matchKey is built the same way (RuleSummary), so match on item sets.
         var byKey: [String: Int] = [:]
@@ -155,13 +171,7 @@ public struct RouteMap: Equatable, Sendable {
             classes.append(TrafficClass(id: "final", ruleIndex: nil, name: TrafficLabel.finalName, condition: "route.final",
                                         exit: final, rate: rate, connections: count, overridden: false))
         }
-        let order = Dictionary(uniqueKeysWithValues: classes.enumerated().map { ($1.id, $0) })
-        classes.sort { a, b in a.rate != b.rate ? a.rate > b.rate : order[a.id]! < order[b.id]! }
-        let visible = Array(classes.prefix(maxClasses))
-        let hidden = classes.dropFirst(maxClasses)
-        var exits: [String] = []
-        for item in visible where !exits.contains(item.exit) { exits.append(item.exit) }
-        return RouteMap(classes: visible, hiddenCount: hidden.count, hiddenRate: hidden.map(\.rate).reduce(0, &+), exits: exits)
+        return classes
     }
 }
 
