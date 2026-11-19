@@ -388,4 +388,52 @@ import Testing
         #expect(halfway > 50 && halfway < 100)
         #expect(!half.isSettled)
     }
+
+    // docs/tasks/fix-panel-nodes-design-parity.md
+
+    @Test func panelNodeSectionsFilterAndFold() throws {
+        func group(_ tag: String, _ type: String, _ selected: String, _ items: [String]) -> OutboundGroupModel {
+            OutboundGroupModel(tag: tag, type: type, selectable: type == "selector", selected: selected,
+                               items: items.enumerated().map { .init(tag: $1, type: "trojan", delay: Int32($0 * 100)) })
+        }
+        let groups = [
+            group("proxy", "selector", "HK-03", ["HK-03", "HK-07", "JP-01", "US-05"]),
+            group("DE Auto", "urltest", "DE-1", ["DE-1", "DE-2"]),
+            group("流媒体", "selector", "SG-02", ["SG-02", "US-05"]),
+            group("备用", "fallback", "JP-01", ["JP-01"]),
+        ]
+        #expect(PanelNodeList.openByDefault == 2)
+        #expect(PanelNodeList.sections([], search: "", toggled: []).isEmpty)
+        #expect(PanelNodeList.sections([], search: "hk", toggled: ["proxy"]).isEmpty)
+
+        // No search: every group and node, the first two open.
+        let all = PanelNodeList.sections(groups, search: "", toggled: [])
+        try #require(all.count == 4)
+        #expect(all.map(\.tag) == ["proxy", "DE Auto", "流媒体", "备用"])
+        #expect(all.map(\.isOpen) == [true, true, false, false])
+        #expect(all.map { $0.items.map(\.tag) } == groups.map { $0.items.map(\.tag) })
+        #expect(all.map(\.subtitle) == ["手动选择", "自动测速", "手动选择", "fallback"])
+        #expect(all.map(\.selectable) == [true, false, true, false])
+        #expect(all.map(\.selected) == ["HK-03", "DE-1", "SG-02", "JP-01"])
+        #expect(all[0].items[2].delay == 200, "items are passed through, delay included")
+
+        // One group is open by default too.
+        #expect(PanelNodeList.sections([groups[2]], search: "", toggled: []).map(\.isOpen) == [true])
+
+        // A toggled group is the opposite of its default; an unknown name changes nothing.
+        #expect(PanelNodeList.sections(groups, search: "", toggled: ["proxy", "流媒体", "nope"]).map(\.isOpen) == [false, true, true, false])
+
+        // Search: case-insensitive on the node name, groups without a match
+        // drop out, and what is left is open whatever was toggled.
+        let hits = PanelNodeList.sections(groups, search: "us-", toggled: ["proxy"])
+        try #require(hits.count == 2)
+        #expect(hits.map(\.tag) == ["proxy", "流媒体"])
+        #expect(hits.map { $0.items.map(\.tag) } == [["US-05"], ["US-05"]])
+        #expect(hits.map(\.isOpen) == [true, true])
+        #expect(PanelNodeList.sections(groups, search: "nothing like this", toggled: []).isEmpty)
+
+        // Whitespace around the term is not part of it; only whitespace is no search.
+        #expect(PanelNodeList.sections(groups, search: "  jp-01 ", toggled: []).map(\.tag) == ["proxy", "备用"])
+        #expect(PanelNodeList.sections(groups, search: "   ", toggled: []) == all)
+    }
 }
