@@ -17,7 +17,24 @@ public struct LogEntry: Identifiable, Equatable, Sendable {
     public init(id: Int, level: LogLevel, message: String) {
         self.id = id
         self.level = level
-        self.message = message
+        self.message = Self.plain(message)
+    }
+
+    /// libbox formats logs for a terminal; drop CSI sequences (ESC [ params
+    /// final-letter), including a cut-off one at the end (fix-log-ansi-codes).
+    static func plain(_ raw: String) -> String {
+        guard raw.contains("\u{1B}") else { return raw }
+        var out = ""
+        out.reserveCapacity(raw.count)
+        var iterator = raw.unicodeScalars.makeIterator()
+        while let scalar = iterator.next() {
+            guard scalar == "\u{1B}" else { out.unicodeScalars.append(scalar); continue }
+            guard let next = iterator.next() else { break }
+            guard next == "[" else { continue }
+            // Parameters and intermediates until a final byte in @...~.
+            while let byte = iterator.next(), !(0x40...0x7E).contains(byte.value) {}
+        }
+        return out
     }
 }
 
