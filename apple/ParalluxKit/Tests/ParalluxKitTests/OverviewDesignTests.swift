@@ -232,4 +232,61 @@ import Testing
         #expect(LinkStanding.carrying.badge == nil)
         #expect(LinkStanding.disabled.badge == nil)
     }
+
+    // docs/tasks/fix-design-parity-followups.md
+
+    @Test func overviewSubtitleGivesWayToAProblem() {
+        #expect(OverviewCopy.subtitle(links: 2, mode: .bond, server: "东京 VPS", problem: "已连接，但读不到内核：EOF") == "已连接，但读不到内核：EOF")
+        #expect(OverviewCopy.subtitle(links: 1, mode: nil, server: nil, problem: "配置读取失败") == "配置读取失败")
+        #expect(OverviewCopy.subtitle(links: 2, mode: .bond, server: "东京 VPS", problem: nil) == "2 条线路 · 叠加 · 经东京 VPS")
+        #expect(OverviewCopy.subtitle(links: 2, mode: .failover, server: nil, problem: "") == "2 条线路 · 主备", "an empty problem is no problem")
+    }
+
+    @Test func linkStandingFollowsTheCoresLinkOrder() {
+        let three = ["en7", "en0", "en8"]
+        // 主备: the lead is the first healthy primary, then the first healthy backup, then simply the first.
+        #expect(LinkStanding.all(enabled: three, backup: [], unhealthy: ["en7"], mode: .failover) == ["en7": .standby, "en0": .primary, "en8": .standby])
+        #expect(LinkStanding.all(enabled: three, backup: ["en8"], unhealthy: ["en7", "en0"], mode: .failover) == ["en7": .standby, "en0": .standby, "en8": .primary])
+        #expect(LinkStanding.all(enabled: three, backup: [], unhealthy: Set(three), mode: .failover) == ["en7": .primary, "en0": .standby, "en8": .standby])
+        // 分流 and 叠加: every healthy primary carries; without one, a single link is picked as 主备 would.
+        for mode in [AggregationMode.balance, .bond] {
+            #expect(LinkStanding.all(enabled: three, backup: [], unhealthy: ["en0"], mode: mode) == ["en7": .carrying, "en0": .standby, "en8": .carrying])
+            #expect(LinkStanding.all(enabled: three, backup: ["en8"], unhealthy: ["en7", "en0"], mode: mode) == ["en7": .standby, "en0": .standby, "en8": .carrying])
+            #expect(LinkStanding.all(enabled: three, backup: [], unhealthy: Set(three), mode: mode) == ["en7": .carrying, "en0": .standby, "en8": .standby])
+        }
+        // One link is what it is, healthy or not; an unknown name in `unhealthy` changes nothing.
+        #expect(LinkStanding.all(enabled: ["en0"], backup: [], unhealthy: ["en0"], mode: nil) == ["en0": .carrying])
+        #expect(LinkStanding.all(enabled: three, backup: [], unhealthy: ["en9"], mode: .failover)
+            == LinkStanding.all(enabled: three, backup: [], mode: .failover))
+        #expect(LinkStanding.all(enabled: [], backup: [], unhealthy: ["en0"], mode: .failover).isEmpty)
+    }
+
+    @Test func topRuleNamesTheMostHitRuleAndItsShare() {
+        func row(_ id: Int, rule: String, outbound: String, type: String) -> ConnectionRow {
+            var row = ConnectionRow(id: "\(id)", process: "", destination: "", rule: rule, outbound: outbound)
+            row.outboundType = type
+            return row
+        }
+        #expect(OverviewCopy.topRule([]) == nil)
+        #expect(OverviewCopy.topRule([row(0, rule: "", outbound: "Proxy", type: "selector")]) == nil, "route.final is not a rule")
+
+        // 61 of 100 connections hit geosite-cn; most of those left directly.
+        var rows = (0..<58).map { row($0, rule: "rule_set=geosite-cn", outbound: "direct", type: "direct") }
+        rows += (58..<61).map { row($0, rule: "rule_set=geosite-cn", outbound: "CN-relay", type: "vmess") }
+        rows += (61..<90).map { row($0, rule: "rule_set=[geosite-youtube geosite-github]", outbound: "Proxy", type: "selector") }
+        rows += (90..<100).map { row($0, rule: "", outbound: "Proxy", type: "selector") }
+        #expect(OverviewCopy.topRule(rows) == "命中最多：geosite-cn → 直连（61%）")
+
+        // A rewritten direct outbound (two links or more) is still 直连; other items keep their key.
+        #expect(OverviewCopy.topRule([row(0, rule: "rule_set=geosite-cn", outbound: "direct", type: "aggregate")]) == "命中最多：geosite-cn → 直连（100%）")
+        #expect(OverviewCopy.topRule([row(0, rule: "protocol=dns", outbound: "dns-out", type: "dns"), row(1, rule: "", outbound: "Proxy", type: "selector")])
+            == "命中最多：protocol=dns → dns-out（50%）")
+        #expect(OverviewCopy.topRule([row(0, rule: "rule_set=[geosite-a geosite-b]", outbound: "Proxy", type: "selector")])
+            == "命中最多：rule_set=[geosite-a geosite-b] → Proxy（100%）")
+
+        // A tie goes to the smaller rule text, whatever order the connections arrive in.
+        let tie = [row(0, rule: "rule_set=geosite-b", outbound: "Proxy", type: "selector"), row(1, rule: "rule_set=geosite-a", outbound: "Proxy", type: "selector")]
+        #expect(OverviewCopy.topRule(tie) == "命中最多：geosite-a → Proxy（50%）")
+        #expect(OverviewCopy.topRule(tie.reversed()) == "命中最多：geosite-a → Proxy（50%）")
+    }
 }

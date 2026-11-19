@@ -5,7 +5,7 @@ import Foundation
 public enum OverviewCopy {
     /// Window subtitle: 「3 条线路 · 叠加 · 经东京 VPS」. Only 叠加 goes through
     /// the aggregation server; one link has no aggregation mode at all.
-    public static func subtitle(links: Int, mode: AggregationMode?, server: String?) -> String {
+    public static func subtitle(links: Int, mode: AggregationMode?, server: String?, problem: String? = nil) -> String {
         var parts = ["\(links) 条线路"]
         if let mode { parts.append(mode.title) }
         if mode == .bond, let server, !server.isEmpty {
@@ -42,6 +42,9 @@ public enum OverviewCopy {
         return "\(server) → \(node)"
     }
 
+    /// 「命中最多：geosite‑cn → 直连（61%）」 for the route mode card.
+    public static func topRule(_ connections: [ConnectionRow]) -> String? { nil }
+
     /// Above the centre bar: 「叠加 · 731 Mbps」.
     public static func centre(mode: AggregationMode?, rate: Int64) -> String {
         let speed = RateFormat.bitsPerSecond(rate)
@@ -66,7 +69,7 @@ public enum LinkStanding: Equatable, Sendable {
     ///   - backup: names marked 仅备用.
     ///   - mode: the aggregation mode in effect; nil with fewer than two links.
     /// - Returns: one entry per enabled link. A link without an entry is disabled.
-    public static func all(enabled: [String], backup: Set<String>, mode: AggregationMode?) -> [String: LinkStanding] {
+    public static func all(enabled: [String], backup: Set<String>, unhealthy: Set<String> = [], mode: AggregationMode?) -> [String: LinkStanding] {
         guard let first = enabled.first else { return [:] }
         // The core skips backup-only links while any other is usable; when
         // every link is backup-only the first one takes the traffic anyway.
