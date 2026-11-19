@@ -289,4 +289,10 @@ import Testing
         #expect(OverviewCopy.topRule(tie) == "命中最多：geosite-a → Proxy（50%）")
         #expect(OverviewCopy.topRule(tie.reversed()) == "命中最多：geosite-a → Proxy（50%）")
     }
+
+    @Test func topRuleOmitsAnExitItDoesNotKnow() {
+        // A connection the core reports without an outbound must not print 「→ （100%）」.
+        let row = ConnectionRow(id: "1", process: "", destination: "", rule: "rule_set=geosite-cn", outbound: "")
+        #expect(OverviewCopy.topRule([row]) == "命中最多：geosite-cn（100%）")
+    }
 }

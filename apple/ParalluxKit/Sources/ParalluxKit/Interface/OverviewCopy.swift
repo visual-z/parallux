@@ -53,6 +53,8 @@ public enum OverviewCopy {
     /// profile. nil when no connection matched a rule (only route.final).
     public static func topRule(_ connections: [ConnectionRow]) -> String? {
         var byRule: [String: [ConnectionRow]] = [:]
+        // Counted as the core reports them, DNS lookups included: on a profile
+        // that routes DNS by rule, that rule may well be the busiest one.
         for connection in connections where !connection.rule.isEmpty { byRule[connection.rule, default: []].append(connection) }
         // Most hits first; a tie goes to the smaller text so the line does not flicker.
         guard let (rule, hits) = byRule.min(by: { $0.value.count != $1.value.count ? $0.value.count > $1.value.count : $0.key < $1.key }) else { return nil }
@@ -66,7 +68,7 @@ public enum OverviewCopy {
         let single = "rule_set="
         let name = rule.hasPrefix(single) && !rule.contains(" ") && !rule.contains("[") ? String(rule.dropFirst(single.count)) : rule
         let share = Int((Double(hits.count) / Double(connections.count) * 100).rounded())
-        return "命中最多：\(name) → \(exit)（\(share)%）"
+        return exit.isEmpty ? "命中最多：\(name)（\(share)%）" : "命中最多：\(name) → \(exit)（\(share)%）"
     }
 
     /// Above the centre bar: 「叠加 · 731 Mbps」.

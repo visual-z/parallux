@@ -69,9 +69,15 @@ struct OverviewView: View {
     }
 
     /// What the status line would say instead of 「已连接 · …」: a failed
-    /// action, or a core the app cannot read.
+    /// action, an extension that needs approval or failed, or a core the app
+    /// cannot read. The same conditions StatusLine.text puts first.
     private var problem: String? {
-        app.lastError != nil || app.tunnel.startError != nil || app.session.lastError != nil ? app.statusLine : nil
+        let setupNeedsAttention = switch app.tunnel.phase {
+        case .awaitingApproval, .failed: true
+        default: false
+        }
+        let any = setupNeedsAttention || app.lastError != nil || app.tunnel.startError != nil || app.session.lastError != nil
+        return any ? app.statusLine : nil
     }
 
     /// The server 叠加 goes through, when 叠加 is what is in effect.
