@@ -68,6 +68,11 @@ struct RouteModeCard: View {
     /// The clash modes the running configuration offers (often just one).
     let modes: [String]
     @Binding var mode: String
+    /// Decision 21: 聚合 and 代理 sit with the other mode controls.
+    @Binding var aggregation: Bool
+    var aggregationDisabled = false
+    @Binding var proxy: Bool
+    var proxyDisabled = false
     @Binding var systemProxy: Bool
     var systemProxyDisabled = false
 
@@ -79,16 +84,22 @@ struct RouteModeCard: View {
                     set: { if modes.indices.contains($0) { mode = modes[$0] } }
                 ))
                 .accessibilityLabel(DashboardCard.routeMode.title)
+                .padding(.bottom, 4)
             }
-            Toggle(isOn: $systemProxy) {
-                Text("系统 HTTP 代理").font(.callout.weight(.medium)).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .toggleStyle(.switch).controlSize(.small)
-            .padding(.top, 6)
-            .disabled(systemProxyDisabled)
-            .help("修改操作系统的代理设置")
+            row("聚合", isOn: $aggregation).disabled(aggregationDisabled)
+            row("代理", isOn: $proxy).disabled(proxyDisabled)
+            row("系统 HTTP 代理", isOn: $systemProxy).disabled(systemProxyDisabled)
+                .help("修改操作系统的代理设置")
         }
+    }
+
+    /// Design: the label on the left in the card's quiet type, the switch on the right.
+    private func row(_ title: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            Text(title).font(.callout.weight(.medium)).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .toggleStyle(.switch).controlSize(.small)
     }
 }
 

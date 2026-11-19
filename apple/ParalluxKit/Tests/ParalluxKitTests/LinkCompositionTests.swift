@@ -189,3 +189,36 @@ extension LinkCompositionTests {
         #expect(links["mode"] as? String == "bond")
     }
 }
+
+/// fix-link-rates-across-groups: `direct` and `parallux-links` are two
+/// aggregates with their own counters for the same links.
+@Suite struct LinkRatesAcrossGroupsTests {
+    static func link(_ tag: String, _ up: Int64, _ down: Int64) -> LinkGroupStat.Link {
+        .init(tag: tag, healthy: true, backup: false, upload: up, download: down, active: 0)
+    }
+
+    static func group(_ tag: String, _ links: [LinkGroupStat.Link]) -> LinkGroupStat {
+        .init(tag: tag, mode: "balance", links: links)
+    }
+
+    @Test func linkRatesSumEveryGroupWhateverTheOrder() {
+        let before = [Self.group("direct", [Self.link("link-en0", 100, 1000), Self.link("link-en7", 0, 0)]),
+                      Self.group("parallux-links", [Self.link("link-en0", 0, 0), Self.link("link-en7", 50, 500)])]
+        let after = [Self.group("direct", [Self.link("link-en0", 300, 3000), Self.link("link-en7", 0, 0)]),
+                     Self.group("parallux-links", [Self.link("link-en0", 0, 0), Self.link("link-en7", 150, 2500)])]
+        let expected: [String: LinkRates.Rate] = ["link-en0": .init(upload: 200, download: 2000), "link-en7": .init(upload: 100, download: 2000)]
+        for previous in [before, before.reversed()] {
+            for current in [after, after.reversed()] {
+                #expect(LinkRates.rates(previous: Array(previous), current: Array(current), interval: 1) == expected)
+            }
+        }
+        // A group that appears only now contributes 0 this time.
+        let added = after + [Self.group("other", [Self.link("link-en0", 9999, 9999)])]
+        #expect(LinkRates.rates(previous: before, current: added, interval: 1) == expected)
+        // A reset counter is 0, not negative; the other group still counts.
+        let reset = [Self.group("direct", [Self.link("link-en0", 1, 1), Self.link("link-en7", 0, 0)]), after[1]]
+        #expect(LinkRates.rates(previous: before, current: reset, interval: 1)["link-en0"] == .init(upload: 0, download: 0))
+        #expect(LinkRates.rates(previous: before, current: reset, interval: 1)["link-en7"] == .init(upload: 100, download: 2000))
+        #expect(LinkRates.rates(previous: before, current: after, interval: 0).isEmpty)
+    }
+}

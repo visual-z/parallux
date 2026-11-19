@@ -46,7 +46,7 @@ final class WidgetSnapshotWriter {
         return WidgetSnapshot(
             connected: app.tunnel.isConnected,
             mode: app.effectiveMode?.rawValue,
-            linkCount: max(app.enabledLinks.count, app.links.links.isEmpty ? 0 : 1),
+            linkCount: max(app.activeLinks.count, app.links.links.isEmpty ? 0 : 1),
             rate: (status?.uplink ?? 0) + (status?.downlink ?? 0),
             profileName: app.profiles.store.selected?.name,
             updatedAt: Date()

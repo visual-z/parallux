@@ -32,8 +32,9 @@ private struct PanelHome: View {
     let openMainWindow: () -> Void
     let openSettings: () -> Void
 
-    private var isOn: Binding<Bool> {
-        Binding(get: { app.isOn }, set: { on in Task { await app.setOn(on) } })
+    private func switchBinding(_ which: ConnectionSwitches.Which) -> Binding<Bool> {
+        Binding(get: { which == .aggregation ? app.switches.aggregation : app.switches.proxy },
+                set: { on in Task { await app.setSwitch(which, on: on) } })
     }
 
     var body: some View {
@@ -47,6 +48,8 @@ private struct PanelHome: View {
                     .padding(.horizontal, 16).padding(.bottom, 6)
             }
             if app.tunnel.isConnected { strip.padding(.horizontal, 12) }
+            switches.padding(.horizontal, 16).padding(.top, 8)
+            PanelSeparator()
             PanelSection(title: "线路") { links }
             PanelSeparator()
             PanelSection(title: "聚合方式") { aggregation }
@@ -63,9 +66,20 @@ private struct PanelHome: View {
                 Text(app.statusLine).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer()
-            Toggle(app.isOn ? "停止" : "启动", isOn: isOn).toggleStyle(.switch).labelsHidden().controlSize(.regular)
-                .disabled(app.tunnel.isBusy || !app.controlsLocalCore)
         }
+    }
+
+    /// 聚合 and 代理, the two switches of decision 21; both off disconnects.
+    /// They took the place of the design's single switch in the header.
+    @ViewBuilder private var switches: some View {
+        let busy = app.tunnel.isBusy || !app.controlsLocalCore
+        PanelSwitchRow(symbol: "point.3.connected.trianglepath.dotted", title: "聚合",
+                       detail: app.enabledLinks.count < 2 ? "不可用" : "\(app.linkSettings.value.mode.title) · \(app.enabledLinks.count) 条线路",
+                       isOn: switchBinding(.aggregation))
+            .disabled(busy || app.enabledLinks.count < 2)
+        PanelSwitchRow(symbol: "globe", title: "代理", detail: app.profiles.store.selected?.name ?? "无配置",
+                       isOn: switchBinding(.proxy))
+            .disabled(busy)
     }
 
     private var strip: some View {
@@ -85,13 +99,14 @@ private struct PanelHome: View {
             let ib = prefs.order.firstIndex(of: b.name) ?? Int.max
             return ia != ib ? ia < ib : a.name < b.name
         }
-        let standings = LinkStanding.all(enabled: app.enabledLinks.map(\.name), backup: prefs.backup, mode: app.effectiveMode)
+        let standings = LinkStanding.all(enabled: app.activeLinks.map(\.name), backup: prefs.backup, mode: app.effectiveMode)
         if ordered.isEmpty {
             Text("不可用").foregroundStyle(.secondary).frame(minHeight: 30)
         }
         ForEach(ordered) { link in
-            let standing = standings[link.name] ?? .disabled
-            PanelLinkRow(symbol: link.kind.symbol, name: link.kind.title, badge: standing.badge,
+            // Enabled but not in use (聚合 is off): no standing, nothing to report.
+            let standing = standings[link.name] ?? (prefs.disabled.contains(link.name) ? .disabled : nil)
+            PanelLinkRow(symbol: link.kind.symbol, name: link.kind.title, badge: standing?.badge,
                          detail: "\(link.displayName) · \(link.name)", trailing: carried(link, standing),
                          color: LinkColors.color(for: link, in: app.links.links),
                          isOn: Binding(
@@ -105,7 +120,8 @@ private struct PanelHome: View {
     }
 
     /// The right-hand side of a link row: 已停用, 不可用, 待命 or the live rate.
-    private func carried(_ link: LinkInterface, _ standing: LinkStanding) -> String {
+    private func carried(_ link: LinkInterface, _ standing: LinkStanding?) -> String {
+        guard let standing else { return "" }
         if standing == .disabled { return OverviewCopy.linkDetail(enabled: false, standby: false, rate: 0) }
         guard app.tunnel.isConnected else { return "" }
         let tag = ProfileComposer.linkTag(link.name)
@@ -121,6 +137,9 @@ private struct PanelHome: View {
         ))
         .accessibilityLabel("聚合方式")
         .disabled(app.enabledLinks.count < 2 || !app.controlsLocalCore)
+        if let notice = app.aggregationNotice {
+            Text(notice).font(.caption).foregroundStyle(.secondary).padding(.top, 4)
+        }
         // Only 叠加 goes through a server (design: the row is hidden otherwise).
         if app.linkSettings.value.mode == .bond {
             PanelRow(title: "聚合服务器") {

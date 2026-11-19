@@ -84,6 +84,30 @@ struct RoundSwitchStyle: ToggleStyle {
     }
 }
 
+/// 聚合 or 代理 (decision 21): a glyph, the name over one line of what it
+/// stands for, the system switch on the right.
+struct PanelSwitchRow: View {
+    let symbol: String
+    let title: String
+    let detail: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            HStack(spacing: 10) {
+                Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(.secondary).frame(width: 28)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                    Text(detail).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .toggleStyle(.switch).controlSize(.small)
+        .frame(minHeight: 36)
+    }
+}
+
 /// A label with its control on the right (the design's `.prow`).
 struct PanelRow<Trailing: View>: View {
     let title: String

@@ -23,6 +23,7 @@ struct OverviewView: View {
             } actions: {
                 Button("连接") { Task { await app.setOn(true) } }.buttonStyle(.borderedProminent)
                     .disabled(!app.controlsLocalCore || app.tunnel.isBusy)
+                SwitchesForm(app: app).frame(width: 320)
             }
             .navigationSubtitle(app.statusLine)
         } else {
@@ -49,7 +50,7 @@ struct OverviewView: View {
                 }
                 .padding(.horizontal, 16).padding(.bottom, 16)
             }
-            .navigationSubtitle(OverviewCopy.subtitle(links: app.enabledLinks.count, mode: app.effectiveMode, server: bondServerName))
+            .navigationSubtitle(OverviewCopy.subtitle(links: app.activeLinks.count, mode: app.effectiveMode, server: bondServerName))
             .toolbar {
                 // Design v0.2: the aggregation mode is switched from the
                 // overview's toolbar, next to the power button.
@@ -86,6 +87,10 @@ struct OverviewView: View {
         let session = app.session
         return RouteModeCard(modes: session.routeModes,
                              mode: Binding(get: { session.routeMode ?? "" }, set: { session.setRouteMode($0) }),
+                             aggregation: Binding(get: { app.switches.aggregation }, set: { on in Task { await app.setSwitch(.aggregation, on: on) } }),
+                             aggregationDisabled: app.tunnel.isBusy || !app.controlsLocalCore || app.enabledLinks.count < 2,
+                             proxy: Binding(get: { app.switches.proxy }, set: { on in Task { await app.setSwitch(.proxy, on: on) } }),
+                             proxyDisabled: app.tunnel.isBusy || !app.controlsLocalCore,
                              systemProxy: $settings.value.tunnel.systemProxyEnabled,
                              systemProxyDisabled: !app.controlsLocalCore)
     }
@@ -134,5 +139,30 @@ private struct DeprecationBanner: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+/// 聚合 and 代理 on the overview (decision 21): off, both show off and
+/// turning one on connects with just that one.
+struct SwitchesForm: View {
+    let app: AppModel
+
+    private func binding(_ which: ConnectionSwitches.Which) -> Binding<Bool> {
+        Binding(get: { which == .aggregation ? app.switches.aggregation : app.switches.proxy },
+                set: { on in Task { await app.setSwitch(which, on: on) } })
+    }
+
+    var body: some View {
+        let busy = app.tunnel.isBusy || !app.controlsLocalCore
+        Form {
+            Section {
+                Toggle("聚合", isOn: binding(.aggregation)).disabled(busy || app.enabledLinks.count < 2)
+                Toggle("代理", isOn: binding(.proxy)).disabled(busy)
+            }
+        }
+        .formStyle(.grouped)
+        .scrollDisabled(true)
+        .scrollContentBackground(.hidden)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }

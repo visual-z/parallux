@@ -108,6 +108,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(ActionItem(app.isOn ? "停止" : "启动") { [app] in
             Task { await app.setOn(!app.isOn) }
         })
+        let switches = app.switches
+        let aggregate = ActionItem("聚合") { [app] in Task { await app.setSwitch(.aggregation, on: !switches.aggregation) } }
+        aggregate.state = switches.aggregation ? .on : .off
+        aggregate.isEnabled = app.enabledLinks.count >= 2
+        menu.addItem(aggregate)
+        let proxy = ActionItem("代理") { [app] in Task { await app.setSwitch(.proxy, on: !switches.proxy) } }
+        proxy.state = switches.proxy ? .on : .off
+        menu.addItem(proxy)
         menu.addItem(.separator())
 
         let aggregation = NSMenu()
