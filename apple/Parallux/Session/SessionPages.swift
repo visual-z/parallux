@@ -72,28 +72,32 @@ struct ConnectionsView: View {
                                            systemImage: "arrow.left.arrow.right")
                 }
             } else {
-                // Column titles: Clash Verge Rev connections.fields.*
+                // Columns as design v0.2 names them. Its 「线路」 column needs the
+                // core to record links per connection (design-additions.md);
+                // 「流量」 stands there until it does.
                 Table(rows, selection: $selection) {
-                    TableColumn("主机") { row in
+                    TableColumn("进程") { Text($0.process.isEmpty ? "—" : $0.process).lineLimit(1) }
+                        .width(min: 60, ideal: 90)
+                    TableColumn("目标") { row in
                         Text(row.destination).lineLimit(1).truncationMode(.middle).foregroundStyle(row.isClosed ? .secondary : .primary)
                     }
                     .width(min: 140, ideal: 240)
-                    TableColumn("进程") { Text($0.process.isEmpty ? "—" : $0.process).lineLimit(1) }
-                        .width(min: 60, ideal: 90)
                     TableColumn("规则") { row in
-                        Text(row.rule.isEmpty ? "MATCH" : row.rule).font(.callout.monospaced()).lineLimit(1).truncationMode(.middle)
+                        DesignTag(text: row.rule.isEmpty ? "final" : row.rule)
                     }
                     .width(min: 80, ideal: 180)
-                    TableColumn("链路") { row in
+                    TableColumn("出站") { row in
                         Text(row.chain.isEmpty ? row.outbound : row.chain.joined(separator: " › ")).lineLimit(1)
                     }
                     .width(min: 70, ideal: 140)
-                    TableColumn("下载速度") { row in
+                    TableColumn("↓") { row in
                         Text(row.isClosed ? "—" : RateFormat.bitsPerSecond(row.downlink)).monospacedDigit()
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                     .width(min: 60, ideal: 80)
                     TableColumn("流量") { row in
                         Text(RateFormat.bytes(row.downlinkTotal + row.uplinkTotal)).monospacedDigit()
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                     .width(min: 56, ideal: 72)
                 }
@@ -137,28 +141,35 @@ private struct ConnectionInspector: View {
 
     var body: some View {
         if let row {
-            Form {
-                Section {
-                    LabeledContent("目标地址", value: row.destination)
-                    LabeledContent("进程", value: row.process.isEmpty ? "—" : row.process)
-                    LabeledContent("网络", value: row.network.uppercased())
-                    LabeledContent("连接时间", value: row.createdAt.formatted(date: .omitted, time: .standard))
-                }
-                Section {
-                    LabeledContent("规则", value: row.rule.isEmpty ? "MATCH" : row.rule)
-                    LabeledContent("链路", value: row.chain.isEmpty ? row.outbound : row.chain.joined(separator: " › "))
-                    Button("评估连接") {
-                        app.pendingExplainTarget = ExplainView.host(row.destination)
-                        NotificationCenter.default.post(name: .explainRoute, object: nil)
+            // Design v0.2: the destination as the title, a key-value list, then the actions.
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(row.destination).font(.headline).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, 8)
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        DesignKeyValues(rows: [
+                            ("进程", row.process.isEmpty ? "—" : row.process),
+                            ("规则", row.rule.isEmpty ? "final" : row.rule),
+                            ("出站链", row.chain.isEmpty ? row.outbound : row.chain.joined(separator: " → ")),
+                            ("协议", row.network.uppercased()),
+                            ("持续", row.isClosed ? "已关闭" : ConnectionCopy.duration(context.date.timeIntervalSince(row.createdAt))),
+                        ])
                     }
+                    Text("流量").font(.headline).padding(.top, 18).padding(.bottom, 8)
+                    DesignKeyValues(rows: [("下载", RateFormat.bytes(row.downlinkTotal)), ("上传", RateFormat.bytes(row.uplinkTotal))])
+                    HStack(spacing: 8) {
+                        Button("关闭连接") { session.closeConnection(row.id) }.designPill().disabled(row.isClosed)
+                        Button("评估连接") {
+                            app.pendingExplainTarget = ExplainView.host(row.destination)
+                            NotificationCenter.default.post(name: .explainRoute, object: nil)
+                        }
+                        .designPill()
+                    }
+                    .padding(.top, 18)
                 }
-                Section {
-                    LabeledContent("下载", value: RateFormat.bytes(row.downlinkTotal))
-                    LabeledContent("上传", value: RateFormat.bytes(row.uplinkTotal))
-                }
-                Button("关闭连接", role: .destructive) { session.closeConnection(row.id) }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
             }
-            .formStyle(.grouped)
         } else {
             ContentUnavailableView("无数据", systemImage: "sidebar.trailing")
         }
@@ -181,19 +192,19 @@ struct LogsView: View {
             } else if entries.isEmpty {
                 if search.isEmpty { ContentUnavailableView("无日志", systemImage: "doc.plaintext") } else { ContentUnavailableView.search(text: search) }
             } else {
+                // Design v0.2: one monospaced box. Lazy, because the buffer
+                // holds up to CoreSession.logCapacity lines.
                 ScrollViewReader { proxy in
-                    List(entries) { entry in
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(entry.level.title).font(.caption2.monospaced().weight(.semibold))
-                                .foregroundStyle(entry.level <= .error ? .red : entry.level == .warn ? .orange : .secondary)
-                                .frame(width: 44, alignment: .leading)
-                            Text(entry.message).font(.callout.monospaced()).textSelection(.enabled)
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(entries) { entry in
+                                LogLineView(level: entry.level, message: entry.message).id(entry.id)
+                            }
                         }
-                        .id(entry.id)
-                        .listRowSeparator(.hidden)
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(DesignMetrics.cardFill, in: RoundedRectangle(cornerRadius: DesignMetrics.cardRadius))
+                        .padding(.horizontal, DesignMetrics.pageInset).padding(.vertical, 16)
                     }
-                    .listStyle(.plain)
-                    .environment(\.defaultMinListRowHeight, 18)
                     .onChange(of: entries.last?.id) { _, last in
                         if let last, !session.logsPaused { proxy.scrollTo(last, anchor: .bottom) }
                     }

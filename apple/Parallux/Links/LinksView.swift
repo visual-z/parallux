@@ -30,28 +30,19 @@ struct LinksView: View {
     }
 
     private func content(_ links: [LinkInterface]) -> some View {
-        List {
-            Section {
-                ForEach(links) { link in
-                    LinkRow(link: link)
-                }
-                .onMove { source, destination in
-                    var names = links.map(\.name)
-                    names.move(fromOffsets: source, toOffset: destination)
-                    app.linkSettings.value.preferences.order = names
-                    Task { await app.applyLinkChanges() }
-                }
-            } footer: {
-                // Design v0.2, links page.
-                Text("拖动排序决定主备模式下的优先级。").font(.caption).foregroundStyle(.secondary)
+        // Design v0.2, links page: one list card, the shared-egress warning, a note.
+        DesignPage {
+            DesignList(items: links, id: \.name, move: { dragged, target in
+                app.linkSettings.value.preferences.order = ListReorder.moving(dragged, onto: target, in: links.map(\.name))
+                Task { await app.applyLinkChanges() }
+            }) { link in
+                row(link)
             }
             if let warning = SharedEgress.warning(links: app.enabledLinks, egress: app.links.egress) {
-                Section {
-                    Label(warning, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
-                }
+                DesignWarning(text: warning).padding(.top, 10)
             }
+            DesignNote(text: "拖动排序决定主备模式下的优先级。").padding(.top, 10)
         }
-        .listStyle(.inset(alternatesRowBackgrounds: false))
         .navigationSubtitle("\(links.count) 个网口")
         .toolbar {
             ToolbarItem {
@@ -65,6 +56,48 @@ struct LinksView: View {
         }
     }
 
+    private func row(_ link: LinkInterface) -> some View {
+        let tag = ProfileComposer.linkTag(link.name)
+        let rate = RateFormat.bitsPerSecond(app.linkStats.rates[tag]?.total ?? 0)
+        let prefs = app.linkSettings.value.preferences
+        var addresses = ["IP 地址 \(link.address ?? "—")"]
+        if let ip = app.links.egress[link.name] { addresses.append("外部地址 \(ip)") }
+        // One state per link, merged over every aggregate (LinkView).
+        let status: LinkRowView.Status
+        let activity: String
+        if let stat = app.linkStats.link(tag) {
+            status = stat.healthy ? .init(text: "已连接", tone: .good) : .init(text: "不可用", tone: .bad)
+            activity = "\(rate) · 连接 \(stat.active)"
+        } else if app.tunnel.isConnected {
+            // No aggregate has it: 聚合 is off or the link is not enabled.
+            let inUse = app.activeLinks.contains { $0.name == link.name }
+            status = inUse ? .init(text: "已连接", tone: .good) : .init(text: "未使用", tone: .plain)
+            activity = rate
+        } else {
+            status = .init(text: "未连接", tone: .plain)
+            activity = ""
+        }
+        return LinkRowView(
+            symbol: link.kind.symbol, color: LinkColors.color(for: link, in: app.links.links),
+            name: link.kind.title, badge: prefs.backup.contains(link.name) ? "仅备用" : nil,
+            detail: "\(link.displayName) · \(link.name)", addresses: addresses, status: status, activity: activity,
+            isOn: Binding(
+                get: { !app.linkSettings.value.preferences.disabled.contains(link.name) },
+                set: { on in
+                    if on { app.linkSettings.value.preferences.disabled.remove(link.name) } else { app.linkSettings.value.preferences.disabled.insert(link.name) }
+                    Task { await app.applyLinkChanges() }
+                }
+            ),
+            isBackupOnly: Binding(
+                get: { app.linkSettings.value.preferences.backup.contains(link.name) },
+                set: { on in
+                    if on { app.linkSettings.value.preferences.backup.insert(link.name) } else { app.linkSettings.value.preferences.backup.remove(link.name) }
+                    Task { await app.applyLinkChanges() }
+                }
+            )
+        )
+    }
+
     private func detectEgress() {
         Task.detached {
             let results = (try? CommandXPCDialer.probeLinks()) ?? []
@@ -72,82 +105,6 @@ struct LinksView: View {
                 var egress: [String: String] = [:]
                 for result in results { if let ip = result.egressIP { egress[result.interface] = ip } }
                 app.links.egress = egress
-            }
-        }
-    }
-}
-
-private struct LinkRow: View {
-    let link: LinkInterface
-    @Environment(AppModel.self) private var app
-
-    var body: some View {
-        let tag = ProfileComposer.linkTag(link.name)
-        let rate = app.linkStats.rates[tag]
-        let stat = app.linkStats.link(tag)
-        let prefs = app.linkSettings.value.preferences
-        HStack(spacing: 10) {
-            Image(systemName: link.kind.symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
-                .frame(width: 26, height: 26).background(LinkColors.color(for: link, in: app.links.links), in: Circle())
-            // Wide windows put the addresses in their own column; narrow ones
-            // stack them under the name instead of overflowing.
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) {
-                    names.frame(minWidth: 150, alignment: .leading)
-                    addresses
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    names
-                    addresses
-                }
-            }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 2) {
-                if let stat {
-                    Text(stat.healthy ? "已连接" : "不可用").font(.caption).foregroundStyle(stat.healthy ? .green : .red)
-                    Text("\(RateFormat.bitsPerSecond(rate?.total ?? 0)) · 连接 \(stat.active)").font(.caption).monospacedDigit().foregroundStyle(.secondary)
-                } else if app.tunnel.isConnected {
-                    // No aggregate has it: 聚合 is off or the link is not enabled.
-                    let inUse = app.activeLinks.contains { $0.name == link.name }
-                    Text(inUse ? "已连接" : "未使用").font(.caption).foregroundStyle(inUse ? .green : .secondary)
-                    Text(RateFormat.bitsPerSecond(rate?.total ?? 0)).font(.caption).monospacedDigit().foregroundStyle(.secondary)
-                } else {
-                    Text("未连接").font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            Toggle("仅备用", isOn: Binding(
-                get: { prefs.backup.contains(link.name) },
-                set: { on in
-                    if on { app.linkSettings.value.preferences.backup.insert(link.name) } else { app.linkSettings.value.preferences.backup.remove(link.name) }
-                    Task { await app.applyLinkChanges() }
-                }
-            ))
-            .toggleStyle(.checkbox).font(.caption)
-            .disabled(prefs.disabled.contains(link.name))
-            Toggle("启用", isOn: Binding(
-                get: { !prefs.disabled.contains(link.name) },
-                set: { on in
-                    if on { app.linkSettings.value.preferences.disabled.remove(link.name) } else { app.linkSettings.value.preferences.disabled.insert(link.name) }
-                    Task { await app.applyLinkChanges() }
-                }
-            ))
-            .toggleStyle(.switch).labelsHidden()
-        }
-        .padding(.vertical, 2)
-    }
-
-    private var names: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(link.kind.title).font(.body.weight(.medium))
-            Text("\(link.displayName) · \(link.name)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
-        }
-    }
-
-    private var addresses: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text("IP 地址 \(link.address ?? "—")").font(.caption.monospaced()).lineLimit(1)
-            if let ip = app.links.egress[link.name] {
-                Text("外部地址 \(ip)").font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
             }
         }
     }

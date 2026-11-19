@@ -66,30 +66,44 @@ struct DiagnosticsView: View {
         .formStyle(.grouped)
     }
 
-    /// 单线程下载测速 (design): each link alone, then all links bonded.
+    /// 单线程下载测速 (design v0.2): each link alone, then all links bonded,
+    /// one bar per path as long as its share of the fastest.
     @ViewBuilder private var speedSection: some View {
         Section {
-            HStack {
-                if let current = speed.current { ProgressView().controlSize(.small); Text(current).font(.caption) }
-                Spacer()
-                Button(speed.isRunning ? "检查中..." : "开始测试") { speed.run(paths: speedPaths) }
-                    .disabled(speed.isRunning || !app.tunnel.isConnected || app.activeLinks.count < 2)
-            }
-            ForEach(Array(speed.results.enumerated()), id: \.offset) { _, result in
-                LabeledContent(result.label) {
-                    Text(result.rate.map { RateFormat.bitsPerSecond($0) } ?? "失败").monospacedDigit()
-                        .foregroundStyle(result.rate == nil ? .red : .primary)
-                }
+            let fractions = SpeedTest.fractions(speed.results)
+            ForEach(Array(speed.results.enumerated()), id: \.offset) { index, result in
+                DesignMeterRow(label: result.label, fraction: index < fractions.count ? fractions[index] : 0, color: barColor(index, result),
+                               value: result.rate.map { RateFormat.bitsPerSecond($0) } ?? "失败")
             }
             if let summary = SpeedTest.summary(speed.results) {
                 Text(summary).font(.callout.weight(.medium))
             }
+            if speed.results.isEmpty, !speed.isRunning {
+                Text("尚未测试").foregroundStyle(.secondary)
+            }
         } header: {
-            Text("单线程下载测速")
+            HStack(spacing: 8) {
+                Text("单线程下载测速")
+                Spacer()
+                if let current = speed.current {
+                    ProgressView().controlSize(.small)
+                    Text(current).font(.caption).foregroundStyle(.secondary)
+                }
+                Button(speed.isRunning ? "检查中..." : "开始测试", systemImage: "bolt") { speed.run(paths: speedPaths) }
+                    .designPill(primary: true)
+                    .disabled(speed.isRunning || !app.tunnel.isConnected || app.activeLinks.count < 2)
+            }
         } footer: {
             // Design v0.2, diagnostics page.
             Text("测速依次只用一条线路，再用全部线路叠加，看叠加到底多出多少。").font(.caption).foregroundStyle(.secondary)
         }
+    }
+
+    /// A link's bar in the link's colour; the bonded path in the accent colour.
+    private func barColor(_ index: Int, _ result: SpeedTest.Result) -> Color {
+        let links = app.activeLinks
+        guard !result.isBond, index < links.count else { return .accentColor }
+        return LinkColors.color(for: links[index], in: app.links.links)
     }
 
     /// SFM #97/#98, through any outbound of the running core.

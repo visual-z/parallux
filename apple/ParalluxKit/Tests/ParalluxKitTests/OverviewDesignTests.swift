@@ -279,8 +279,10 @@ import Testing
 
         // A rewritten direct outbound (two links or more) is still 直连; other items keep their key.
         #expect(OverviewCopy.topRule([row(0, rule: "rule_set=geosite-cn", outbound: "direct", type: "aggregate")]) == "命中最多：geosite-cn → 直连（100%）")
-        #expect(OverviewCopy.topRule([row(0, rule: "protocol=dns", outbound: "dns-out", type: "dns"), row(1, rule: "", outbound: "Proxy", type: "selector")])
-            == "命中最多：protocol=dns → dns-out（50%）")
+        // (The example was `protocol=dns` until the author chose to leave DNS
+        // lookups out, fix-pages-design-parity D1; the point here is the key=value form.)
+        #expect(OverviewCopy.topRule([row(0, rule: "process_name=curl", outbound: "HK-03", type: "trojan"), row(1, rule: "", outbound: "Proxy", type: "selector")])
+            == "命中最多：process_name=curl → HK-03（50%）")
         #expect(OverviewCopy.topRule([row(0, rule: "rule_set=[geosite-a geosite-b]", outbound: "Proxy", type: "selector")])
             == "命中最多：rule_set=[geosite-a geosite-b] → Proxy（100%）")
 
@@ -474,5 +476,34 @@ import Testing
         #expect(ConnectionCopy.duration(3599) == "59 分 59 秒")
         #expect(ConnectionCopy.duration(3600) == "1 小时 0 分")
         #expect(ConnectionCopy.duration(93_784) == "26 小时 3 分")
+    }
+
+    @Test func aRowDroppedOnAnotherTakesItsPlace() throws {
+        let ids = ["a", "b", "c", "d"]
+        // Dragged down: it lands after the row it was dropped on. Dragged up: before it.
+        #expect(ListReorder.moving("a", onto: "c", in: ids) == ["b", "c", "a", "d"])
+        #expect(ListReorder.moving("d", onto: "b", in: ids) == ["a", "d", "b", "c"])
+        #expect(ListReorder.moving("a", onto: "d", in: ids) == ["b", "c", "d", "a"])
+        #expect(ListReorder.moving("d", onto: "a", in: ids) == ["d", "a", "b", "c"])
+        // Onto itself, an unknown row, or an unknown target: nothing moves.
+        #expect(ListReorder.moving("b", onto: "b", in: ids) == ids)
+        #expect(ListReorder.moving("x", onto: "b", in: ids) == ids)
+        #expect(ListReorder.moving("b", onto: "x", in: ids) == ids)
+        #expect(ListReorder.moving("a", onto: "a", in: ["a"]) == ["a"])
+        #expect(ListReorder.moving("a", onto: "b", in: []).isEmpty)
+        #expect(ListReorder.offsets(moving: "b", onto: "b", in: ids) == nil)
+        #expect(ListReorder.offsets(moving: "x", onto: "b", in: ids) == nil)
+
+        // The offsets are the same move in Array.move(fromOffsets:toOffset:) terms, for every pair.
+        for from in ids {
+            for to in ids where to != from {
+                let move = try #require(ListReorder.offsets(moving: from, onto: to, in: ids))
+                var moved = ids
+                let item = moved.remove(at: move.from)
+                moved.insert(item, at: move.to > move.from ? move.to - 1 : move.to)
+                #expect(moved == ListReorder.moving(from, onto: to, in: ids), "\(from) onto \(to)")
+                #expect(Set(moved) == Set(ids) && moved.count == ids.count)
+            }
+        }
     }
 }

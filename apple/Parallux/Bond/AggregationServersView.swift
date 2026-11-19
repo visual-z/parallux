@@ -9,42 +9,32 @@ struct AggregationServersView: View {
     @State private var link = ""
     @State private var error: String?
 
+    /// Run on the VPS; prints the import link when it is done (decision 18).
+    static let installCommand = "sudo sh install.sh --binary ./parallux-server"
+
     var body: some View {
         let servers = app.servers
-        Form {
-            Section("服务器") {
-                if servers.servers.isEmpty {
-                    Text("无服务器").foregroundStyle(.secondary)
-                }
-                ForEach(servers.servers) { server in
-                    ServerRow(server: server)
-                }
+        // Design v0.2, aggregation server page: the list card, then how to add one.
+        DesignPage {
+            if servers.servers.isEmpty {
+                DesignList(items: ["无服务器"], id: { $0 }) { Text($0).foregroundStyle(.secondary) }
+            } else {
+                DesignList(items: servers.servers, id: { $0.id.uuidString }) { server in row(server) }
             }
-            Section {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("sudo sh install.sh --binary ./parallux-server")
-                        .font(.callout.monospaced()).textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("复制") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString("sudo sh install.sh --binary ./parallux-server", forType: .string)
-                    }
-                    .controlSize(.small)
+            DesignSectionHeader(title: "添加服务器") {
+                Button("复制") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(Self.installCommand, forType: .string)
                 }
-                Button("粘贴") {
-                    link = NSPasteboard.general.string(forType: .string) ?? ""
-                    adding = true
-                }
-            } header: {
-                Text("添加服务器")
-            } footer: {
-                Text("在 VPS 上运行，结束后会显示一个导入链接").font(.caption).foregroundStyle(.secondary)
+                .designPill()
+                .help("复制安装命令")
+                Button("添加", systemImage: "plus") { promptForLink() }.designPill(primary: true)
             }
+            DesignCode(text: Self.installCommand, comment: "# 在 VPS 上运行，结束后会显示一个导入链接")
         }
-        .formStyle(.grouped)
         .navigationSubtitle(servers.servers.isEmpty ? "" : "\(servers.servers.count)")
         .toolbar {
-            ToolbarItem { Button("新建服务器", systemImage: "plus") { link = NSPasteboard.general.string(forType: .string) ?? ""; adding = true }.help("新建服务器") }
+            ToolbarItem { Button("新建服务器", systemImage: "plus") { promptForLink() }.help("新建服务器") }
             ToolbarItem { Button("延迟测试", systemImage: "bolt") { servers.pingAll() }.help("延迟测试") }
         }
         .onAppear { servers.pingAll() }
@@ -56,6 +46,34 @@ struct AggregationServersView: View {
         .alert("错误", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("完成") { error = nil }
         } message: { Text(error ?? "") }
+    }
+
+    /// The import prompt, pre-filled with whatever link is on the pasteboard.
+    private func promptForLink() {
+        link = NSPasteboard.general.string(forType: .string) ?? ""
+        adding = true
+    }
+
+    private func row(_ server: AggregationServer) -> some View {
+        let inUse = app.linkSettings.value.bondServerID == server.id
+        let latency = app.servers.latency[server.id]
+        let unreachable = app.servers.unreachable.contains(server.id)
+        return ServerRowView(
+            name: server.name, address: "\(server.host):\(server.port)",
+            // Design: the server in use is 在线, the others wait.
+            tag: unreachable ? "不可用" : inUse ? "在线" : "待命", tone: unreachable ? .bad : inUse ? .good : .plain,
+            latency: latency.map { "\($0) ms" } ?? "", latencyColor: DelayGrade(milliseconds: Int32(latency ?? 0)).color,
+            inUse: inUse,
+            enable: {
+                app.linkSettings.value.bondServerID = server.id
+                Task { await app.applyLinkChanges() }
+            },
+            delete: {
+                if inUse { app.linkSettings.value.bondServerID = nil }
+                app.servers.remove(server.id)
+                Task { await app.applyLinkChanges() }
+            }
+        )
     }
 
     private func add() {
@@ -80,44 +98,5 @@ struct AggregationServersView: View {
         case let .missing(field) where field == "host" || field == "port": "缺少 URL"
         default: "不可用"
         }
-    }
-}
-
-private struct ServerRow: View {
-    let server: AggregationServer
-    @Environment(AppModel.self) private var app
-
-    var body: some View {
-        let inUse = app.linkSettings.value.bondServerID == server.id
-        HStack(spacing: 10) {
-            Image(systemName: "server.rack").foregroundStyle(inUse ? Color.accentColor : .secondary).frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(server.name).font(.body.weight(.medium))
-                Text("\(server.host):\(server.port)").font(.caption.monospaced()).foregroundStyle(.secondary)
-            }
-            Spacer()
-            if let ms = app.servers.latency[server.id] {
-                Text("\(ms) ms").font(.caption).monospacedDigit().foregroundStyle(DelayGrade(milliseconds: Int32(ms)).color)
-            } else if app.servers.unreachable.contains(server.id) {
-                Text("不可用").font(.caption).foregroundStyle(.red)
-            }
-            if inUse {
-                Text("在线").font(.caption).foregroundStyle(.green)
-            } else {
-                Button("启用") {
-                    app.linkSettings.value.bondServerID = server.id
-                    Task { await app.applyLinkChanges() }
-                }
-                .controlSize(.small)
-            }
-        }
-        .contextMenu {
-            Button("删除", role: .destructive) {
-                if inUse { app.linkSettings.value.bondServerID = nil }
-                app.servers.remove(server.id)
-                Task { await app.applyLinkChanges() }
-            }
-        }
-        .padding(.vertical, 2)
     }
 }

@@ -136,8 +136,16 @@ public enum SpeedTest {
     /// PLAN §1: two links, one connection ≥ 1.6 × the fastest single link.
     public static let target = 1.6
 
-    /// Each result's bar length (design v0.2, diagnostics).
-    public static func fractions(_ results: [Result]) -> [Double] { [] }
+    /// Each result's bar length as a share of the fastest one, 0...1 (design
+    /// v0.2, diagnostics). A failed or empty measurement has no bar.
+    public static func fractions(_ results: [Result]) -> [Double] {
+        let fastest = results.compactMap(\.rate).max() ?? 0
+        guard fastest > 0 else { return results.map { _ in 0 } }
+        return results.map { result in
+            guard let rate = result.rate, rate > 0 else { return 0 }
+            return min(1, Double(rate) / Double(fastest))
+        }
+    }
 
     /// "叠加是最快单线路的 1.9 倍（达标）", or nil when it cannot be compared.
     public static func summary(_ results: [Result]) -> String? {

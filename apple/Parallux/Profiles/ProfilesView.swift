@@ -15,6 +15,8 @@ struct ProfilesView: View {
     @State private var linkPrompt = false
     @State private var link = ""
     @State private var error: String?
+    /// The first lines of the configuration in use (bounded, see `excerpt`).
+    @State private var preview: String?
 
     private var store: ProfileStore { service.store }
 
@@ -28,17 +30,36 @@ struct ProfilesView: View {
                     Button("导入远程配置") { adding = .remote }
                 }
             } else {
-                List {
-                    ForEach(store.profiles) { profile in
-                        ProfileRow(profile: profile, isSelected: profile.id == store.selectedID,
-                                   isUpdating: service.updating.contains(profile.id))
-                            .contentShape(Rectangle())
-                            .onTapGesture { run { try store.select(profile.id) } }
-                            .contextMenu { menu(for: profile) }
+                // Design v0.2, profiles page: the list card, then a read-only
+                // look at the configuration in use.
+                DesignPage {
+                    DesignList(items: store.profiles, id: { $0.id.uuidString }, move: { dragged, target in
+                        guard let move = ListReorder.offsets(moving: dragged, onto: target, in: store.profiles.map { $0.id.uuidString }) else { return }
+                        run { try store.move(fromOffsets: [move.from], toOffset: move.to) }
+                    }) { profile in
+                        ProfileRowView(
+                            symbol: Self.symbol(profile.kind), name: profile.name, inUse: profile.id == store.selectedID,
+                            detail: ProfileDescription.detail(profile, now: Date()),
+                            isUpdating: service.updating.contains(profile.id),
+                            update: profile.kind == .remote ? { Task { await runAsync { try await service.update(profile) } } } : nil
+                        ) { menu(for: profile) }
+                        // A click anywhere on the row uses that configuration.
+                        .onTapGesture { run { try store.select(profile.id) } }
+                        .contextMenu { menu(for: profile) }
                     }
-                    .onMove { source, destination in run { try store.move(fromOffsets: source, toOffset: destination) } }
+                    if let selected = store.selected {
+                        DesignSectionHeader(title: "\(selected.name) · config.json") {
+                            Text("只读预览").font(.subheadline).foregroundStyle(.secondary)
+                            Button(selected.isReadOnly ? "查看内容" : "编辑内容") { editing = selected }.designPill()
+                        }
+                        DesignCode(text: preview ?? "…")
+                    }
                 }
-                .listStyle(.inset(alternatesRowBackgrounds: false))
+                .task(id: PreviewKey(id: store.selectedID, updated: store.selected?.lastUpdated)) {
+                    preview = nil
+                    guard let selected = store.selected, let content = try? await service.content(of: selected) else { return }
+                    preview = Self.excerpt(content)
+                }
             }
         }
         .navigationSubtitle(store.selected?.name ?? "")
@@ -59,6 +80,34 @@ struct ProfilesView: View {
             Button("完成") { error = nil }
         } message: {
             Text(error ?? "")
+        }
+    }
+
+    /// Reloads the preview when another profile is chosen or the chosen one is updated.
+    private struct PreviewKey: Hashable {
+        var id: UUID?
+        var updated: Date?
+    }
+
+    /// Why 40 lines and 4000 characters: enough to recognise a configuration
+    /// (its first sections); a subscription can be megabytes and one Text
+    /// that long would stall the page. The editor shows the rest. Assumed
+    /// sizes, chosen to fill about one screen.
+    static let previewLines = 40
+    static let previewCharacters = 4000
+
+    static func excerpt(_ content: String) -> String {
+        let head = String(content.prefix(previewCharacters))
+        let lines = head.split(separator: "\n", omittingEmptySubsequences: false)
+        let cut = lines.count > previewLines || head.count < content.count
+        return lines.prefix(previewLines).joined(separator: "\n") + (cut ? "\n…" : "")
+    }
+
+    static func symbol(_ kind: ProfileKind) -> String {
+        switch kind {
+        case .local: "doc.text"
+        case .icloud: "icloud"
+        case .remote: "link"
         }
     }
 
@@ -108,28 +157,6 @@ struct ProfilesView: View {
 
     private func runAsync(_ body: () async throws -> Void) async {
         do { try await body() } catch { self.error = error.localizedDescription }
-    }
-}
-
-private struct ProfileRow: View {
-    let profile: Profile
-    let isSelected: Bool
-    let isUpdating: Bool
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(profile.name).font(.body.weight(isSelected ? .semibold : .regular))
-                Text(ProfileDescription.detail(profile, now: Date())).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            if isUpdating { ProgressView().controlSize(.small) }
-            Text(profile.kind.title).font(.caption).padding(.horizontal, 6).padding(.vertical, 2)
-                .background(.quaternary, in: Capsule())
-        }
-        .padding(.vertical, 2)
     }
 }
 

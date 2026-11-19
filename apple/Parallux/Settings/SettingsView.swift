@@ -43,10 +43,13 @@ private struct GeneralSettings: View {
         @Bindable var settings = app.settings
         Form {
             Section {
-                Toggle("开机启动", isOn: $settings.launchAtLogin)
+                Toggle("登录时启动", isOn: $settings.launchAtLogin)
                 if let error = settings.loginItemError { Text(error).font(.caption).foregroundStyle(.red) }
-                Toggle("将菜单栏保留在后台", isOn: $settings.value.keepInMenuBarAfterClose)
-                Toggle("实时速率", isOn: $settings.value.showRateInMenuBar)
+                Toggle(isOn: $settings.value.keepInMenuBarAfterClose) {
+                    Text("关闭窗口后保留在菜单栏")
+                    Text("主窗口关闭时，Parallux 继续在后台运行")
+                }
+                Toggle("菜单栏显示实时速率", isOn: $settings.value.showRateInMenuBar)
             }
             UpdateSection()
         }
@@ -60,7 +63,7 @@ private struct AggregationSettings: View {
         @Bindable var settings = app.settings
         Form {
             Section {
-                Picker("聚合方式", selection: Binding(get: { app.linkSettings.value.mode }, set: { mode in Task { await app.setMode(mode) } })) {
+                Picker("默认聚合方式", selection: Binding(get: { app.linkSettings.value.mode }, set: { mode in Task { await app.setMode(mode) } })) {
                     ForEach(AggregationMode.allCases) { Text($0.title).tag($0) }
                 }
                 Toggle("线路掉线时通知", isOn: $settings.value.notifyLinkChanges)
@@ -74,23 +77,34 @@ private struct TunnelSettingsView: View {
     @Environment(AppModel.self) private var app
     var body: some View {
         @Bindable var settings = app.settings
-        // SFM shows the NEVPNProtocol property names verbatim (PacketTunnelView.swift)
-        // and the profile overrides under 配置重载 (ProfileOverrideView.swift).
+        // Design v0.2: a name for each NEVPNProtocol switch with the property
+        // underneath, in the design's order. The three profile overrides below
+        // keep SFM's names (ProfileOverrideView.swift): the design draws only
+        // one of them and they are distinct behaviours.
         Form {
-            Section("隧道") {
-                Toggle("includeAllNetworks", isOn: $settings.value.tunnel.includeAllNetworks)
-                Toggle("excludeAPNs", isOn: $settings.value.tunnel.excludeAPNs)
-                Toggle("excludeLocalNetworks", isOn: $settings.value.tunnel.excludeLocalNetworks)
-                Toggle("enforceRoutes", isOn: $settings.value.tunnel.enforceRoutes)
-                Toggle("excludeDeviceCommunication", isOn: $settings.value.tunnel.excludeDeviceCommunication)
+            Section("数据包隧道") {
+                property("包含所有网络", "includeAllNetworks", $settings.value.tunnel.includeAllNetworks)
+                property("排除本地网络", "excludeLocalNetworks", $settings.value.tunnel.excludeLocalNetworks)
+                property("排除 APNs 路由", "excludeAPNs", $settings.value.tunnel.excludeAPNs)
+                property("排除设备间通信", "excludeDeviceCommunication", $settings.value.tunnel.excludeDeviceCommunication)
+                property("强制路由", "enforceRoutes", $settings.value.tunnel.enforceRoutes)
             }
-            Section("配置重载") {
+            Section("配置覆盖") {
                 Toggle("隐藏 VPN 图标", isOn: $settings.value.tunnel.excludeDefaultRoute)
                 Toggle("不使用默认路由", isOn: $settings.value.tunnel.autoRouteUseSubRangesByDefault)
                 Toggle("系统 HTTP 代理", isOn: $settings.value.tunnel.systemProxyEnabled)
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+private extension TunnelSettingsView {
+    func property(_ title: String, _ name: String, _ isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            Text(title)
+            Text(verbatim: name)
+        }
     }
 }
 
@@ -102,9 +116,10 @@ private struct OnDemandSettings: View {
         @Bindable var settings = app.settings
         Form {
             Section {
-                Toggle("按需启动", isOn: $settings.value.onDemandEnabled)
-            } footer: {
-                Text(settings.value.onDemandRules.isEmpty ? "没有规则时，VPN 会在任意网络上连接。" : "根据规则自动连接或断开 VPN 连接。")
+                Toggle(isOn: $settings.value.onDemandEnabled) {
+                    Text("启用按需连接")
+                    Text(settings.value.onDemandRules.isEmpty ? "没有规则时，任何网络下都会连接" : "根据规则自动连接或断开")
+                }
             }
             Section("规则") {
                 ForEach(settings.value.onDemandRules) { rule in
@@ -118,7 +133,7 @@ private struct OnDemandSettings: View {
                     }
                 }
                 .onMove { settings.value.onDemandRules.move(fromOffsets: $0, toOffset: $1) }
-                Button("添加规则") { adding = true }
+                Button("添加规则…") { adding = true }
             }
         }
         .formStyle(.grouped)
@@ -178,17 +193,17 @@ private struct CoreSettings: View {
         Form {
             SetupSection()
             Section("系统扩展") {
-                LabeledContent("状态", value: installed.map { "已启用 · \($0)" } ?? "不可用")
+                LabeledContent("状态", value: installed.map { "已安装 · 版本 \($0)" } ?? "未安装")
                 HStack {
-                    Button(installed == nil ? "安装系统扩展" : "更新") { Task { busy = true; await app.tunnel.install(); await refresh(); busy = false } }
+                    Button(installed == nil ? "安装系统扩展" : "重新安装") { Task { busy = true; await app.tunnel.install(); await refresh(); busy = false } }
                     if installed != nil {
                         Button("卸载", role: .destructive) { Task { busy = true; await app.tunnel.uninstall(); await refresh(); busy = false } }
                     }
                 }
                 .disabled(busy)
             }
-            Section("核心") {
-                LabeledContent("版本", value: PxbridgeVersion())
+            Section("内核") {
+                LabeledContent("内核版本", value: PxbridgeVersion())
             }
             HelperSettingsSection()
             MemoryLimitSection()

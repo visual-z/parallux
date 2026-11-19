@@ -52,9 +52,11 @@ public enum OverviewCopy {
     /// Connection.rule: the condition only), so this needs nothing from the
     /// profile. nil when no connection matched a rule (only route.final).
     public static func topRule(_ connections: [ConnectionRow]) -> String? {
+        // Without DNS lookups (the connections page's 隐藏 DNS test): on a
+        // profile that routes DNS by rule they would nearly always win, and
+        // the line is about where traffic goes.
+        let connections = connections.filter { !ConnectionQuery.isDNS($0) }
         var byRule: [String: [ConnectionRow]] = [:]
-        // Counted as the core reports them, DNS lookups included: on a profile
-        // that routes DNS by rule, that rule may well be the busiest one.
         for connection in connections where !connection.rule.isEmpty { byRule[connection.rule, default: []].append(connection) }
         // Most hits first; a tie goes to the smaller text so the line does not flicker.
         guard let (rule, hits) = byRule.min(by: { $0.value.count != $1.value.count ? $0.value.count > $1.value.count : $0.key < $1.key }) else { return nil }
@@ -127,5 +129,32 @@ public enum LinkStanding: Equatable, Sendable {
 
 /// Copy of the connections page (design v0.2).
 public enum ConnectionCopy {
-    public static func duration(_ seconds: TimeInterval) -> String { "" }
+    /// How long a connection has been open: 「42 秒」「4 分 12 秒」「2 小时 5 分」.
+    public static func duration(_ seconds: TimeInterval) -> String {
+        let total = seconds.isFinite && seconds > 0 ? Int(seconds) : 0
+        if total < 60 { return "\(total) 秒" }
+        if total < 3600 { return "\(total / 60) 分 \(total % 60) 秒" }
+        return "\(total / 3600) 小时 \(total / 60 % 60) 分"
+    }
+}
+
+/// Where a row dragged onto another row of a list ends up (the design's
+/// lists: links and profiles are ordered by dragging).
+public enum ListReorder {
+    /// The dragged row takes the place of the row it was dropped on: dragged
+    /// down it lands after the target, dragged up before it. Unknown rows and
+    /// a drop on itself change nothing.
+    public static func moving(_ id: String, onto target: String, in ids: [String]) -> [String] {
+        guard id != target, let from = ids.firstIndex(of: id), let to = ids.firstIndex(of: target) else { return ids }
+        var result = ids
+        result.remove(at: from)
+        result.insert(id, at: to)
+        return result
+    }
+
+    /// The same move as `move(fromOffsets:toOffset:)` takes it; nil when nothing moves.
+    public static func offsets(moving id: String, onto target: String, in ids: [String]) -> (from: Int, to: Int)? {
+        guard id != target, let from = ids.firstIndex(of: id), let to = ids.firstIndex(of: target) else { return nil }
+        return (from, to > from ? to + 1 : to)
+    }
 }

@@ -36,7 +36,7 @@ struct OverviewCard<Content: View>: View {
         // name, a profile name) made the whole row stack in a window with
         // plenty of room; the line truncates instead.
         .frame(minWidth: 190, idealWidth: 190, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .quaternarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+        .background(DesignMetrics.cardFill, in: RoundedRectangle(cornerRadius: DesignMetrics.cardRadius))
     }
 }
 

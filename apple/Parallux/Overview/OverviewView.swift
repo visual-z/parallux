@@ -47,7 +47,7 @@ struct OverviewView: View {
                     }
                     .contextMenu { DashboardMenu(app: app) }
                 }
-                .padding(.horizontal, 16).padding(.bottom, 16)
+                .padding(.horizontal, DesignMetrics.pageInset).padding(.bottom, 16)
             }
             .navigationSubtitle(OverviewCopy.subtitle(links: app.activeLinks.count, mode: app.effectiveMode, server: bondServerName, problem: problem))
             .toolbar {
