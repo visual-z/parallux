@@ -33,7 +33,7 @@ struct LinksView: View {
                     Task { await app.applyLinkChanges() }
                 }
             } footer: {
-                Text("拖动排序决定主备模式下的优先级。「仅备用」的线路只在其他线路都不可用时使用（比如只让 iPhone 兜底）。改动立即生效，不会断开正在进行的连接。")
+                Text("拖动排序决定主备模式下的优先级。「仅备用」的线路只在其他线路都不可用时使用（比如只让 iPhone 兜底）。改动立即生效：内核重载配置，正在进行的连接会断开重连（隧道本身不断）。")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if let warning = SharedEgress.warning(links: app.enabledLinks, egress: app.links.egress) {

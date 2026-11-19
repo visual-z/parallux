@@ -53,12 +53,11 @@
       "backup" : [
         "link-en7"
       ],
-      "bond" : "parallux-bond",
       "links" : [
         "link-en0",
         "link-en7"
       ],
-      "mode" : "bond",
+      "mode" : "failover",
       "tag" : "direct",
       "type" : "aggregate"
     },

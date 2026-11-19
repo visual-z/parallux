@@ -2,7 +2,6 @@ package aggregate
 
 import (
 	"context"
-	"io"
 	"net"
 	"slices"
 	"sync"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
-	"github.com/sagernet/sing-box/common/interrupt"
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/log"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -56,10 +54,12 @@ func init() {
 	})
 }
 
-var (
-	_ adapter.OutboundGroup = (*Outbound)(nil)
-	_ adapter.Referrer      = (*Outbound)(nil)
-)
+// Outbound is deliberately not an adapter.OutboundGroup: sing-box's router
+// expands groups through Selected() and dials the last outbound itself
+// (route/route.go resolveOutbound), which would skip this outbound's
+// DialContext and with it rotation, failover retries and per-link counters
+// (docs/tasks/fix-aggregate-routing.md).
+var _ adapter.Referrer = (*Outbound)(nil)
 
 // Outbound spreads connections over its link outbounds (PLAN decision 13).
 type Outbound struct {
@@ -77,10 +77,8 @@ type Outbound struct {
 	health   []*linkHealth
 	counters []*linkCounters
 	next     atomic.Uint64 // balance: rotation cursor
-	// interrupts closes the connections attached through AttachConnection.
-	interrupts *interrupt.Group
-	cancel     context.CancelFunc
-	probes     sync.WaitGroup
+	cancel   context.CancelFunc
+	probes   sync.WaitGroup
 	// disableProbes is for tests that drive health directly.
 	disableProbes bool
 }
@@ -134,15 +132,14 @@ func newOutbound(manager adapter.OutboundManager, logger log.ContextLogger, tag 
 		dependencies = append(dependencies, options.Bond)
 	}
 	return &Outbound{
-		Adapter:    outbound.NewAdapter(Type, tag, []string{N.NetworkTCP, N.NetworkUDP}, dependencies),
-		manager:    manager,
-		logger:     logger,
-		mode:       options.Mode,
-		tags:       options.Links,
-		backup:     backup,
-		bondTag:    options.Bond,
-		targets:    targets,
-		interrupts: interrupt.NewGroup(),
+		Adapter: outbound.NewAdapter(Type, tag, []string{N.NetworkTCP, N.NetworkUDP}, dependencies),
+		manager: manager,
+		logger:  logger,
+		mode:    options.Mode,
+		tags:    options.Links,
+		backup:  backup,
+		bondTag: options.Bond,
+		targets: targets,
 	}, nil
 }
 
@@ -195,23 +192,6 @@ func (o *Outbound) Close() error {
 		o.probes.Wait()
 	}
 	return nil
-}
-
-// All implements adapter.OutboundGroup so the UI lists the links.
-func (o *Outbound) All() []string { return o.tags }
-
-// Selected reports the link the next connection would try first.
-func (o *Outbound) Selected(string) adapter.Outbound {
-	order := o.order(false)
-	if len(order) == 0 {
-		return nil
-	}
-	return o.links[order[0]]
-}
-
-// AttachConnection implements adapter.OutboundGroup.
-func (o *Outbound) AttachConnection(closer io.Closer) func() {
-	return o.interrupts.Add(closer, true)
 }
 
 // References implements adapter.Referrer.

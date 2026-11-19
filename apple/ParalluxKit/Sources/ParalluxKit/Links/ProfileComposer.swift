@@ -73,15 +73,20 @@ public enum ProfileComposer {
         }
 
         let useBond = mode == .bond && bond != nil
-        func aggregate(tag: String) -> [String: Any] {
+        /// `carriesBond`: only the nodes' detour (parallux-links) goes through
+        /// the aggregation server. Traffic the profile sends "direct" (LAN,
+        /// domestic) stays off it: the transport is unencrypted, and the design
+        /// draws 直连 as its own exit (docs/tasks/fix-aggregate-routing.md).
+        func aggregate(tag: String, carriesBond: Bool) -> [String: Any] {
+            let bonded = useBond && carriesBond
             var outbound: [String: Any] = [
                 "type": "aggregate", "tag": tag,
-                "mode": mode == .bond && !useBond ? AggregationMode.failover.rawValue : mode.rawValue,
+                "mode": mode == .bond && !bonded ? AggregationMode.failover.rawValue : mode.rawValue,
                 "links": linkTags,
             ]
             let backupTags = links.filter { backup.contains($0.name) }.map { linkTag($0.name) }
             if !backupTags.isEmpty { outbound["backup"] = backupTags }
-            if useBond, let bond { outbound["bond"] = bond.tag }
+            if bonded, let bond { outbound["bond"] = bond.tag }
             return outbound
         }
 
@@ -90,7 +95,7 @@ public enum ProfileComposer {
         outbounds = outbounds.map { outbound in
             guard outbound["type"] as? String == "direct", let tag = outbound["tag"] as? String,
                   outbound["bind_interface"] == nil else { return outbound }
-            return aggregate(tag: tag)
+            return aggregate(tag: tag, carriesBond: false)
         }
         // Nodes without a detour dial their server through the links.
         outbounds = outbounds.map { outbound in
@@ -100,7 +105,7 @@ public enum ProfileComposer {
             return copy
         }
         var added = linkOutbounds.filter { !taken.contains($0["tag"] as! String) }
-        if !taken.contains(aggregateTag) { added.append(aggregate(tag: aggregateTag)) }
+        if !taken.contains(aggregateTag) { added.append(aggregate(tag: aggregateTag, carriesBond: true)) }
         if useBond, let bond, !taken.contains(bond.tag) {
             var multipath = bond.outbound.mapValues(\.foundation)
             multipath["tag"] = bond.tag

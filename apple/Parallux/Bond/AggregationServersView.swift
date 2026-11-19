@@ -28,7 +28,7 @@ struct AggregationServersView: View {
             Section("叠加如何工作") {
                 Text("叠加把一条连接拆到两条线路上，在聚合服务器上重组，再转发到订阅节点或直接出网。叠加速度上限取决于服务器带宽；两条线路背后若是同一条宽带，叠加不会更快。")
                     .font(.callout).foregroundStyle(.secondary)
-                Text("叠加只聚合 TCP，协议本身不加密；经它的流量仍由节点的代理协议加密，直连流量在服务器之前是明文。")
+                Text("叠加只聚合 TCP，协议本身不加密：只有发往节点的流量走叠加，并且仍由节点的代理协议加密；配置里走「直连」的流量（局域网、国内）不经聚合服务器，按主备在线路之间切换。")
                     .font(.callout).foregroundStyle(.secondary)
                 if app.enabledLinks.count > 2 {
                     Text("当前启用了 \(app.enabledLinks.count) 条线路，叠加使用优先级最高的两条（\(app.enabledLinks.prefix(2).map(\.kind.title).joined(separator: "、"))）。")
