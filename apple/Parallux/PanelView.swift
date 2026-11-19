@@ -206,61 +206,27 @@ private struct PanelHome: View {
     }
 }
 
-/// Drill-down from the panel: pick a node, search, test delays.
+/// Drill-down from the panel: pick a node, search, test delays. The layout
+/// is PanelNodeListView (design v0.2); this only binds it to the session.
 private struct PanelNodesView: View {
     let session: CoreSession
     @State private var search = ""
+    /// Groups the user opened or folded, against their default (PanelNodeList).
+    @State private var toggled: Set<String> = []
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // A popover has no toolbar, so back, title and search live in the content.
-            HStack(spacing: 6) {
-                Button("返回", systemImage: "chevron.backward") { dismiss() }
-                    .labelStyle(.iconOnly).buttonStyle(.borderless)
-                    .keyboardShortcut(.cancelAction)
-                Text("节点").font(.headline)
-            }
-            TextField("搜索", text: $search, prompt: Text("搜索"))
-                .textFieldStyle(.roundedBorder)
-            List {
-                ForEach(session.groups.filter(\.selectable)) { group in
-                    Section {
-                        ForEach(group.items.filter { search.isEmpty || $0.tag.localizedCaseInsensitiveContains(search) }) { item in
-                            Button {
-                                session.select(group: group.tag, outbound: item.tag)
-                            } label: {
-                                LabeledContent {
-                                    let grade = LatencyGrade(milliseconds: item.delay)
-                                    Text(verbatim: item.delay > 0 ? "\(item.delay) ms" : "—").monospacedDigit().foregroundStyle(grade.color)
-                                } label: {
-                                    // Checkmark only on the pick, blank space elsewhere (menu convention).
-                                    Label {
-                                        Text(item.tag)
-                                    } icon: {
-                                        Image(systemName: "checkmark").opacity(item.tag == group.selected ? 1 : 0)
-                                    }
-                                    .foregroundStyle(item.tag == group.selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    } header: {
-                        HStack {
-                            Text(group.tag)
-                            Spacer()
-                            Button("延迟测试", systemImage: "bolt") { session.urlTest(group: group.tag) }
-                                .labelStyle(.iconOnly).buttonStyle(.borderless)
-                                .disabled(session.testing.contains(group.tag))
-                        }
-                    }
-                }
-            }
-            .listStyle(.inset)
-            .frame(height: 360)
-        }
-        .padding(.horizontal, 14).padding(.vertical, 12)
+        let sections = PanelNodeList.sections(session.groups, search: search, toggled: toggled)
+        PanelNodeListView(
+            sections: sections, search: $search,
+            isTesting: !session.testing.isEmpty,
+            delayColor: { LatencyGrade(milliseconds: $0).color },
+            back: { dismiss() },
+            // One button for everything on the page (design), not one per group.
+            testAll: { for section in sections { session.urlTest(group: section.tag) } },
+            toggle: { toggled.formSymmetricDifference([$0]) },
+            select: { group, node in session.select(group: group, outbound: node) }
+        )
         .navigationBarBackButtonHidden(true)
     }
 }

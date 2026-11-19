@@ -1,3 +1,4 @@
+import ParalluxKit
 import SwiftUI
 
 /// The menu bar panel's building blocks, laid out as design v0.2's panel:
@@ -146,5 +147,174 @@ struct PanelStrip<Diagram: View>: View {
         }
         .buttonStyle(.plain)
         .help("打开主窗口")
+    }
+}
+
+// MARK: Node page
+
+/// The panel's node page as design v0.2 lays it out: a round back button
+/// with the title centred, a pill search field beside a round test button,
+/// then folding groups of flat rows straight on the panel (no list box, no
+/// separators; a row lights up under the pointer). Values and closures only,
+/// so it can be rendered on its own.
+struct PanelNodeListView: View {
+    let sections: [PanelNodeList.Section]
+    @Binding var search: String
+    /// A delay test is running: the test button waits.
+    var isTesting = false
+    /// Milliseconds to the colour of its latency grade.
+    let delayColor: (Int32) -> Color
+    let back: () -> Void
+    let testAll: () -> Void
+    let toggle: (String) -> Void
+    let select: (_ group: String, _ node: String) -> Void
+
+    @FocusState private var searchFocused: Bool
+
+    /// Why 420: design v0.2's cap for the list; taller and the panel would
+    /// not fit a 13-inch display under the menu bar together with the header.
+    static let maxListHeight: CGFloat = 420
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                Text("节点").font(.headline)
+                HStack {
+                    Button("返回", systemImage: "chevron.backward", action: back)
+                        .labelStyle(.iconOnly).buttonBorderShape(.circle)
+                        .keyboardShortcut(.cancelAction)
+                        .help("返回")
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
+
+            HStack(spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("搜索", text: $search).textFieldStyle(.plain).focused($searchFocused)
+                    if !search.isEmpty {
+                        Button("清除", systemImage: "xmark.circle.fill") { search = "" }
+                            .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(.horizontal, 10).frame(height: 28)
+                .background(.quaternary, in: Capsule())
+                Button("延迟测试", systemImage: "bolt", action: testAll)
+                    .labelStyle(.iconOnly).buttonBorderShape(.circle)
+                    .disabled(isTesting || sections.isEmpty)
+                    .help("延迟测试")
+            }
+            .padding(.horizontal, 12).padding(.bottom, 6)
+
+            if sections.isEmpty {
+                Group {
+                    if search.trimmingCharacters(in: .whitespaces).isEmpty {
+                        ContentUnavailableView("暂无可用代理组", systemImage: "globe")
+                    } else {
+                        ContentUnavailableView.search(text: search)
+                    }
+                }
+                .frame(height: 200)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        // One flat list with ids unique across groups: the same
+                        // node usually sits in several groups, and rows that
+                        // share an id in one lazy stack are not all drawn.
+                        ForEach(lines) { line in
+                            if let item = line.item {
+                                row(item, in: line.section)
+                            } else {
+                                groupHeader(line.section)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 8).padding(.bottom, 8)
+                }
+                .frame(height: listHeight)
+            }
+        }
+        .onAppear { searchFocused = true }
+    }
+
+    /// A group header (`item` nil) or one of its nodes.
+    private struct Line: Identifiable {
+        let section: PanelNodeList.Section
+        let item: OutboundGroupModel.Item?
+        // U+0000 cannot occur in a tag, so a group and a node never collide.
+        var id: String { item.map { "\(section.tag)\u{0}\($0.tag)" } ?? section.tag }
+    }
+
+    private var lines: [Line] {
+        sections.flatMap { section in
+            [Line(section: section, item: nil)] + (section.isOpen ? section.items.map { Line(section: section, item: $0) } : [])
+        }
+    }
+
+    /// As tall as its rows, up to the cap: a short list does not leave the panel half empty.
+    private var listHeight: CGFloat {
+        let rows = sections.reduce(0) { $0 + ($1.isOpen ? $1.items.count : 0) }
+        return min(Self.maxListHeight, CGFloat(sections.count) * 30 + CGFloat(rows) * 28 + 8)
+    }
+
+    private func groupHeader(_ section: PanelNodeList.Section) -> some View {
+        Button {
+            toggle(section.tag)
+        } label: {
+            HStack(spacing: 6) {
+                Text(section.subtitle.isEmpty ? section.tag : "\(section.tag) · \(section.subtitle)").lineLimit(1)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.down").font(.caption2.weight(.bold))
+                    .rotationEffect(.degrees(section.isOpen ? 0 : -90))
+            }
+            .font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            .padding(.horizontal, 8).frame(height: 30)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(section.isOpen ? "已展开" : "已折叠")
+    }
+
+    private func row(_ item: OutboundGroupModel.Item, in section: PanelNodeList.Section) -> some View {
+        let picked = item.tag == section.selected
+        return Button {
+            select(section.tag, item.tag)
+        } label: {
+            HStack(spacing: 8) {
+                // Only the check carries the accent; the name keeps its colour (design).
+                Image(systemName: "checkmark").font(.caption.weight(.semibold))
+                    .foregroundStyle(section.selectable ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                    .opacity(picked ? 1 : 0).frame(width: 16)
+                Text(item.tag).lineLimit(1)
+                Spacer(minLength: 8)
+                Text(verbatim: item.delay > 0 ? "\(item.delay) ms" : "—")
+                    .font(.callout).monospacedDigit().foregroundStyle(delayColor(item.delay))
+            }
+        }
+        .buttonStyle(PanelRowButtonStyle())
+        // A urltest group picks for itself: its rows show the pick but cannot be chosen.
+        .allowsHitTesting(section.selectable)
+        .accessibilityAddTraits(picked ? .isSelected : [])
+    }
+}
+
+/// A flat row that lights up under the pointer (the design's `.nitem:hover`).
+struct PanelRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { Row(configuration: configuration) }
+
+    private struct Row: View {
+        let configuration: Configuration
+        @State private var hovering = false
+
+        var body: some View {
+            configuration.label
+                .padding(.horizontal, 8).frame(height: 28)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(configuration.isPressed ? AnyShapeStyle(.tertiary) : hovering ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
+                            in: RoundedRectangle(cornerRadius: 8))
+                .contentShape(RoundedRectangle(cornerRadius: 8))
+                .onHover { hovering = $0 }
+        }
     }
 }
