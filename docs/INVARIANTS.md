@@ -13,6 +13,7 @@
 | INV-3 | 流向图里每个节点高度等于流经它的流带宽度之和，左右两侧总高度相等 | 代码断言 + property | `aSankeyLayoutConservesWidth` |
 | INV-4 | 选线顺序是全部线路的排列；有健康的非备用线路时，第一条一定是它 | 代码断言 + property | `TestLinkOrderIsAPermutationThatStartsHealthy` |
 | INV-5 | 组合后的配置保留用户的每个出站 tag，且没有 detour、成员或 links 指向不存在的 tag | property | `composingKeepsEveryTagAndNoDanglingDetour` |
+| INV-6 | 路由覆盖只改写对应规则的出站，其余规则不变，且不产生指向不存在出站的规则 | property | `overridesOnlyTouchTheirRulesAndNeverDangle` |
 
 ## 写法提示
 

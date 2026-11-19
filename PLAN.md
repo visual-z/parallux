@@ -78,7 +78,7 @@ App 与扩展之间照 SFM：扩展在版本化的 `NEMachServiceName` 上开 XP
 | 4 | 2026-11-18 | sing-box 作为库（gomobile 编成 Libbox.xcframework）跑在 NEPacketTunnelProvider 系统扩展里，不用独立进程跑内核（「不用 root helper」一句已由决策 12 修订） | 与 SFM 同构；Fable 审计未发现独立进程模型在 macOS 上的优势 | 生效 |
 | 5 | 2026-11-18 | sing-box 钉 v1.14.4；构建参数照搬其 `cmd/internal/build_libbox` | singbox-multipath beta11 基于 v1.14.4 | 生效 |
 | 6 | 2026-11-18 | 从零开始写代码；旧仓库 `sing-box-mygo` 只搬 redact、proto、SFM 对照文档，其余只作参考 | Fable 审计：可移植代码仅约 7%，旧架构排除网络扩展 | 生效 |
-| 7 | 2026-11-18 | 界面以设计稿 v0.2 为准：菜单栏左键面板、右键原生菜单；主窗口九项侧栏；设置独立窗口；菜单栏用模板图标 | 设计稿 设计稿 v0.2（未入库） | 生效 |
+| 7 | 2026-11-18 | 界面以设计稿 v0.2 为准：菜单栏左键面板、右键原生菜单；主窗口九项侧栏（侧栏已由决策 20 修订）；设置独立窗口；菜单栏用模板图标 | 设计稿 设计稿 v0.2（未入库） | 生效 |
 | 8 | 2026-11-18 | Xcode 工程用 XcodeGen 从 `apple/project.yml` 生成，不入库 | 避免 pbxproj 合并冲突；生成物不手改 | 生效 |
 | 9 | 2026-11-18 | Bundle ID 前缀 `io.github.visual-z.parallux`，App Group 为 `<Team ID>.io.github.visual-z.parallux` | 首次签名构建前可改；改动会影响已安装用户的数据位置 | 生效 |
 | 10 | 2026-11-18 | sing-box 用 fork `github.com/visual-z/sing-box` 分支 `parallux/v<版本>`，只含一个注册钩子提交（`include.Register*Extension`），go.mod replace 钉住；Parallux 的协议代码都在本仓库 `core/` | libbox 1.14.4 `baseContext` 未导出、每次新建注册表（`experimental/libbox/config.go:29-40`）；不直接依赖 singbox-multipath 的 fork，升级不受制于人。作者选定 | 生效 |
@@ -91,3 +91,4 @@ App 与扩展之间照 SFM：扩展在版本化的 `NEMachServiceName` 上开 XP
 | 17 | 2026-11-19 | 叠加：把 singbox-multipath（beta11，d99530a）的 `protocol/multipath` 整包移植进 `core/bond`，经 fork 的注册钩子注册为 `multipath` 出站与入站；`aggregate` 的 bond 模式生成到它的配置 | 作者选定；GPLv3 与本项目一致（附加条款：不得用 sing-box 名称）；只依赖 sing-box 公开包与 quic-go（已在依赖图里）；不依赖它的 fork，理由同决策 10 | 生效 |
 | 18 | 2026-11-19 | 聚合服务器：仓库加 `server/`（Go，复用 `core/bond` 的入站）与一键安装脚本（systemd、生成 psk、输出导入链接）；App 粘贴链接添加服务器 | 作者选定；设计稿「添加服务器」一节 | 生效 |
 | 19 | 2026-11-19 | 发布：写 Developer ID 签名、公证、DMG 打包脚本；自动更新用 Sparkle（新依赖，MIT）；公证凭据由作者之后配进钥匙串，脚本缺凭据时报错并说明，不推送、不发布 | 作者选定；Sparkle 是 macOS 独立分发 App 的通行做法（SFM 走 App Store，不适用） | 生效 |
+| 20 | 2026-11-19 | 路由页按设计稿 v0.3（`docs/design/routing-v0.3.html`）：「节点」与「规则」合成「路由」，侧栏改为八项；路由页有两种视图——路线图（从流量出发）与分组（Clash 式的分组与节点）；「改走」存为 App 内的路由覆盖层（按配置分别保存，连接时改写规则的出站，配置文件不动），被覆盖的规则在界面上标明；流量类别名默认由规则条件生成，可重命名，名字也存在覆盖层；界面遵循 macOS 26 的 Apple 设计规范 | 作者评审设计稿后选定，并要求保留旧式分组视图 | 生效 |
