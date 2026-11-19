@@ -26,3 +26,5 @@
 | SFM 768b3de `Library/Network/HelperServiceManager.swift` | GPLv3（同上） | `apple/Parallux/Helper/HelperServiceManager.swift` | 改写：注册、注销、状态与打开登录项设置；改为 @Observable |
 | SFM 768b3de `Library/Network/RootHelperXPC.swift` | GPLv3（同上） | `apple/ParalluxKit/Sources/ParalluxKit/Helper/HelperXPC.swift` | 改写：接口只保留本卡的方法，回复改为 JSON，每次调用有超时上限 |
 | sing-box v1.14.4 `common/process/searcher_darwin_shared.go` `matchDarwinConnectionEntry` | GPLv3 | `apple/ParalluxKit/Sources/ParalluxKit/Helper/SocketOwnerMatcher.swift` | 用 Swift 重写同一组匹配规则（精确、本地回退、通配回退、去掉 IPv4 映射） |
+| `sparkle-project/Sparkle` 2.10.1 | MIT | `apple/Frameworks/Sparkle.xcframework`（`scripts/fetch-sparkle.sh` 取得，不入库），嵌入 App | 依赖，发布资产按 sha256 钉住（决策 19） |
+| coder/coder-desktop-macos `UpdaterService.swift` | AGPL-3.0 | `apple/Parallux/Update/UpdaterModel.swift` | 只借鉴做法（包一层 SPUStandardUpdaterController、渠道存 UserDefaults），未拷代码 |

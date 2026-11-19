@@ -8,6 +8,7 @@ cd "$ROOT"
 # Rebuilds the Go framework only when its inputs changed (content hash, see
 # build-core.sh), so the Swift build never links a stale core.
 scripts/build-core.sh
+scripts/fetch-sparkle.sh
 scripts/gen-xcodeproj.sh
 scripts/check-apple-config.sh
 mkdir -p .build/logs

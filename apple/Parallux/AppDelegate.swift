@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.behavior = .transient
         app.start()
         SystemServices.start(app)
+        UpdaterModel.shared.start()
         popover.contentViewController = NSHostingController(rootView: PanelView(
             app: app,
             openMainWindow: { [weak self] in self?.showMainWindow() },
@@ -155,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(submenu("配置", profiles))
 
         menu.addItem(.separator())
+        if UpdaterModel.shared.isConfigured { menu.addItem(ActionItem("检查更新…") { UpdaterModel.shared.checkForUpdates() }) }
         menu.addItem(ActionItem("打开主窗口", key: "o") { [weak self] in self?.showMainWindow() })
         menu.addItem(ActionItem("设置…", key: ",") { [weak self] in self?.showSettings() })
         menu.addItem(.separator())

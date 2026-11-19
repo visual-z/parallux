@@ -44,9 +44,7 @@ private struct GeneralSettings: View {
                 }
                 Toggle("菜单栏显示实时速率", isOn: $settings.value.showRateInMenuBar)
             }
-            Section {
-                Text("语言跟随系统；自动更新在 M6 提供。").font(.caption).foregroundStyle(.secondary)
-            }
+            UpdateSection()
         }
         .formStyle(.grouped)
     }
