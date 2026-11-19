@@ -227,12 +227,109 @@ struct DesignMeterRow: View {
 }
 
 extension View {
-    /// The design's `.pill-btn`: a system button with a capsule border; `primary` fills it with the accent colour.
+    /// The design's `.pill-btn`: a system button with a capsule border, at the
+    /// regular control size; `primary` fills it with the accent colour.
     @ViewBuilder func designPill(primary: Bool = false) -> some View {
         if primary {
-            buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.small)
+            buttonStyle(.borderedProminent).buttonBorderShape(.capsule)
         } else {
-            buttonStyle(.bordered).buttonBorderShape(.capsule).controlSize(.small)
+            buttonStyle(.bordered).buttonBorderShape(.capsule)
         }
+    }
+}
+
+/// The design's `.icon-btn` as a pull-down: 「⋯」 on a 28 pt disc, the whole
+/// disc clickable. A borderless Menu draws only its glyph and is about as
+/// easy to hit (the author's screenshots, docs/tasks/fix-ui-details.md).
+struct DesignMoreMenu<Content: View>: View {
+    @ViewBuilder var content: Content
+    var body: some View {
+        Menu {
+            content
+        } label: {
+            Image(systemName: "ellipsis").font(.system(size: 13, weight: .semibold))
+                .frame(width: 28, height: 28)
+                .background(.quaternary, in: Circle())
+                .contentShape(Circle())
+        }
+        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+        .accessibilityLabel("更多")
+        .help("更多")
+    }
+}
+
+/// The design's `.field`: a magnifier and a text field on a capsule, with a
+/// clear button once there is text. Used by the panel's node page and 试一下.
+struct DesignSearchField: View {
+    let prompt: String
+    @Binding var text: String
+    var symbol = "magnifyingglass"
+    var monospaced = false
+    /// Points; 28 in the panel, 32 on a page.
+    var height: CGFloat = 32
+    var focus: FocusState<Bool>.Binding?
+    var submit: () -> Void = {}
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol).foregroundStyle(.secondary)
+            field.textFieldStyle(.plain).font(monospaced ? .body.monospaced() : .body).onSubmit(submit)
+            if !text.isEmpty {
+                Button("清除", systemImage: "xmark.circle.fill") { text = "" }
+                    .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 10).frame(height: height)
+        .background(.quaternary, in: Capsule())
+    }
+
+    @ViewBuilder private var field: some View {
+        if let focus {
+            TextField(prompt, text: $text).focused(focus)
+        } else {
+            TextField(prompt, text: $text)
+        }
+    }
+}
+
+/// Lays its subviews out left to right and wraps to the next line when the
+/// width runs out (chips, tags). Rows are as tall as their tallest subview.
+struct FlowingRow: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(subviews, width: proposal.width ?? .infinity)
+        return CGSize(width: rows.map(\.width).max() ?? 0,
+                      height: rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in arrange(subviews, width: bounds.width) {
+            var x = bounds.minX
+            for index in row.items {
+                // Nothing is wider than the row: a long host truncates inside its chip.
+                let size = subviews[index].sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(width: min(size.width, bounds.width), height: size.height))
+                x += min(size.width, bounds.width) + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> [(items: [Int], width: CGFloat, height: CGFloat)] {
+        var rows: [(items: [Int], width: CGFloat, height: CGFloat)] = []
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(ProposedViewSize(width: width, height: nil))
+            let item = min(size.width, width)
+            if let last = rows.indices.last, rows[last].width + spacing + item <= width {
+                rows[last].items.append(index)
+                rows[last].width += spacing + item
+                rows[last].height = max(rows[last].height, size.height)
+            } else {
+                rows.append(([index], item, size.height))
+            }
+        }
+        return rows
     }
 }

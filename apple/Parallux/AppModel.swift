@@ -284,7 +284,7 @@ final class AppModel {
         let linkText: String? = effectiveMode != nil
             ? "\(effectiveMode?.title ?? "") · \(activeLinks.count) 条线路"
             : defaultLink.link?.kind
-        return StatusLine.text(setup: setup, tunnel: state, actionError: lastError ?? tunnel.startError,
+        return StatusLine.text(setup: setup, tunnel: state, actionError: lastError ?? tunnel.startError ?? session.actionError,
                                coreError: session.lastError, linkKind: linkText)
     }
 

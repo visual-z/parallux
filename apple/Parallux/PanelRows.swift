@@ -190,16 +190,7 @@ struct PanelNodeListView: View {
             .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
 
             HStack(spacing: 6) {
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField("搜索", text: $search).textFieldStyle(.plain).focused($searchFocused)
-                    if !search.isEmpty {
-                        Button("清除", systemImage: "xmark.circle.fill") { search = "" }
-                            .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.tertiary)
-                    }
-                }
-                .padding(.horizontal, 10).frame(height: 28)
-                .background(.quaternary, in: Capsule())
+                DesignSearchField(prompt: "搜索", text: $search, height: 28, focus: $searchFocused)
                 Button("延迟测试", systemImage: "bolt", action: testAll)
                     .labelStyle(.iconOnly).buttonBorderShape(.circle)
                     .disabled(isTesting || sections.isEmpty)

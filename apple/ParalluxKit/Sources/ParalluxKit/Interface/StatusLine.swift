@@ -34,9 +34,20 @@ public enum StatusLine {
     }
 }
 
-/// A one-shot action sent to the core (docs/tasks/fix-ui-details.md).
+/// A one-shot action sent to the core, and what to say when it fails
+/// (docs/tasks/fix-ui-details.md). The sentence names the action; the
+/// transport's own error text (gRPC status, deadlines) is not shown: it is
+/// long, says nothing a user can act on, and once read as 「读不到内核」.
 public enum CoreAction: CaseIterable, Sendable {
     case urlTest, selectOutbound, setRouteMode, closeConnection, clearLogs
 
-    public var failure: String { "" }
+    public var failure: String {
+        switch self {
+        case .urlTest: "延迟测试失败"
+        case .selectOutbound: "切换节点失败"
+        case .setRouteMode: "切换路由模式失败"
+        case .closeConnection: "关闭连接失败"
+        case .clearLogs: "清除日志失败"
+        }
+    }
 }

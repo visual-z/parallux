@@ -26,7 +26,8 @@ public enum SidebarItem: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// SF Symbol name. All were checked with `NSImage(systemSymbolName:)`
-    /// on macOS 27.2 (2026-11-18); re-check when changing one.
+    /// on macOS 27.2 (2026-11-18; the diagnostics pulse on 2026-11-20, as
+    /// design v0.2 draws it); re-check when changing one.
     public var symbol: String {
         switch self {
         case .overview: "gauge.with.dots.needle.67percent"
@@ -34,7 +35,7 @@ public enum SidebarItem: String, CaseIterable, Identifiable, Sendable {
         case .logs: "list.bullet.rectangle"
         case .links: "cable.connector"
         case .aggregationServer: "server.rack"
-        case .diagnostics: "stethoscope"
+        case .diagnostics: "waveform.path.ecg"
         case .profiles: "doc.text"
         case .routing: "arrow.triangle.branch"
         }

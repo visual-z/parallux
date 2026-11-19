@@ -16,15 +16,7 @@ struct MainWindow: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
-                ForEach(SidebarSection.allCases) { section in
-                    if let title = section.title {
-                        Section(title) { rows(section) }
-                    } else {
-                        Section { rows(section) }
-                    }
-                }
-            }
+            SidebarList(selection: $selection, badge: badge(for:))
             .navigationSplitViewColumnWidth(min: 200, ideal: 220)
             .safeAreaInset(edge: .bottom) { uptime }
         } detail: {
@@ -47,25 +39,34 @@ struct MainWindow: View {
                     HStack {
                         Label("远程 · \(server.name)", systemImage: "desktopcomputer")
                         Spacer()
-                        Button("本机") { app.remote.activate(nil, session: app.session, localConnected: app.tunnel.isConnected) }.controlSize(.small)
+                        Button("本机") { app.remote.activate(nil, session: app.session, localConnected: app.tunnel.isConnected) }
                     }
                     .font(.callout)
                     .padding(.horizontal, 16).padding(.vertical, 8)
                     .background(.tint.opacity(0.15))
                 }
             }
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    // Design v0.2: a plain power button, tinted while Parallux
-                    // is on; not a toggle with a filled "selected" background.
-                    Button {
-                        Task { await app.setOn(!app.isOn) }
-                    } label: {
-                        Label(app.isOn ? "关闭 Parallux" : "开启 Parallux", systemImage: "power")
-                            .foregroundStyle(app.isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+            // Design v0.2: the power button is the last item, right of the page's
+            // own controls. A toolbar's items come in the order of the views
+            // that declare them, and only an overlay comes after the page
+            // itself: rendered four ways on 2026-11-20, `.primaryAction`, a
+            // plain item and a background all put the button first
+            // (docs/tasks/fix-ui-details.md).
+            .overlay {
+                Color.clear.allowsHitTesting(false).toolbar {
+                    ToolbarSpacer(.fixed)
+                    ToolbarItem {
+                        // A plain button tinted while Parallux is on; not a
+                        // toggle with a filled "selected" background.
+                        Button {
+                            Task { await app.setOn(!app.isOn) }
+                        } label: {
+                            Label(app.isOn ? "关闭 Parallux" : "开启 Parallux", systemImage: "power")
+                                .foregroundStyle(app.isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                        }
+                        .disabled(app.tunnel.isBusy || !app.controlsLocalCore)
+                        .help(app.isOn ? "关闭 Parallux" : "开启 Parallux")
                     }
-                    .disabled(app.tunnel.isBusy || !app.controlsLocalCore)
-                    .help(app.isOn ? "关闭 Parallux" : "开启 Parallux")
                 }
             }
         }
@@ -77,14 +78,6 @@ struct MainWindow: View {
         .onAppear { if let item = app.pendingSidebar { selection = item; app.pendingSidebar = nil } }
         .onChange(of: app.pendingSidebar) { _, item in
             if let item { selection = item; app.pendingSidebar = nil }
-        }
-    }
-
-    private func rows(_ section: SidebarSection) -> some View {
-        ForEach(section.items) { item in
-            Label(item.title, systemImage: item.symbol)
-                .badge(badge(for: item))
-                .tag(item)
         }
     }
 

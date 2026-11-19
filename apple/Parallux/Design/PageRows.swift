@@ -50,12 +50,10 @@ struct LinkRowView: View {
             // A fixed width, so the name and address columns start at the same
             // x in every row whatever the state reads.
             .frame(width: 136, alignment: .trailing)
-            Menu("更多", systemImage: "ellipsis") {
+            DesignMoreMenu {
                 Toggle("仅备用", isOn: $isBackupOnly).disabled(!isOn)
             }
-            .labelStyle(.iconOnly).menuIndicator(.hidden).buttonBorderShape(.circle).fixedSize()
-            .help("更多")
-            Toggle("启用", isOn: $isOn).toggleStyle(.switch).controlSize(.small).labelsHidden()
+            Toggle("启用", isOn: $isOn).toggleStyle(.switch).labelsHidden()
         }
     }
 
@@ -112,9 +110,7 @@ struct ProfileRowView<MenuContent: View>: View {
             if let update {
                 Button("更新", systemImage: "arrow.clockwise", action: update).designPill().disabled(isUpdating)
             }
-            Menu("更多", systemImage: "ellipsis") { menu }
-                .labelStyle(.iconOnly).menuIndicator(.hidden).buttonBorderShape(.circle).fixedSize()
-                .help("更多")
+            DesignMoreMenu { menu }
         }
     }
 }
@@ -143,11 +139,9 @@ struct ServerRowView: View {
             DesignTag(text: tag, tone: tone)
             if !latency.isEmpty { Text(latency).font(.callout).monospacedDigit().foregroundStyle(latencyColor) }
             if !inUse { Button("启用", action: enable).designPill() }
-            Menu("更多", systemImage: "ellipsis") {
+            DesignMoreMenu {
                 Button("删除", role: .destructive, action: delete)
             }
-            .labelStyle(.iconOnly).menuIndicator(.hidden).buttonBorderShape(.circle).fixedSize()
-            .help("更多")
         }
     }
 }

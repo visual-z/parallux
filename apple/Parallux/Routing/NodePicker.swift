@@ -30,7 +30,7 @@ struct ExitInspector: View {
                                         Text(item.rate > 0 ? RateFormat.bitsPerSecond(item.rate) : "暂无流量").font(.caption).foregroundStyle(.secondary)
                                     }
                                     Spacer()
-                                    Button("编辑规则…") { reroute(item) }.controlSize(.small)
+                                    Button("编辑规则…") { reroute(item) }.designPill()
                                 }
                                 .padding(.vertical, 3)
                             }

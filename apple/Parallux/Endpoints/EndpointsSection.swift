@@ -64,7 +64,6 @@ private struct EndpointRow: View {
                     Button("提交", action: answer)
                     Button("取消") { model.cancel(status) }
                 }
-                .controlSize(.small)
             }
         }
         .padding(.vertical, 2)

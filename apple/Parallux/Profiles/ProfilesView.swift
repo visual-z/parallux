@@ -15,8 +15,6 @@ struct ProfilesView: View {
     @State private var linkPrompt = false
     @State private var link = ""
     @State private var error: String?
-    /// The first lines of the configuration in use (bounded, see `excerpt`).
-    @State private var preview: String?
 
     private var store: ProfileStore { service.store }
 
@@ -30,8 +28,9 @@ struct ProfilesView: View {
                     Button("导入远程配置") { adding = .remote }
                 }
             } else {
-                // Design v0.2, profiles page: the list card, then a read-only
-                // look at the configuration in use.
+                // Design v0.2, profiles page: the list card. The content opens
+                // from a row's menu (查看内容 / 编辑内容), never by itself: a
+                // subscription can be megabytes (docs/tasks/fix-ui-details.md).
                 DesignPage {
                     DesignList(items: store.profiles, id: { $0.id.uuidString }, move: { dragged, target in
                         guard let move = ListReorder.offsets(moving: dragged, onto: target, in: store.profiles.map { $0.id.uuidString }) else { return }
@@ -47,18 +46,6 @@ struct ProfilesView: View {
                         .onTapGesture { run { try store.select(profile.id) } }
                         .contextMenu { menu(for: profile) }
                     }
-                    if let selected = store.selected {
-                        DesignSectionHeader(title: "\(selected.name) · config.json") {
-                            Text("只读预览").font(.subheadline).foregroundStyle(.secondary)
-                            Button(selected.isReadOnly ? "查看内容" : "编辑内容") { editing = selected }.designPill()
-                        }
-                        DesignCode(text: preview ?? "…")
-                    }
-                }
-                .task(id: PreviewKey(id: store.selectedID, updated: store.selected?.lastUpdated)) {
-                    preview = nil
-                    guard let selected = store.selected, let content = try? await service.content(of: selected) else { return }
-                    preview = Self.excerpt(content)
                 }
             }
         }
@@ -81,26 +68,6 @@ struct ProfilesView: View {
         } message: {
             Text(error ?? "")
         }
-    }
-
-    /// Reloads the preview when another profile is chosen or the chosen one is updated.
-    private struct PreviewKey: Hashable {
-        var id: UUID?
-        var updated: Date?
-    }
-
-    /// Why 40 lines and 4000 characters: enough to recognise a configuration
-    /// (its first sections); a subscription can be megabytes and one Text
-    /// that long would stall the page. The editor shows the rest. Assumed
-    /// sizes, chosen to fill about one screen.
-    static let previewLines = 40
-    static let previewCharacters = 4000
-
-    static func excerpt(_ content: String) -> String {
-        let head = String(content.prefix(previewCharacters))
-        let lines = head.split(separator: "\n", omittingEmptySubsequences: false)
-        let cut = lines.count > previewLines || head.count < content.count
-        return lines.prefix(previewLines).joined(separator: "\n") + (cut ? "\n…" : "")
     }
 
     static func symbol(_ kind: ProfileKind) -> String {

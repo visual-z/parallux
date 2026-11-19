@@ -26,29 +26,37 @@ struct ExplainView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    TextField("主机", text: $target, prompt: Text("example.com"))
-                        .textFieldStyle(.roundedBorder).font(.body.monospaced())
-                        .onSubmit(run)
-                    Button("评估连接", action: run).buttonStyle(.borderedProminent).disabled(target.trimmingCharacters(in: .whitespaces).isEmpty || running)
+        // Design v0.3, 试一下: one field, the recent hosts to try, the answer
+        // as steps on a card. Built from the same parts as the other pages.
+        DesignPage {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 8) {
+                    DesignSearchField(prompt: "域名或 IP，例如 example.com", text: $target, symbol: "arrow.triangle.branch", monospaced: true, submit: run)
+                    Button("评估连接", action: run).designPill(primary: true)
+                        .disabled(target.trimmingCharacters(in: .whitespaces).isEmpty || running)
                 }
                 if !recentTargets.isEmpty {
-                    HStack(spacing: 6) {
-                        Text("连接").font(.caption).foregroundStyle(.secondary)
-                        ForEach(recentTargets, id: \.self) { host in
-                            Button(host) { target = host; run() }.controlSize(.small)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("最近的连接").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                        // Wraps instead of truncating: hosts are the content here.
+                        FlowingRow(spacing: 6) {
+                            ForEach(recentTargets, id: \.self) { host in
+                                Button(host) { target = host; run() }.designPill().lineLimit(1)
+                            }
                         }
                     }
                 }
-                if running { ProgressView() }
-                if let result { Steps(result: result, model: model, reroute: reroute) }
-
+                if running {
+                    ProgressView().frame(maxWidth: .infinity).padding(.top, 20)
+                } else if let result {
+                    Steps(result: result, model: model, reroute: reroute)
+                } else {
+                    ContentUnavailableView("这条流量为什么走这里", systemImage: "arrow.triangle.branch",
+                                           description: Text("输入域名或 IP，逐步列出命中的规则、经过的分组、最终节点和线路。不会发起连接。"))
+                        .frame(maxWidth: .infinity).padding(.top, 20)
+                }
             }
-            .padding(20)
             .frame(maxWidth: 720, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         // A target set from outside (connections inspector) or typed: explain it
         // once typing pauses. Why 400 ms: one XPC round trip per pause, not per key.
@@ -81,7 +89,7 @@ private struct Steps: View {
 
     var body: some View {
         if let error = result.error {
-            Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+            DesignWarning(text: error)
         } else {
             let profile = model.effectiveProfile(app: app)
             let rule = result.ruleIndex >= 0 && result.ruleIndex < profile.rules.count ? profile.rules[result.ruleIndex] : nil
@@ -106,15 +114,15 @@ private struct Steps: View {
                 }
                 if let item, result.outbound != nil {
                     HStack {
-                        Button("编辑规则…") { reroute(item) }
+                        Button("编辑规则…") { reroute(item) }.designPill()
                         if item.connections > 0 { Text("\(item.connections) 个活跃连接").font(.caption).foregroundStyle(.secondary) }
                     }
                     .padding(.top, 8)
                 }
             }
             .padding(16)
-            .background(.background, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.primary.opacity(0.08)))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(DesignMetrics.cardFill, in: RoundedRectangle(cornerRadius: DesignMetrics.cardRadius))
         }
     }
 

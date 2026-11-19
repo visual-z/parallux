@@ -37,6 +37,12 @@ final class CoreSession {
     private(set) var connections: [ConnectionRow] = []
     private(set) var logs = RingBuffer<LogEntry>(capacity: logCapacity)
     private(set) var lastError: String?
+    /// The last one-shot action that failed (CoreAction.failure), for a moment.
+    private(set) var actionError: String?
+    @ObservationIgnored private var actionSerial = 0
+    /// Why 6 s: time to read a short sentence in the subtitle; longer and it
+    /// reads as a state the app is in. Assumed.
+    static let actionErrorSeconds = 6.0
     private(set) var testing: Set<String> = []
     private(set) var startedAt: Date?
     var logsPaused = false
@@ -175,26 +181,41 @@ final class CoreSession {
     // MARK: actions (one-shot standalone clients, dialed over XPC)
 
     func select(group: String, outbound: String) {
-        perform { try $0.selectOutbound(group, outboundTag: outbound) }
+        perform(.selectOutbound) { try $0.selectOutbound(group, outboundTag: outbound) }
         if let index = groups.firstIndex(where: { $0.tag == group }) { groups[index].selected = outbound }
     }
 
-    func urlTest(group: String) {
-        testing.insert(group)
-        perform({ try $0.urlTest(group) }, then: { [weak self] in self?.testing.remove(group) })
+    func urlTest(group: String) { urlTest(groups: [group]) }
+
+    /// Tests several groups over one client, one after another. One client
+    /// per group, all at once, was what a "test everything" button did: with
+    /// 19 groups, 19 concurrent probes of the command server, some of which
+    /// timed out (docs/tasks/fix-ui-details.md).
+    func urlTest(groups tags: [String]) {
+        let pending = tags.filter { !testing.contains($0) }
+        guard !pending.isEmpty else { return }
+        testing.formUnion(pending)
+        perform(.urlTest, { client in
+            // A group that fails does not stop the others; the first failure is reported.
+            var failure: Error?
+            for tag in pending {
+                do { try client.urlTest(tag) } catch { failure = failure ?? error }
+            }
+            if let failure { throw failure }
+        }, then: { [weak self] in self?.testing.subtract(pending) })
     }
 
     func setRouteMode(_ mode: String) {
         routeMode = mode
-        perform { try $0.setClashMode(mode) }
+        perform(.setRouteMode) { try $0.setClashMode(mode) }
     }
 
-    func closeConnection(_ id: String) { perform { try $0.closeConnection(id) } }
-    func closeAllConnections() { perform { try $0.closeConnections() } }
+    func closeConnection(_ id: String) { perform(.closeConnection) { try $0.closeConnection(id) } }
+    func closeAllConnections() { perform(.closeConnection) { try $0.closeConnections() } }
 
     func clearLogs() {
         logs.removeAll()
-        perform { try $0.clearLogs() }
+        perform(.clearLogs) { try $0.clearLogs() }
     }
 
     func dismissError() { lastError = nil }
@@ -212,19 +233,33 @@ final class CoreSession {
         }
     }
 
-    private func perform(_ action: @escaping @Sendable (LibboxCommandClient) throws -> Void, then done: (@MainActor () -> Void)? = nil) {
+    private func perform(_ kind: CoreAction, _ action: @escaping @Sendable (LibboxCommandClient) throws -> Void, then done: (@MainActor () -> Void)? = nil) {
         Task.detached { [weak self] in
-            var message: String?
+            var failed = false
             do {
                 let client = try CommandTarget.standalone()
                 try action(client)
             } catch {
-                message = error.localizedDescription
+                failed = true
             }
             await MainActor.run {
-                if let message { self?.lastError = message }
+                self?.finished(kind, failed: failed)
                 done?()
             }
+        }
+    }
+
+    /// A failed action is its own thing, not a core that cannot be read
+    /// (`lastError` is for the streams): it says what failed, and goes away
+    /// by itself or with the next action that works.
+    private func finished(_ kind: CoreAction, failed: Bool) {
+        actionSerial += 1
+        guard failed else { return actionError = nil }
+        actionError = kind.failure
+        let serial = actionSerial
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(Self.actionErrorSeconds))
+            if self?.actionSerial == serial { self?.actionError = nil }
         }
     }
 

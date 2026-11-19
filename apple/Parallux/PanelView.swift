@@ -222,7 +222,7 @@ private struct PanelNodesView: View {
             delayColor: { LatencyGrade(milliseconds: $0).color },
             back: { dismiss() },
             // One button for everything on the page (design), not one per group.
-            testAll: { for section in sections { session.urlTest(group: section.tag) } },
+            testAll: { session.urlTest(groups: sections.map(\.tag)) },
             toggle: { toggled.formSymmetricDifference([$0]) },
             select: { group, node in session.select(group: group, outbound: node) }
         )

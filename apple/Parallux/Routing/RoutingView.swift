@@ -48,7 +48,7 @@ struct RoutingView: View {
             ToolbarItem { RouteModeMenu() }
             ToolbarItem {
                 Button("延迟测试", systemImage: "bolt") {
-                    for group in app.session.groups { app.session.urlTest(group: group.tag) }
+                    app.session.urlTest(groups: app.session.groups.map(\.tag))
                 }
                 .disabled(!app.session.isRunning || !app.session.testing.isEmpty)
                 .help("延迟测试")

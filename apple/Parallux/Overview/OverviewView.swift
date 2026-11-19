@@ -75,7 +75,7 @@ struct OverviewView: View {
         case .awaitingApproval, .failed: true
         default: false
         }
-        let any = setupNeedsAttention || app.lastError != nil || app.tunnel.startError != nil || app.session.lastError != nil
+        let any = setupNeedsAttention || app.lastError != nil || app.tunnel.startError != nil || app.session.lastError != nil || app.session.actionError != nil
         return any ? app.statusLine : nil
     }
 
@@ -146,7 +146,7 @@ private struct DeprecationBanner: View {
         VStack(alignment: .leading, spacing: 6) {
             Label("弃用警告", systemImage: "exclamationmark.triangle").font(.callout.weight(.medium))
             ForEach(notes, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
-            Button("禁用弃用警告", action: hide).controlSize(.small)
+            Button("禁用弃用警告", action: hide)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
