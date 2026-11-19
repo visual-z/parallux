@@ -47,7 +47,10 @@ final class AppModel {
         if UserDefaults.standard.bool(forKey: "ParalluxPreview") { session.loadPreview() }
         #endif
         profiles.startAutoUpdate()
-        Task { await tunnel.load() }
+        Task {
+            await tunnel.load()
+            await upgradeStaleExtension()
+        }
         observeTunnel()
         observeLinkHealth()
         observeLinkSet(previous: links.links)
@@ -128,6 +131,33 @@ final class AppModel {
     func setMode(_ mode: AggregationMode) async {
         linkSettings.value.mode = mode
         await applyLinkChanges()
+    }
+
+    /// After an app update the running extension is the old build, whose Mach
+    /// service this app cannot reach; replace it, and bring a tunnel that was
+    /// on back up (fix-stale-extension-on-launch).
+    private func upgradeStaleExtension() async {
+        let signed = AppGroup.identifier() != nil
+        guard signed, tunnel.hasConfiguration else { return }
+        let status: LaunchUpgrade.Status = switch tunnel.vpnStatus {
+        case .connected: .connected
+        case .connecting: .connecting
+        case .reasserting: .reasserting
+        case .disconnecting: .disconnecting
+        default: .disconnected
+        }
+        let stale = await tunnel.needsActivation()
+        switch LaunchUpgrade.action(signed: signed, status: status, stale: stale) {
+        case .none:
+            return
+        case .replace:
+            await tunnel.install()
+        case .replaceAndReconnect:
+            await tunnel.disconnect()
+            await waitUntilStopped()
+            await tunnel.install()
+            if tunnel.phase == .ready { await connect() }
+        }
     }
 
     func setOn(_ on: Bool) async {
