@@ -37,34 +37,30 @@ private struct PanelHome: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            header
+        // Design v0.2's panel: flat rows under small section titles, parted
+        // by hairlines (docs/tasks/fix-panel-design-parity.md). System
+        // controls throughout, apart from the round link switch.
+        VStack(alignment: .leading, spacing: 0) {
+            header.padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)
             if let server = app.remote.active {
                 Label("\(server.name) · 远程", systemImage: "desktopcomputer").font(.caption).foregroundStyle(.secondary)
+                    .padding(.horizontal, 16).padding(.bottom, 6)
             }
-            if app.tunnel.isConnected { miniFlow }
-            // A grouped Form, so rows get the system's label/control layout
-            // (control trailing, subtitle under the title) instead of hand-made HStacks.
-            Form {
-                Section("线路") { links }
-                Section("聚合方式") { aggregation }
-                Section("出口") { exit }
-            }
-            .formStyle(.grouped)
-            .scrollDisabled(true)
-            .scrollContentBackground(.hidden)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, -14)
-            footer
+            if app.tunnel.isConnected { strip.padding(.horizontal, 12) }
+            PanelSection(title: "线路") { links }
+            PanelSeparator()
+            PanelSection(title: "聚合方式") { aggregation }
+            PanelSeparator()
+            PanelSection(title: "出口") { exit }
+            footer.padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 12)
         }
-        .padding(.horizontal, 14).padding(.vertical, 12)
     }
 
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Parallux").font(.headline)
-                Text(app.statusLine).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                Text(app.statusLine).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer()
             Toggle(app.isOn ? "停止" : "启动", isOn: isOn).toggleStyle(.switch).labelsHidden().controlSize(.regular)
@@ -72,124 +68,120 @@ private struct PanelHome: View {
         }
     }
 
-    private var miniFlow: some View {
-        Button(action: openMainWindow) {
-            HStack(spacing: 10) {
-                let diagram = FlowModel.diagram(app)
-                FlowDiagram(links: diagram.links, exits: diagram.exits, capacity: diagram.capacity, isCompact: true)
-                    .frame(height: 44)
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(RateFormat.bitsPerSecond(app.session.status?.downlink ?? 0)).font(.callout.weight(.semibold))
-                    Text("↑ " + RateFormat.bitsPerSecond(app.session.status?.uplink ?? 0)).font(.caption2).foregroundStyle(.secondary)
-                }
-                .monospacedDigit()
-                .frame(width: 84, alignment: .trailing)
-            }
-            .padding(8)
-            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
+    private var strip: some View {
+        let diagram = FlowModel.diagram(app)
+        return PanelStrip(download: RateFormat.bitsPerSecond(app.session.status?.downlink ?? 0),
+                          upload: RateFormat.bitsPerSecond(app.session.status?.uplink ?? 0), action: openMainWindow) {
+            FlowDiagram(links: diagram.links, exits: diagram.exits, capacity: diagram.capacity, isCompact: true)
         }
-        .buttonStyle(.plain)
-        .help("打开主窗口")
     }
 
-    /// Each link is a system Toggle row (on = takes part in aggregation).
+    /// Every link in priority order, each with its round switch (on = takes
+    /// part in aggregation).
     @ViewBuilder private var links: some View {
-        if app.links.links.isEmpty {
-            Text("不可用").foregroundStyle(.secondary)
+        let prefs = app.linkSettings.value.preferences
+        let ordered = app.links.links.sorted { a, b in
+            let ia = prefs.order.firstIndex(of: a.name) ?? Int.max
+            let ib = prefs.order.firstIndex(of: b.name) ?? Int.max
+            return ia != ib ? ia < ib : a.name < b.name
         }
-        ForEach(app.links.links) { link in
-            let tag = ProfileComposer.linkTag(link.name)
-            Toggle(isOn: Binding(
-                get: { !app.linkSettings.value.preferences.disabled.contains(link.name) },
-                set: { on in
-                    if on { app.linkSettings.value.preferences.disabled.remove(link.name) } else { app.linkSettings.value.preferences.disabled.insert(link.name) }
-                    Task { await app.applyLinkChanges() }
-                }
-            )) {
-                Label {
-                    Text(link.kind.title)
-                    Text(linkDetail(link, tag: tag))
-                } icon: {
-                    Image(systemName: link.kind.symbol).foregroundStyle(LinkColors.color(for: link, in: app.links.links))
-                }
-            }
-            .toggleStyle(.switch)
-            .controlSize(.mini)
+        let standings = LinkStanding.all(enabled: app.enabledLinks.map(\.name), backup: prefs.backup, mode: app.effectiveMode)
+        if ordered.isEmpty {
+            Text("不可用").foregroundStyle(.secondary).frame(minHeight: 30)
+        }
+        ForEach(ordered) { link in
+            let standing = standings[link.name] ?? .disabled
+            PanelLinkRow(symbol: link.kind.symbol, name: link.kind.title, badge: standing.badge,
+                         detail: "\(link.displayName) · \(link.name)", trailing: carried(link, standing),
+                         color: LinkColors.color(for: link, in: app.links.links),
+                         isOn: Binding(
+                             get: { !app.linkSettings.value.preferences.disabled.contains(link.name) },
+                             set: { on in
+                                 if on { app.linkSettings.value.preferences.disabled.remove(link.name) } else { app.linkSettings.value.preferences.disabled.insert(link.name) }
+                                 Task { await app.applyLinkChanges() }
+                             }
+                         ))
         }
     }
 
-    private func linkDetail(_ link: LinkInterface, tag: String) -> String {
-        if let stat = app.linkStats.link(tag), !stat.healthy { return "\(link.name) · 不可用" }
-        if let rate = app.linkStats.rates[tag] { return "\(link.name) · \(RateFormat.bitsPerSecond(rate.total))" }
-        return "\(link.displayName) · \(link.name)"
+    /// The right-hand side of a link row: 已停用, 不可用, 待命 or the live rate.
+    private func carried(_ link: LinkInterface, _ standing: LinkStanding) -> String {
+        if standing == .disabled { return OverviewCopy.linkDetail(enabled: false, standby: false, rate: 0) }
+        guard app.tunnel.isConnected else { return "" }
+        let tag = ProfileComposer.linkTag(link.name)
+        if let stat = app.linkStats.link(tag), !stat.healthy { return "不可用" }
+        return OverviewCopy.linkDetail(enabled: true, standby: standing == .standby, rate: app.linkStats.rates[tag]?.total ?? 0)
     }
 
     @ViewBuilder private var aggregation: some View {
-        Picker("聚合方式", selection: Binding(get: { app.linkSettings.value.mode }, set: { mode in Task { await app.setMode(mode) } })) {
-            ForEach(AggregationMode.allCases) { Text($0.title).tag($0) }
-        }
-        .pickerStyle(.segmented).labelsHidden()
-        .frame(maxWidth: .infinity)
-        .disabled(app.enabledLinks.count < 2)
-        // A Menu, not a decorative chevron: pick the server or open the page.
-        LabeledContent("聚合服务器") {
-            Menu(app.bondServerSummary ?? "无服务器") {
-                ForEach(app.servers.servers) { server in
-                    Toggle(server.name, isOn: Binding(
-                        get: { app.linkSettings.value.bondServerID == server.id },
-                        set: { on in
-                            app.linkSettings.value.bondServerID = on ? server.id : nil
-                            Task { await app.applyLinkChanges() }
-                        }
-                    ))
+        let modes = AggregationMode.allCases
+        FillSegmentedControl(labels: modes.map(\.title), selection: Binding(
+            get: { modes.firstIndex(of: app.linkSettings.value.mode) ?? -1 },
+            set: { index in if modes.indices.contains(index) { Task { await app.setMode(modes[index]) } } }
+        ))
+        .accessibilityLabel("聚合方式")
+        .disabled(app.enabledLinks.count < 2 || !app.controlsLocalCore)
+        // Only 叠加 goes through a server (design: the row is hidden otherwise).
+        if app.linkSettings.value.mode == .bond {
+            PanelRow(title: "聚合服务器") {
+                // A Menu, not a decorative chevron: pick the server or open the page.
+                Menu(app.bondServerSummary ?? "无服务器") {
+                    ForEach(app.servers.servers) { server in
+                        Toggle(server.name, isOn: Binding(
+                            get: { app.linkSettings.value.bondServerID == server.id },
+                            set: { on in
+                                app.linkSettings.value.bondServerID = on ? server.id : nil
+                                Task { await app.applyLinkChanges() }
+                            }
+                        ))
+                    }
+                    if !app.servers.servers.isEmpty { Divider() }
+                    Button("新建服务器…") { openMainWindow(); app.pendingSidebar = .aggregationServer }
                 }
-                if !app.servers.servers.isEmpty { Divider() }
-                Button("新建服务器…") { openMainWindow(); app.pendingSidebar = .aggregationServer }
+                .menuStyle(.borderlessButton).fixedSize()
             }
-            .menuStyle(.borderlessButton).fixedSize()
+            .padding(.top, 4)
         }
     }
 
     @ViewBuilder private var exit: some View {
         let session = app.session
-        LabeledContent("模式") {
-            Picker("模式", selection: Binding(get: { session.routeMode ?? "" }, set: { session.setRouteMode($0) })) {
+        PanelRow(title: "路由") {
+            Picker("路由模式", selection: Binding(get: { session.routeMode ?? "" }, set: { session.setRouteMode($0) })) {
                 ForEach(session.routeModes, id: \.self) { Text(RouteMode.title($0)).tag($0) }
             }
             .labelsHidden().pickerStyle(.menu).fixedSize()
             .disabled(session.routeModes.isEmpty)
         }
-        LabeledContent("节点") {
+        PanelRow(title: "节点") {
             NavigationLink(value: PanelRoute.nodes) {
-                if let group = session.groups.first(where: \.selectable) {
-                    let delay = group.items.first { $0.tag == group.selected }?.delay ?? 0
-                    Text(delay > 0 ? "\(group.selected) · \(delay) ms" : group.selected)
-                } else {
-                    Text("暂无可用代理组")
+                HStack(spacing: 4) {
+                    if let group = session.groups.first(where: \.selectable) {
+                        let delay = group.items.first { $0.tag == group.selected }?.delay ?? 0
+                        Text(delay > 0 ? "\(group.selected) · \(delay) ms" : group.selected).lineLimit(1).monospacedDigit()
+                    } else {
+                        Text("暂无可用代理组")
+                    }
+                    Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
                 }
+                .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .disabled(session.groups.isEmpty)
         }
     }
 
     private var footer: some View {
         HStack {
-            Button("打开主窗口", action: openMainWindow)
+            Button("打开主窗口", action: openMainWindow).buttonBorderShape(.capsule)
             Spacer()
             Menu("更多", systemImage: "ellipsis") {
                 Button("设置…", action: openSettings)
                 Divider()
                 Button("退出 Parallux") { NSApp.terminate(nil) }
             }
-            .labelStyle(.iconOnly).menuIndicator(.hidden).menuStyle(.borderlessButton).fixedSize()
-        }
-        .controlSize(.small)
-    }
-
-    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-            content()
+            .labelStyle(.iconOnly).menuIndicator(.hidden).buttonBorderShape(.circle).fixedSize()
         }
     }
 }

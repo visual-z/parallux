@@ -49,11 +49,45 @@ public enum OverviewCopy {
     }
 }
 
-/// What a link is doing right now, as the panel and the overview both show it.
+/// What a link is doing right now, as the panel and the overview both show
+/// it. One rule for both, so they cannot disagree about which link leads.
 public enum LinkStanding: Equatable, Sendable {
-    case disabled, carrying, primary, standby
+    /// Switched off.
+    case disabled
+    /// Takes traffic (分流, 叠加, or the only link).
+    case carrying
+    /// 主备's leading link.
+    case primary
+    /// Enabled but waiting: 主备's other links, and 仅备用 links in any mode.
+    case standby
 
-    public static func all(enabled: [String], backup: Set<String>, mode: AggregationMode?) -> [String: LinkStanding] { [:] }
+    /// - Parameters:
+    ///   - enabled: names of the enabled links in priority order.
+    ///   - backup: names marked 仅备用.
+    ///   - mode: the aggregation mode in effect; nil with fewer than two links.
+    /// - Returns: one entry per enabled link. A link without an entry is disabled.
+    public static func all(enabled: [String], backup: Set<String>, mode: AggregationMode?) -> [String: LinkStanding] {
+        guard let first = enabled.first else { return [:] }
+        // The core skips backup-only links while any other is usable; when
+        // every link is backup-only the first one takes the traffic anyway.
+        let lead = enabled.first { !backup.contains($0) } ?? first
+        var standings: [String: LinkStanding] = [:]
+        for name in enabled {
+            if mode == .failover {
+                standings[name] = name == lead ? .primary : .standby
+            } else {
+                standings[name] = backup.contains(name) && name != lead ? .standby : .carrying
+            }
+        }
+        return standings
+    }
 
-    public var badge: String? { nil }
+    /// The design's 「主」「备」 tag after a link's name.
+    public var badge: String? {
+        switch self {
+        case .primary: "主"
+        case .standby: "备"
+        case .disabled, .carrying: nil
+        }
+    }
 }

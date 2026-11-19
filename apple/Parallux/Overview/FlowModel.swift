@@ -24,13 +24,11 @@ enum FlowModel {
         let columns = LinkFlow.columns(links: carrying, linkRates: app.linkStats.rates,
                                        totalRate: status.uplink + status.downlink,
                                        exits: FlowSummary.exits(app.session.connections))
-        let backup = app.linkSettings.value.preferences.backup
-        var links: [FlowNode] = zip(carrying, columns.left).enumerated().map { index, pair in
-            let (link, node) = pair
-            // 主备 uses the first link; the rest, and 仅备用 links in any mode, wait.
-            let standby = (mode == .failover && index > 0) || backup.contains(link.name)
-            return FlowNode(id: link.name, name: node.title, detail: OverviewCopy.linkDetail(enabled: true, standby: standby, rate: node.rate),
-                            rate: Double(node.rate), color: LinkColors.color(for: link, in: app.links.links))
+        let standings = LinkStanding.all(enabled: carrying.map(\.name), backup: app.linkSettings.value.preferences.backup, mode: mode)
+        var links: [FlowNode] = zip(carrying, columns.left).map { link, node in
+            FlowNode(id: link.name, name: node.title,
+                     detail: OverviewCopy.linkDetail(enabled: true, standby: standings[link.name] == .standby, rate: node.rate),
+                     rate: Double(node.rate), color: LinkColors.color(for: link, in: app.links.links))
         }
         // Design v0.2 keeps switched-off links in the picture, faded.
         links += idle.map { link in

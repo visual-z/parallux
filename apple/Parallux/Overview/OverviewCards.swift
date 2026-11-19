@@ -139,6 +139,8 @@ struct FillSegmentedControl: NSViewRepresentable {
             control.setLabel(label, forSegment: index)
         }
         if control.selectedSegment != selection { control.selectedSegment = selection }
+        // An AppKit control does not pick up SwiftUI's .disabled by itself.
+        if control.isEnabled != context.environment.isEnabled { control.isEnabled = context.environment.isEnabled }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView control: NSSegmentedControl, context: Context) -> CGSize? {
