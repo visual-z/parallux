@@ -15,14 +15,14 @@ struct UpdateSection: View {
                     ForEach(UpdateChannel.allCases) { Text($0.title).tag($0) }
                 }
                 HStack {
-                    Text(updater.lastCheck.map { "上次检查：\($0.formatted(date: .abbreviated, time: .shortened))" } ?? "还没有检查过")
-                        .font(.caption).foregroundStyle(.secondary)
+                    if let last = updater.lastCheck {
+                        Text(last.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+                    }
                     Spacer()
-                    Button("检查更新…") { updater.checkForUpdates() }.disabled(!updater.canCheckForUpdates)
+                    Button("检查更新") { updater.checkForUpdates() }.disabled(!updater.canCheckForUpdates)
                 }
             } else {
-                Text("此构建未配置更新源（开发构建）。发布构建由 scripts/release.sh 写入更新地址与公钥。")
-                    .font(.caption).foregroundStyle(.secondary)
+                LabeledContent("检查更新", value: "仅在 macOS 独立版本中可用")
             }
         }
     }

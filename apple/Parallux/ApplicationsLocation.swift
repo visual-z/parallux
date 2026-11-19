@@ -11,12 +11,12 @@ enum ApplicationsMover {
                                                      home: FileManager.default.homeDirectoryForCurrentUser.path)
         guard location != .ok else { return }
         let alert = NSAlert()
-        alert.messageText = "把 Parallux 移到「应用程序」文件夹？"
-        alert.informativeText = location == .translocated
-            ? "Parallux 正从下载后的隔离位置运行。macOS 只会从「应用程序」文件夹启用网络扩展。"
-            : "macOS 只会从「应用程序」文件夹启用 Parallux 的网络扩展。"
-        alert.addButton(withTitle: "移到「应用程序」")
-        alert.addButton(withTitle: "暂不")
+        // Copy from LetsMove (potionfactory/LetsMove zh_CN.lproj), the library
+        // most Mac apps use for this prompt.
+        alert.messageText = "是否要把程序移动到“应用程序”文件夹中？"
+        alert.informativeText = "这样做能让你的“下载”文件夹保持整洁。"
+        alert.addButton(withTitle: "移动到“应用程序”文件夹中")
+        alert.addButton(withTitle: "不移动")
         NSApp.activate()
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         move(bundle)
@@ -31,7 +31,8 @@ enum ApplicationsMover {
             try FileManager.default.copyItem(at: bundle, to: target)
         } catch {
             let failure = NSAlert(error: error)
-            failure.informativeText = "请手动把 Parallux 拖到「应用程序」文件夹。（\(error.localizedDescription)）"
+            failure.messageText = "无法移动到“应用程序”文件夹中"
+            failure.informativeText = error.localizedDescription
             failure.runModal()
             return
         }

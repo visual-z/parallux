@@ -2,19 +2,26 @@ import Libbox
 import ParalluxKit
 import SwiftUI
 
-/// The Settings window (⌘,): one tab per SettingsTab (design v0.2). Every
-/// control here takes effect; features of later milestones say so instead of
-/// showing inert switches.
+/// The Settings window (⌘,): one tab per SettingsTab (design v0.2). Labels
+/// follow SFM's zh-Hans strings (docs/design/copy-and-style.md). Width is
+/// fixed like System Settings panes; height follows each tab's content up to
+/// a cap, so short tabs do not leave an empty lower half.
 struct SettingsView: View {
+    /// Why 560: the narrowest width that keeps every LabeledContent on one
+    /// line. Height cap 620 fits a 13" display with menu bar and Dock.
+    static let width: CGFloat = 560
+
     var body: some View {
         TabView {
             ForEach(SettingsTab.allCases) { tab in
                 Tab(tab.title, systemImage: tab.symbol) {
                     content(for: tab)
+                        .frame(width: Self.width)
+                        .frame(minHeight: 200, idealHeight: 420, maxHeight: 620)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .frame(width: 600, height: 480)
     }
 
     @ViewBuilder private func content(for tab: SettingsTab) -> some View {
@@ -36,13 +43,10 @@ private struct GeneralSettings: View {
         @Bindable var settings = app.settings
         Form {
             Section {
-                Toggle("登录时启动", isOn: $settings.launchAtLogin)
+                Toggle("开机启动", isOn: $settings.launchAtLogin)
                 if let error = settings.loginItemError { Text(error).font(.caption).foregroundStyle(.red) }
-                Toggle(isOn: $settings.value.keepInMenuBarAfterClose) {
-                    Text("关闭窗口后保留在菜单栏")
-                    Text("主窗口关闭时，Parallux 继续在后台运行")
-                }
-                Toggle("菜单栏显示实时速率", isOn: $settings.value.showRateInMenuBar)
+                Toggle("将菜单栏保留在后台", isOn: $settings.value.keepInMenuBarAfterClose)
+                Toggle("实时速率", isOn: $settings.value.showRateInMenuBar)
             }
             UpdateSection()
         }
@@ -55,15 +59,12 @@ private struct AggregationSettings: View {
     var body: some View {
         @Bindable var settings = app.settings
         Form {
-            Picker("聚合方式", selection: Binding(get: { app.linkSettings.value.mode }, set: { mode in Task { await app.setMode(mode) } })) {
-                ForEach(AggregationMode.allCases) { Text($0.title).tag($0) }
+            Section {
+                Picker("聚合方式", selection: Binding(get: { app.linkSettings.value.mode }, set: { mode in Task { await app.setMode(mode) } })) {
+                    ForEach(AggregationMode.allCases) { Text($0.title).tag($0) }
+                }
+                Toggle("线路掉线时通知", isOn: $settings.value.notifyLinkChanges)
             }
-            Toggle(isOn: $settings.value.notifyLinkChanges) {
-                Text("线路掉线时通知")
-                Text("线路变为不可用或恢复时发通知")
-            }
-            Text("线路的启用、排序与「仅备用」在主窗口「线路」页设置；叠加的聚合服务器在「聚合服务器」页。")
-                .font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
     }
@@ -73,23 +74,21 @@ private struct TunnelSettingsView: View {
     @Environment(AppModel.self) private var app
     var body: some View {
         @Bindable var settings = app.settings
+        // SFM shows the NEVPNProtocol property names verbatim (PacketTunnelView.swift)
+        // and the profile overrides under 配置重载 (ProfileOverrideView.swift).
         Form {
-            Section("数据包隧道（与 SFM 相同）") {
-                Toggle("包含所有网络", isOn: $settings.value.tunnel.includeAllNetworks).help("includeAllNetworks")
-                Toggle("排除本地网络", isOn: $settings.value.tunnel.excludeLocalNetworks).help("excludeLocalNetworks")
-                Toggle("排除 APNs 路由", isOn: $settings.value.tunnel.excludeAPNs).help("excludeAPNs")
-                Toggle("排除设备间通信", isOn: $settings.value.tunnel.excludeDeviceCommunication).help("excludeDeviceCommunication")
-                Toggle("强制路由", isOn: $settings.value.tunnel.enforceRoutes).help("enforceRoutes")
+            Section("隧道") {
+                Toggle("includeAllNetworks", isOn: $settings.value.tunnel.includeAllNetworks)
+                Toggle("excludeAPNs", isOn: $settings.value.tunnel.excludeAPNs)
+                Toggle("excludeLocalNetworks", isOn: $settings.value.tunnel.excludeLocalNetworks)
+                Toggle("enforceRoutes", isOn: $settings.value.tunnel.enforceRoutes)
+                Toggle("excludeDeviceCommunication", isOn: $settings.value.tunnel.excludeDeviceCommunication)
             }
-            Section("配置覆盖") {
-                Toggle(isOn: $settings.value.tunnel.excludeDefaultRoute) {
-                    Text("不添加默认路由")
-                    Text("只接管配置里明确列出的地址")
-                }
-                Toggle("自动路由默认使用子网段", isOn: $settings.value.tunnel.autoRouteUseSubRangesByDefault)
+            Section("配置重载") {
+                Toggle("隐藏 VPN 图标", isOn: $settings.value.tunnel.excludeDefaultRoute)
+                Toggle("不使用默认路由", isOn: $settings.value.tunnel.autoRouteUseSubRangesByDefault)
                 Toggle("系统 HTTP 代理", isOn: $settings.value.tunnel.systemProxyEnabled)
             }
-            Text("改动在下次连接时生效。").font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
     }
@@ -103,10 +102,9 @@ private struct OnDemandSettings: View {
         @Bindable var settings = app.settings
         Form {
             Section {
-                Toggle(isOn: $settings.value.onDemandEnabled) {
-                    Text("启用按需连接")
-                    Text("没有规则时不启用；规则按顺序匹配")
-                }
+                Toggle("按需启动", isOn: $settings.value.onDemandEnabled)
+            } footer: {
+                Text(settings.value.onDemandRules.isEmpty ? "没有规则时，VPN 会在任意网络上连接。" : "根据规则自动连接或断开 VPN 连接。")
             }
             Section("规则") {
                 ForEach(settings.value.onDemandRules) { rule in
@@ -120,9 +118,8 @@ private struct OnDemandSettings: View {
                     }
                 }
                 .onMove { settings.value.onDemandRules.move(fromOffsets: $0, toOffset: $1) }
-                Button("添加规则…") { adding = true }
+                Button("添加规则") { adding = true }
             }
-            Text("改动在下次连接时生效。").font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
         .sheet(isPresented: $adding) { AddOnDemandRule { settings.value.onDemandRules.append($0) } }
@@ -143,16 +140,19 @@ private struct AddOnDemandRule: View {
 
     var body: some View {
         Form {
-            Picker("条件", selection: $kind) {
-                Text("任何网络").tag(0)
-                Text("Wi‑Fi 名称").tag(1)
-                Text("探测地址").tag(2)
+            Picker("接口类型", selection: $kind) {
+                Text("任意网络").tag(0)
+                Text("SSID").tag(1)
+                Text("探测 URL").tag(2)
             }
-            if kind == 1 { TextField("Wi‑Fi 名称", text: $text) }
-            if kind == 2 { TextField("探测地址", text: $text, prompt: Text("http://intranet.local")) }
+            if kind == 1 { TextField("SSID", text: $text) }
+            if kind == 2 {
+                TextField("探测 URL", text: $text, prompt: Text("http://intranet.local"))
+                Text("仅当请求此 URL 返回 HTTP 200 时匹配。").font(.caption).foregroundStyle(.secondary)
+            }
             Picker("动作", selection: $action) {
                 Text("连接").tag(OnDemandRuleModel.Action.connect)
-                Text("断开").tag(OnDemandRuleModel.Action.disconnect)
+                Text("断开连接").tag(OnDemandRuleModel.Action.disconnect)
             }
             if let problem = rule.problem, !text.isEmpty || kind == 0 {
                 Text(problem).font(.caption).foregroundStyle(.red)
@@ -163,7 +163,7 @@ private struct AddOnDemandRule: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
-                Button("添加") { add(rule); dismiss() }.disabled(rule.problem != nil)
+                Button("完成") { add(rule); dismiss() }.disabled(rule.problem != nil)
             }
         }
     }
@@ -177,16 +177,17 @@ private struct CoreSettings: View {
     var body: some View {
         Form {
             Section("系统扩展") {
-                LabeledContent("状态", value: installed.map { "已安装 · 版本 \($0)" } ?? "未安装")
+                LabeledContent("状态", value: installed.map { "已启用 · \($0)" } ?? "不可用")
                 HStack {
-                    Button("重新安装") { Task { busy = true; await app.tunnel.install(); await refresh(); busy = false } }
-                    Button("卸载", role: .destructive) { Task { busy = true; await app.tunnel.uninstall(); await refresh(); busy = false } }
+                    Button(installed == nil ? "安装系统扩展" : "更新") { Task { busy = true; await app.tunnel.install(); await refresh(); busy = false } }
+                    if installed != nil {
+                        Button("卸载", role: .destructive) { Task { busy = true; await app.tunnel.uninstall(); await refresh(); busy = false } }
+                    }
                 }
                 .disabled(busy)
             }
-            Section("内核") {
-                LabeledContent("内核版本", value: PxbridgeVersion())
-                LabeledContent("App Group", value: AppGroup.identifier() ?? "未签名构建，没有 App Group")
+            Section("核心") {
+                LabeledContent("版本", value: PxbridgeVersion())
             }
             HelperSettingsSection()
             MemoryLimitSection()
@@ -205,15 +206,14 @@ private struct MemoryLimitSection: View {
     @Environment(AppModel.self) private var app
     var body: some View {
         @Bindable var settings = app.settings
-        Section("内存") {
-            Toggle("限制网络扩展内存", isOn: Binding(
+        Section {
+            Toggle("启用内存限制", isOn: Binding(
                 get: { settings.value.memoryLimitMB > 0 },
                 set: { settings.value.memoryLimitMB = $0 ? 512 : 0 }
             ))
             if settings.value.memoryLimitMB > 0 {
-                Stepper("上限 \(settings.value.memoryLimitMB) MB", value: $settings.value.memoryLimitMB, in: 128...4096, step: 128)
+                Stepper("内存限制 \(settings.value.memoryLimitMB) MB", value: $settings.value.memoryLimitMB, in: 128...4096, step: 128)
             }
-            Text("超过上限时内核会关闭部分连接以回收内存；下次连接生效。").font(.caption).foregroundStyle(.secondary)
         }
     }
 }

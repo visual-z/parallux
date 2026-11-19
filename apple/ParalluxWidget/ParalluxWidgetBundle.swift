@@ -60,7 +60,7 @@ struct StatusWidget: Widget {
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Parallux")
-        .description("连接状态、聚合方式、线路数与实时速率。")
+        .description("状态")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -89,7 +89,7 @@ struct StatusWidgetView: View {
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Parallux").font(.headline)
-                Text(entry.snapshot == nil ? "打开 Parallux 后显示状态" : "Parallux 未在运行")
+                Text(entry.snapshot == nil ? "无数据" : "服务未启动")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -120,7 +120,7 @@ enum TunnelSwitch {
     }
 
     struct NotSetUp: LocalizedError {
-        var errorDescription: String? { "请先在 Parallux 里连接一次" }
+        var errorDescription: String? { "服务未启动" }
     }
 
     static func set(_ on: Bool) async throws {
@@ -148,11 +148,11 @@ struct TunnelToggleControl: ControlWidget {
         StaticControlConfiguration(kind: Self.kind, provider: Provider()) { isOn in
             ControlWidgetToggle("Parallux", isOn: isOn, action: ToggleTunnelControlIntent()) { on in
                 Label(on ? "已连接" : "未连接", systemImage: "point.3.connected.trianglepath.dotted")
-                    .controlWidgetActionHint(on ? "断开" : "连接")
+                    .controlWidgetActionHint(on ? "断开连接" : "连接")
             }
         }
         .displayName("Parallux")
-        .description("连接或断开 Parallux。")
+        .description("快速连接")
     }
 
     struct Provider: ControlValueProvider {

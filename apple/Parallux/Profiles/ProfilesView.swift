@@ -22,11 +22,10 @@ struct ProfilesView: View {
         Group {
             if store.profiles.isEmpty {
                 ContentUnavailableView {
-                    Label("还没有配置", systemImage: "doc.text")
-                } description: {
-                    Text("新建一份本地配置，或者导入远程订阅。")
+                    Label("无配置", systemImage: "doc.text")
                 } actions: {
-                    addMenu
+                    Button("新建配置") { adding = .local }.buttonStyle(.borderedProminent)
+                    Button("导入远程配置") { adding = .remote }
                 }
             } else {
                 List {
@@ -39,9 +38,10 @@ struct ProfilesView: View {
                     }
                     .onMove { source, destination in run { try store.move(fromOffsets: source, toOffset: destination) } }
                 }
+                .listStyle(.inset(alternatesRowBackgrounds: false))
             }
         }
-        .navigationSubtitle("\(store.profiles.count) 份配置")
+        .navigationSubtitle(store.selected?.name ?? "")
         .toolbar { ToolbarItem { addMenu } }
         .sheet(item: $adding) { kind in AddProfileSheet(kind: kind) }
         .sheet(item: $editing) { profile in ProfileEditor(profile: profile) }
@@ -50,13 +50,13 @@ struct ProfilesView: View {
         .fileImporter(isPresented: $importingFile, allowedContentTypes: [.json, UTType(filenameExtension: "bpf") ?? .data]) { result in
             Task { await runAsync { try await service.importFile(try result.get()) } }
         }
-        .alert("从链接导入", isPresented: $linkPrompt) {
+        .alert("导入远程配置", isPresented: $linkPrompt) {
             TextField("sing-box://import-remote-profile?url=…", text: $link)
             Button("导入") { let value = link; Task { await runAsync { try await service.importLink(value) } } }
             Button("取消", role: .cancel) {}
         }
-        .alert("出错了", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-            Button("好") { error = nil }
+        .alert("错误", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button("完成") { error = nil }
         } message: {
             Text(error ?? "")
         }
@@ -64,29 +64,29 @@ struct ProfilesView: View {
 
     private var addMenu: some View {
         Menu {
-            Button("新建本地配置…") { adding = .local }
-            Button("从文件导入…") { importingFile = true }
+            Button("手动创建") { adding = .local }
+            Button("从文件导入") { importingFile = true }
             Divider()
-            Button("添加远程订阅…") { adding = .remote }
-            Button("从链接导入…") { link = ""; linkPrompt = true }
+            Button("导入远程配置") { adding = .remote }
+            Button("从链接导入") { link = ""; linkPrompt = true }
             Divider()
-            Button("使用 iCloud 云盘中的文件…") { adding = .icloud }
+            Button("iCloud") { adding = .icloud }
         } label: {
-            Label("添加", systemImage: "plus")
+            Label("新建配置", systemImage: "plus")
         }
+        .help("新建配置")
     }
 
     @ViewBuilder private func menu(for profile: Profile) -> some View {
-        Button("使用此配置") { run { try store.select(profile.id) } }
-        Button(profile.isReadOnly ? "查看 JSON…" : "编辑 JSON…") { editing = profile }
-        Button("名称与更新…") { editingInfo = profile }
-        Menu("导出") {
-            Button("导出为 .bpf（与 SFM 互通）…") { Task { await export(profile, bpf: true) } }
-            Button("导出为 JSON…") { Task { await export(profile, bpf: false) } }
+        Button(profile.isReadOnly ? "查看内容" : "编辑内容") { editing = profile }
+        Button("编辑配置") { editingInfo = profile }
+        Menu("分享") {
+            Button("分享文件") { Task { await export(profile, bpf: true) } }
+            Button("保存内容 JSON") { Task { await export(profile, bpf: false) } }
+            if profile.kind == .remote { Button("通过二维码分享 URL") { sharing = profile } }
         }
         if profile.kind == .remote {
-            Button("立即更新") { Task { await runAsync { try await service.update(profile) } } }
-            Button("分享…") { sharing = profile }
+            Button("更新") { Task { await runAsync { try await service.update(profile) } } }
         }
         Divider()
         Button("删除", role: .destructive) { run { try store.delete(profile.id) } }
@@ -117,12 +117,11 @@ private struct ProfileRow: View {
     let isUpdating: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-                .imageScale(.large)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(profile.name).font(.headline)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(profile.name).font(.body.weight(isSelected ? .semibold : .regular))
                 Text(ProfileDescription.detail(profile, now: Date())).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -130,7 +129,7 @@ private struct ProfileRow: View {
             Text(profile.kind.title).font(.caption).padding(.horizontal, 6).padding(.vertical, 2)
                 .background(.quaternary, in: Capsule())
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
 }
 
@@ -153,7 +152,7 @@ private struct AddProfileSheet: View {
             TextField("名称", text: $name)
             switch kind {
             case .remote:
-                TextField("订阅地址", text: $url, prompt: Text("https://"))
+                TextField("URL", text: $url, prompt: Text("https://"))
                 Toggle("自动更新", isOn: $autoUpdate)
                 Picker("更新间隔", selection: $interval) {
                     ForEach(ProfileDescription.intervalChoices, id: \.self) { Text(ProfileDescription.interval($0)).tag($0) }
@@ -161,10 +160,10 @@ private struct AddProfileSheet: View {
                 .disabled(!autoUpdate)
             case .icloud:
                 LabeledContent("文件") {
-                    Button(icloudFile?.lastPathComponent ?? "选择…") { pickingFile = true }
+                    Button(icloudFile?.lastPathComponent ?? "打开") { pickingFile = true }
                 }
             case .local:
-                Text("从一份空白配置开始，保存后可以在编辑器里修改。").foregroundStyle(.secondary)
+                EmptyView()
             }
             if let error { Text(error).foregroundStyle(.red) }
         }
@@ -173,7 +172,7 @@ private struct AddProfileSheet: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
-                Button(busy ? "正在添加…" : "添加") { Task { await add() } }.disabled(busy || !canAdd)
+                Button("创建") { Task { await add() } }.disabled(busy || !canAdd)
             }
         }
         .fileImporter(isPresented: $pickingFile, allowedContentTypes: [.json]) { result in
@@ -223,7 +222,7 @@ private struct ProfileEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if profile.isReadOnly {
-                Label("远程配置只读：每次更新都会覆盖本地内容。要修改，请导出为 JSON 后作为本地配置导入。", systemImage: "lock")
+                Label("无法在只读模式下编辑", systemImage: "lock")
                     .font(.callout).foregroundStyle(.secondary)
             }
             TextEditor(text: $text)
@@ -273,7 +272,7 @@ private struct ProfileInfoEditor: View {
         Form {
             TextField("名称", text: $profile.name)
             if profile.kind == .remote {
-                TextField("订阅地址", text: $url)
+                TextField("URL", text: $url)
                 Toggle("自动更新", isOn: $profile.autoUpdate)
                 Picker("更新间隔", selection: $profile.autoUpdateInterval) {
                     ForEach(ProfileDescription.intervalChoices, id: \.self) { Text(ProfileDescription.interval($0)).tag($0) }
@@ -291,7 +290,7 @@ private struct ProfileInfoEditor: View {
                 Button("保存") {
                     if profile.kind == .remote {
                         guard let parsed = URL(string: url), parsed.scheme?.hasPrefix("http") == true else {
-                            error = "订阅地址要以 http:// 或 https:// 开头"
+                            error = "只允许 HTTP 和 HTTPS URL"
                             return
                         }
                         profile.remoteURL = parsed
@@ -316,13 +315,13 @@ private struct ShareProfileSheet: View {
     var body: some View {
         let link = ProfileService.shareLink(for: profile) ?? ""
         VStack(spacing: 16) {
-            Text("分享「\(profile.name)」").font(.headline)
+            Text(profile.name).font(.headline)
             if let image = Self.qrCode(link) {
                 Image(nsImage: image).interpolation(.none).resizable().frame(width: 220, height: 220)
             }
             Text(link).font(.caption.monospaced()).textSelection(.enabled).lineLimit(3)
             HStack {
-                Button("拷贝链接") {
+                Button("复制") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(link, forType: .string)
                 }
