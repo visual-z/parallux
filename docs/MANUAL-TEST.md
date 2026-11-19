@@ -32,7 +32,9 @@ log stream --predicate 'subsystem BEGINSWITH "io.github.visual-z.parallux"'
 | 2.1 | 配置页：新建、导入 .json / .bpf、远程订阅（含带 `user:pass@` 的）、从链接导入、iCloud 文件、编辑 JSON（无效 JSON 不保存）、名称与更新、导出、分享二维码 | 都能用；远程配置只读 | `feat-profiles` D8、`feat-parity-polish` D6 |
 | 2.2 | 用一份真实订阅连接 | 能上网 | `feat-profiles` D8 |
 | 2.3 | 节点（选、测速、折叠）、连接（过滤、排序、隐藏 DNS、检查器、关闭）、日志（级别、暂停、清空、导出后文件里没有订阅 token）、规则（命中数） | 都有数据 | `feat-core-session` D8、`feat-parity-polish` D6 |
-| 2.4 | 面板、右键菜单、概览（流向图、曲线、卡片右键隐藏与左移）、设置七个标签、菜单栏图标（深浅色） | 与设计稿一致 | `feat-m2-interface` D8、`feat-parity-tail` D5 |
+| 2.4 | 面板、右键菜单、概览（流向图、曲线、卡片右键隐藏与上移）、设置七个标签、菜单栏图标（深浅色） | 与设计稿一致 | `feat-m2-interface` D8、`feat-parity-tail` D5 |
+| 2.4a | 路由页：路线图 / 分组 / 试一下 三种视图切换；点规则只高亮其路径；节点选择器筛地区、按延迟排序；连接检查器「评估连接」跳到试一下；「编辑规则…」改走后规则标「已覆写」 | 与 `docs/design/routing-v0.3.html` 一致 | `feat-routing-page` D8 |
+| 2.4b | 逐页对照 `docs/design/copy-and-style.md`：文案来自 SFM / Clash Verge Rev；窗口拖到最小（760×520）时单列、无横向滚动；各页空态 | 无大块留白，空态有标题和主操作 | `chore-ui-polish-secondary` |
 | 2.5 | 设置 › 内核 › 辅助服务 › 安装 → 系统设置 › 登录项里批准；工作目录、清空、崩溃报告；配置加 `{"process_name":["curl"],"outbound":"direct"}` 后跑 curl | 状态「已启用」；连接页显示进程名与该规则 | `feat-helper-service` D8 |
 
 ## 3. M3 分流与主备（需要 1.4 通过）
