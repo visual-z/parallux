@@ -56,8 +56,13 @@ struct MainWindow: View {
             }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Toggle(isOn: Binding(get: { app.isOn }, set: { on in Task { await app.setOn(on) } })) {
+                    // Design v0.2: a plain power button, tinted while Parallux
+                    // is on; not a toggle with a filled "selected" background.
+                    Button {
+                        Task { await app.setOn(!app.isOn) }
+                    } label: {
                         Label(app.isOn ? "关闭 Parallux" : "开启 Parallux", systemImage: "power")
+                            .foregroundStyle(app.isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                     }
                     .disabled(app.tunnel.isBusy || !app.controlsLocalCore)
                     .help(app.isOn ? "关闭 Parallux" : "开启 Parallux")

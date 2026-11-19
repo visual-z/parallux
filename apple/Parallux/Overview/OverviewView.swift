@@ -1,4 +1,3 @@
-import Charts
 import ParalluxKit
 import SwiftUI
 
@@ -27,42 +26,75 @@ struct OverviewView: View {
             }
             .navigationSubtitle(app.statusLine)
         } else {
+            let diagram = FlowModel.diagram(app)
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 10) {
                     if !session.deprecatedNotes.isEmpty, !app.settings.value.hideDeprecatedNotes {
                         DeprecationBanner(notes: session.deprecatedNotes) { app.settings.value.hideDeprecatedNotes = true }
                     }
-                    let columns = FlowModel.columns(app)
-                    Group {
-                        if !columns.links.isEmpty, !columns.exits.isEmpty {
-                            FlowDiagram(links: columns.links, exits: columns.exits,
-                                        centerLabel: "\(app.effectiveMode?.title ?? "") " + RateFormat.bitsPerSecond((session.status?.downlink ?? 0) + (session.status?.uplink ?? 0)))
-                        } else {
-                            ContentUnavailableView("暂无活动连接", systemImage: "point.3.connected.trianglepath.dotted")
-                        }
-                    }
-                    .frame(height: 240)
-                    .padding(12)
-                    .background(.fill.quinary, in: RoundedRectangle(cornerRadius: 12))
-
-                    // Cards wrap to fewer columns in a narrow window.
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12, alignment: .top)], spacing: 12) {
+                    // Design v0.2: the diagram sits straight on the content
+                    // layer, 330 pt tall, no box around it.
+                    FlowDiagram(links: diagram.links, exits: diagram.exits, centerLabel: diagram.centre, capacity: diagram.capacity)
+                        .frame(height: 330)
+                    OverviewCardRow {
                         ForEach(app.settings.value.dashboard.visible) { card in
                             switch card {
-                            case .traffic: TrafficCard(session: session)
-                            case .routeMode: RouteCard(app: app)
-                            case .profile: ProfileCard(app: app)
+                            case .traffic: trafficCard
+                            case .routeMode: routeModeCard
+                            case .profile: profileCard
                             }
                         }
                     }
                     .contextMenu { DashboardMenu(app: app) }
                 }
-                .padding(16)
+                .padding(.horizontal, 16).padding(.bottom, 16)
             }
-            .navigationSubtitle(app.statusLine)
+            .navigationSubtitle(OverviewCopy.subtitle(links: app.enabledLinks.count, mode: app.effectiveMode, server: bondServerName))
+            .toolbar {
+                // Design v0.2: the aggregation mode is switched from the
+                // overview's toolbar, next to the power button.
+                ToolbarItem {
+                    Picker("聚合方式", selection: Binding(get: { app.linkSettings.value.mode }, set: { mode in Task { await app.setMode(mode) } })) {
+                        ForEach(AggregationMode.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(app.enabledLinks.count < 2 || !app.controlsLocalCore)
+                    .help("聚合方式")
+                }
+            }
             .onAppear { session.retainConnections() }
             .onDisappear { session.releaseConnections() }
         }
+    }
+
+    /// The server 叠加 goes through, when 叠加 is what is in effect.
+    private var bondServerName: String? {
+        guard app.effectiveMode == .bond else { return nil }
+        return app.servers.servers.first { $0.id == app.linkSettings.value.bondServerID }?.name
+    }
+
+    private var trafficCard: some View {
+        let status = app.session.status
+        return TrafficCard(rate: (status?.downlink ?? 0) + (status?.uplink ?? 0),
+                           history: app.session.rateHistory.elements.map { $0.downlink &+ $0.uplink },
+                           window: CoreSession.rateHistoryCapacity,
+                           downlinkTotal: status?.downlinkTotal ?? 0, uplinkTotal: status?.uplinkTotal ?? 0)
+    }
+
+    private var routeModeCard: some View {
+        @Bindable var settings = app.settings
+        let session = app.session
+        return RouteModeCard(modes: session.routeModes,
+                             mode: Binding(get: { session.routeMode ?? "" }, set: { session.setRouteMode($0) }),
+                             systemProxy: $settings.value.tunnel.systemProxyEnabled,
+                             systemProxyDisabled: !app.controlsLocalCore)
+    }
+
+    private var profileCard: some View {
+        let profile = app.profiles.store.selected
+        let status = app.session.status
+        return ProfileCard(name: profile?.name, detail: profile.map { ProfileDescription.detail($0, now: Date()) } ?? "",
+                           connections: status.map { Int($0.connections) }, memory: status?.memory)
     }
 }
 
@@ -102,81 +134,5 @@ private struct DeprecationBanner: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-    }
-}
-
-private struct Card<Content: View>: View {
-    let title: String
-    @ViewBuilder var content: Content
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-            content
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(.fill.quinary, in: RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-private struct TrafficCard: View {
-    let session: CoreSession
-    var body: some View {
-        Card(title: "速率") {
-            let status = session.status
-            Text(RateFormat.bitsPerSecond((status?.downlink ?? 0) + (status?.uplink ?? 0)))
-                .font(.title2.weight(.semibold)).monospacedDigit()
-            let points = Array(session.rateHistory.elements.enumerated())
-            if points.count > 1 {
-            Chart(points, id: \.offset) { index, point in
-                AreaMark(x: .value("t", index), y: .value("速率", point.downlink + point.uplink))
-                    .foregroundStyle(.blue.opacity(0.25))
-                LineMark(x: .value("t", index), y: .value("速率", point.downlink + point.uplink))
-                    .foregroundStyle(.blue)
-            }
-            .chartXAxis(.hidden).chartYAxis(.hidden)
-            .chartXScale(domain: 0...max(CoreSession.rateHistoryCapacity - 1, 1))
-            .frame(height: 44)
-            }
-            Text("流量 ↓ \(RateFormat.bytes(status?.downlinkTotal ?? 0)) · ↑ \(RateFormat.bytes(status?.uplinkTotal ?? 0))")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-    }
-}
-
-private struct RouteCard: View {
-    let app: AppModel
-    var body: some View {
-        @Bindable var settings = app.settings
-        let session = app.session
-        Card(title: "模式") {
-            if !session.routeModes.isEmpty {
-                Picker("路由模式", selection: Binding(get: { session.routeMode ?? "" }, set: { session.setRouteMode($0) })) {
-                    ForEach(session.routeModes, id: \.self) { Text(RouteMode.title($0)).tag($0) }
-                }
-                .pickerStyle(.segmented).labelsHidden()
-            }
-            Toggle("系统代理", isOn: $settings.value.tunnel.systemProxyEnabled)
-                .toggleStyle(.switch).font(.callout)
-                .help("修改操作系统的代理设置")
-        }
-    }
-}
-
-private struct ProfileCard: View {
-    let app: AppModel
-    var body: some View {
-        Card(title: "配置") {
-            if let profile = app.profiles.store.selected {
-                Text(profile.name).font(.headline)
-                Text(ProfileDescription.detail(profile, now: Date())).font(.caption).foregroundStyle(.secondary)
-            } else {
-                Text("无配置").font(.headline).foregroundStyle(.secondary)
-            }
-            if let status = app.session.status {
-                LabeledContent("连接", value: "\(status.connections)").font(.caption)
-                LabeledContent("内存", value: RateFormat.bytes(status.memory)).font(.caption)
-            }
-        }
     }
 }

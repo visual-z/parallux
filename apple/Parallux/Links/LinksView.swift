@@ -148,14 +148,16 @@ private struct LinkRow: View {
     }
 }
 
-/// Stable per-link colours (design: Wi‑Fi cyan, wired orange, iPhone pink).
+/// Stable per-link colours (design v0.2: Wi‑Fi cyan, wired orange, iPhone
+/// pink, in FlowPalette's exact values). A second and third link of a kind
+/// get neighbouring hues; none of them is the exits' green or grey.
 enum LinkColors {
     static func color(for link: LinkInterface, in all: [LinkInterface]) -> Color {
         switch link.kind {
-        case .wifi: .cyan
-        case .ethernet: [Color.orange, .yellow, .brown][min(2, all.filter { $0.kind == .ethernet }.firstIndex(of: link) ?? 0)]
-        case .iPhone: .pink
-        case .other: [Color.green, .mint, .teal][min(2, all.filter { $0.kind == .other }.firstIndex(of: link) ?? 0)]
+        case .wifi: FlowPalette.wifi
+        case .ethernet: [FlowPalette.wired, .yellow, .brown][min(2, all.filter { $0.kind == .ethernet }.firstIndex(of: link) ?? 0)]
+        case .iPhone: FlowPalette.cellular
+        case .other: [Color.purple, .indigo, .teal][min(2, all.filter { $0.kind == .other }.firstIndex(of: link) ?? 0)]
         }
     }
 }

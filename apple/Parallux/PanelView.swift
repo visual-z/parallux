@@ -75,7 +75,8 @@ private struct PanelHome: View {
     private var miniFlow: some View {
         Button(action: openMainWindow) {
             HStack(spacing: 10) {
-                FlowDiagram(links: FlowModel.links(app), exits: FlowModel.exits(app), showsLabels: false)
+                let diagram = FlowModel.diagram(app)
+                FlowDiagram(links: diagram.links, exits: diagram.exits, capacity: diagram.capacity, isCompact: true)
                     .frame(height: 44)
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(RateFormat.bitsPerSecond(app.session.status?.downlink ?? 0)).font(.callout.weight(.semibold))

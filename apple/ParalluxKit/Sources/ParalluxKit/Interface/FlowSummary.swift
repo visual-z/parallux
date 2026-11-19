@@ -16,13 +16,19 @@ public enum FlowSummary {
     public static let maxExits = 4
     public static let directName = "直连"
     public static let otherName = "其他"
+    /// Outbound types that leave without a node. With two links or more the
+    /// composer replaces the profile's `direct` outbounds by `aggregate`
+    /// outbounds of the same tag (ProfileComposer), so direct traffic arrives
+    /// here typed `aggregate`; nodes keep their own type and only detour
+    /// through one.
+    static let directTypes: Set<String> = ["direct", "aggregate"]
 
     public static func exits(_ connections: [ConnectionRow]) -> [Exit] {
         var rates: [String: Int64] = [:]
         for connection in connections {
             let rate = max(0, connection.uplink) &+ max(0, connection.downlink)
             guard rate > 0 else { continue }
-            let name = connection.outboundType == "direct" ? directName : connection.outbound
+            let name = directTypes.contains(connection.outboundType) ? directName : connection.outbound
             rates[name, default: 0] &+= rate
         }
         let sorted = rates.map { Exit(name: $0.key, rate: $0.value) }
