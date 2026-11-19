@@ -136,7 +136,7 @@ private struct RouteMapView: View {
                                          if selectedClass != nil { selectedExit = item.exit }
                                      }, reroute: reroute, chain: { model.chain($0, app: app) })
                         if hidden > 0 || showsAll, search.isEmpty {
-                            Button(showsAll ? "只显示有流量的规则" : "显示其余 \(hidden) 条规则") { showsAll.toggle() }
+                            Button(showsAll ? "收起没有流量的规则" : "显示其余 \(hidden) 条规则") { showsAll.toggle() }
                                 .buttonStyle(.bordered).buttonBorderShape(.capsule)
                         }
                     }
@@ -271,11 +271,13 @@ private struct RouteColumns: View {
                             }
                     }
                 }
-                // Why 150: the narrowest a row reads at (name, rate). With the
-                // inspector open the default window leaves the map about 450 pt;
-                // at the old 200 + 72 + 200 the two columns never fitted and
-                // the page fell back to a plain list without any bands.
-                .frame(minWidth: 150, maxWidth: .infinity)
+                // Why 150, and why the ideal width is pinned to it: ViewThatFits
+                // picks a branch by its ideal size, and a column's ideal width
+                // is its longest line of text (a rule can name a dozen rule
+                // sets). Left to the content, two columns never "fitted" beside
+                // the inspector and the page fell back to the plain list with
+                // no bands at all. 150 is the narrowest a row reads at.
+                .frame(minWidth: 150, idealWidth: 150, maxWidth: .infinity)
                 // The bands need room to curve; fixed so both columns can grow.
                 Color.clear.frame(width: 56)
                 VStack(alignment: .leading, spacing: 6) {
@@ -291,7 +293,7 @@ private struct RouteColumns: View {
                             .onTapGesture { selectedExit = exit }
                     }
                 }
-                .frame(minWidth: 150, maxWidth: .infinity)
+                .frame(minWidth: 150, idealWidth: 150, maxWidth: .infinity)
             }
             // Too narrow for two columns and the bands: a plain list, the exit under each rule.
             VStack(alignment: .leading, spacing: 6) {

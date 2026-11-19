@@ -58,9 +58,11 @@ private struct ClassicGroup: View {
                     Button {
                         withAnimation(.snappy) { collapsed.toggle() }
                     } label: {
+                        // A 28 pt target around the glyph: a bare chevron is a few points wide.
                         Image(systemName: "chevron.right").rotationEffect(.degrees(collapsed && search.isEmpty ? 0 : 90))
+                            .frame(width: 28, height: 28).contentShape(Rectangle())
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
                     .help(collapsed ? "展开" : "折叠")
                     Text(group.tag).font(.headline)
                     KindBadge(type: group.type)
@@ -69,9 +71,8 @@ private struct ClassicGroup: View {
                     if session.testing.contains(group.tag) { ProgressView().controlSize(.mini) }
                     Spacer()
                     if collapsed && search.isEmpty { ChainView(chain: chain) }
-                    Button("测速", systemImage: "bolt") { session.urlTest(group: group.tag) }
-                        .labelStyle(.iconOnly).buttonStyle(.borderless)
-                        .disabled(session.testing.contains(group.tag)).help("延迟测试")
+                    DesignIconButton(title: "延迟测试", symbol: "bolt") { session.urlTest(group: group.tag) }
+                        .disabled(session.testing.contains(group.tag))
                 }
                 if collapsed && search.isEmpty {
                     LatencySummary(items: group.items)

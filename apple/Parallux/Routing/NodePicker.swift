@@ -81,8 +81,8 @@ struct NodePicker: View {
                 KindBadge(type: group.type)
                 if session.testing.contains(group.tag) { ProgressView().controlSize(.mini) }
                 Spacer()
-                Button("测速", systemImage: "bolt") { session.urlTest(group: group.tag) }
-                    .labelStyle(.iconOnly).disabled(session.testing.contains(group.tag)).help("延迟测试")
+                DesignIconButton(title: "延迟测试", symbol: "bolt") { session.urlTest(group: group.tag) }
+                    .disabled(session.testing.contains(group.tag))
             }
             if group.type == "urltest" { AutoExplanation(group: group) }
             if regions.count > 1 {

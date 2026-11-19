@@ -195,12 +195,11 @@ private struct PanelHome: View {
         HStack {
             Button("打开主窗口", action: openMainWindow).buttonBorderShape(.capsule)
             Spacer()
-            Menu("更多", systemImage: "ellipsis") {
+            DesignMoreMenu {
                 Button("设置…", action: openSettings)
                 Divider()
                 Button("退出 Parallux") { NSApp.terminate(nil) }
             }
-            .labelStyle(.iconOnly).menuIndicator(.hidden).buttonBorderShape(.circle).fixedSize()
         }
     }
 }

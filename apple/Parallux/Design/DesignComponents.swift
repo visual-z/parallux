@@ -258,6 +258,27 @@ struct DesignMoreMenu<Content: View>: View {
     }
 }
 
+/// The design's `.icon-btn`: one glyph on a 28 pt disc, the whole disc
+/// clickable. For actions that have no room for a title (test, delete);
+/// the title is the tooltip and the accessibility label.
+struct DesignIconButton: View {
+    let title: String
+    let symbol: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 13, weight: .semibold))
+                .frame(width: 28, height: 28)
+                .background(.quaternary, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .help(title)
+    }
+}
+
 /// The design's `.field`: a magnifier and a text field on a capsule, with a
 /// clear button once there is text. Used by the panel's node page and 试一下.
 struct DesignSearchField: View {

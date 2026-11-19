@@ -126,10 +126,9 @@ private struct OnDemandSettings: View {
                     HStack {
                         Text(rule.summary)
                         Spacer()
-                        Button("删除", systemImage: "minus.circle") {
+                        DesignIconButton(title: "删除", symbol: "minus") {
                             settings.value.onDemandRules.removeAll { $0.id == rule.id }
                         }
-                        .labelStyle(.iconOnly).buttonStyle(.borderless)
                     }
                 }
                 .onMove { settings.value.onDemandRules.move(fromOffsets: $0, toOffset: $1) }
