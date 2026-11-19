@@ -32,6 +32,9 @@ has "$ext" "com\.apple\.security\.application-groups.0" '$(PARALLUX_APP_GROUP)'
 
 info=PacketTunnel/Info.plist
 has "$info" CFBundlePackageType SYSX
+# macOS refuses to activate a network system extension without it (author's
+# manual test, 2026-11-19; SFM sets it). An empty string is enough.
+has "$info" NSSystemExtensionUsageDescription
 has "$info" NetworkExtension.NEMachServiceName '$(PARALLUX_TUNNEL_MACH_SERVICE)'
 has "$info" "NetworkExtension.NEProviderClasses.com\.apple\.networkextension\.packet-tunnel" '$(PRODUCT_MODULE_NAME).PacketTunnelProvider'
 has Parallux/Info.plist ParalluxTunnelMachService '$(PARALLUX_TUNNEL_MACH_SERVICE)'
