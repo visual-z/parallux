@@ -14,6 +14,9 @@ final class FlowModel {
     struct Diagram: Equatable {
         var links: [FlowNode] = []
         var exits: [FlowNode] = []
+        /// The middle column: rules, and what flows from them to the exits.
+        var rules: [FlowNode] = []
+        var flows: [FlowLink] = []
         var centre = ""
         /// FlowParticles.intensity of the smoothed total.
         var intensity = 0.0
@@ -25,7 +28,17 @@ final class FlowModel {
     /// churn least (FlowSlots.retention's measurements).
     static let exitSeats = 5
 
+    /// Rules shown at once. Why 6: one more than the exits because rules
+    /// are more varied than the nodes they lead to; past six the middle
+    /// column's labels crowd at the overview's usual height. Assumed.
+    static let ruleSeats = 6
+    /// Why 64: every (rule, node) pair the seated columns can make, with room
+    /// to spare (7 × 6 = 42); the pairs are only smoothed, never merged.
+    static let pairSeats = 64
+
     private var exits = FlowSlots(limit: exitSeats)
+    private var rules = FlowSlots(limit: ruleSeats)
+    private var pairs = FlowSlots(limit: pairSeats)
     /// Used for its smoothing only: links keep the order of the links page.
     private var links = FlowSlots(limit: 1)
 
@@ -56,7 +69,20 @@ final class FlowModel {
                      rate: 0, color: LinkColors.color(for: link, in: app.links.links), isDimmed: true)
         }
 
-        exits.update(FlowSummary.rates(app.session.connections).map { (id: $0.name, rate: Double($0.rate)) }, at: time)
+        // Rules and nodes from the connections: each one says which rule it
+        // matched and where it left (fix-overview-layout-and-flow). Every
+        // name is passed on; FlowSlots decides who is seated.
+        let columns = FlowColumns.make(app.session.connections, ruleName: TrafficLabel.name(connectionRule:), maxRules: Self.pairSeats, maxNodes: Self.pairSeats)
+        let named = { (list: [(name: String, rate: Double)]) in list.filter { $0.name != FlowSummary.otherName }.map { (id: $0.name, rate: $0.rate) } }
+        rules.update(named(columns.rules), at: time)
+        exits.update(named(columns.nodes), at: time)
+        let seatedRules = Set(rules.slots.map(\.id)), seatedNodes = Set(exits.slots.map(\.id))
+        let seat = { (name: String, seated: Set<String>) in seated.contains(name) ? name : FlowSlots.otherID }
+        var pairRates: [String: Double] = [:]
+        for flow in columns.flows {
+            pairRates[seat(flow.rule, seatedRules) + "\u{1}" + seat(flow.node, seatedNodes), default: 0] += flow.rate
+        }
+        pairs.update(pairRates.map { (id: $0.key, rate: $0.value) }.sorted { $0.id < $1.id }, at: time)
         let server = mode == .bond ? app.servers.servers.first { $0.id == app.linkSettings.value.bondServerID }?.name : nil
         let exitNodes = exits.slots.map { slot in
             let direct = slot.id == FlowSummary.directName
@@ -68,7 +94,18 @@ final class FlowModel {
                             rate: slot.rate,
                             color: direct ? FlowPalette.direct : slot.isOther ? FlowPalette.direct.opacity(0.6) : FlowPalette.proxy)
         }
-        return Diagram(links: linkNodes, exits: exitNodes, centre: OverviewCopy.centre(mode: mode, rate: measured.map(\.rate).reduce(0, &+)),
+        let ruleNodes = rules.slots.map { slot in
+            FlowNode(id: slot.id, name: slot.isOther ? FlowSummary.otherName : slot.id,
+                     detail: RateFormat.bitsPerSecond(Int64(slot.current)), rate: slot.rate, color: .primary)
+        }
+        let ruleIndex = Dictionary(uniqueKeysWithValues: rules.slots.enumerated().map { ($1.id, $0) })
+        let nodeIndex = Dictionary(uniqueKeysWithValues: exits.slots.enumerated().map { ($1.id, $0) })
+        let flowLinks: [FlowLink] = pairs.slots.compactMap { slot in
+            let parts = slot.id.split(separator: "\u{1}", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let rule = ruleIndex[parts[0]], let node = nodeIndex[parts[1]], slot.rate > 0 else { return nil }
+            return FlowLink(id: slot.id, rule: rule, node: node, rate: slot.rate)
+        }
+        return Diagram(links: linkNodes, exits: exitNodes, rules: ruleNodes, flows: flowLinks, centre: OverviewCopy.centre(mode: mode, rate: measured.map(\.rate).reduce(0, &+)),
                        intensity: FlowParticles.intensity(bytesPerSecond: links.slots.map(\.rate).reduce(0, +)))
     }
 }
@@ -83,7 +120,9 @@ struct SteadyFlowDiagram: View {
     @State private var diagram = FlowModel.Diagram()
 
     var body: some View {
-        FlowDiagram(links: diagram.links, exits: diagram.exits, centerLabel: isCompact ? nil : diagram.centre, intensity: diagram.intensity, isCompact: isCompact)
+        // The panel's strip has no room for rule names: two columns there.
+        FlowDiagram(links: diagram.links, exits: diagram.exits, rules: isCompact ? [] : diagram.rules, flows: isCompact ? [] : diagram.flows,
+                    centerLabel: isCompact ? nil : diagram.centre, intensity: diagram.intensity, isCompact: isCompact)
             .task {
                 while !Task.isCancelled {
                     let next = model.sample(app, at: ProcessInfo.processInfo.systemUptime)

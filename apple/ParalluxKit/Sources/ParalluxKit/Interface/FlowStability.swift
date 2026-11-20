@@ -174,7 +174,51 @@ public enum FlowColumns {
         }
     }
 
+    /// - Parameters:
+    ///   - ruleName: the name for a connection's `rule` field ("" is route.final).
+    ///   - maxRules, maxNodes: named entries per column; the rest is merged into 其他.
     public static func make(_ connections: [ConnectionRow], ruleName: (String) -> String, maxRules: Int, maxNodes: Int) -> Result {
-        Result(rules: [], nodes: [], flows: [])
+        // One pass: rate per (rule, node). The node is where the connection
+        // left (Connection.outbound, the end of its chain); every kind of
+        // direct outbound is 直连, as in FlowSummary.
+        var pairs: [String: [String: Double]] = [:]
+        var ruleOrder: [String] = [], nodeOrder: [String] = []
+        for connection in connections {
+            let rate = Double(max(0, connection.uplink) &+ max(0, connection.downlink))
+            guard rate > 0 else { continue }
+            let rule = ruleName(connection.rule)
+            let node = FlowSummary.directTypes.contains(connection.outboundType) ? FlowSummary.directName : connection.outbound
+            if pairs[rule] == nil { ruleOrder.append(rule) }
+            if !nodeOrder.contains(node) { nodeOrder.append(node) }
+            pairs[rule, default: [:]][node, default: 0] += rate
+        }
+        func totals(_ names: [String], _ rate: (String) -> Double) -> [(name: String, rate: Double)] {
+            names.map { (name: $0, rate: rate($0)) }.sorted { $0.rate != $1.rate ? $0.rate > $1.rate : $0.name < $1.name }
+        }
+        let ruleTotals = totals(ruleOrder) { pairs[$0]!.values.reduce(0, +) }
+        let nodeTotals = totals(nodeOrder) { node in pairs.values.map { $0[node] ?? 0 }.reduce(0, +) }
+        func cut(_ list: [(name: String, rate: Double)], _ limit: Int) -> (kept: [(name: String, rate: Double)], names: Set<String>) {
+            guard list.count > limit else { return (list, Set(list.map(\.name))) }
+            let kept = Array(list.prefix(max(limit, 0)))
+            let rest = list.dropFirst(max(limit, 0)).map(\.rate).reduce(0, +)
+            return (kept + [(name: FlowSummary.otherName, rate: rest)], Set(kept.map(\.name)))
+        }
+        let (rules, keptRules) = cut(ruleTotals, maxRules)
+        let (nodes, keptNodes) = cut(nodeTotals, maxNodes)
+        // Merged flows add up per (rule, node) after renaming.
+        var merged: [String: [String: Double]] = [:]
+        for (rule, byNode) in pairs {
+            let r = keptRules.contains(rule) ? rule : FlowSummary.otherName
+            for (node, rate) in byNode {
+                merged[r, default: [:]][keptNodes.contains(node) ? node : FlowSummary.otherName, default: 0] += rate
+            }
+        }
+        var flows: [Flow] = []
+        for rule in rules.map(\.name) {
+            for node in nodes.map(\.name) {
+                if let rate = merged[rule]?[node], rate > 0 { flows.append(Flow(rule: rule, node: node, rate: rate)) }
+            }
+        }
+        return Result(rules: rules, nodes: nodes, flows: flows)
     }
 }

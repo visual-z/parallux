@@ -5,20 +5,21 @@ import SwiftUI
 /// and its node picker.
 struct ExitInspector: View {
     let model: RoutingModel
+    /// The route map's sample (RoutingView): read here, not rebuilt on every redraw.
+    let map: RoutingModel.SteadyMap
     let exit: String?
     let reroute: (TrafficClass) -> Void
     @Environment(AppModel.self) private var app
 
     var body: some View {
         if let exit {
-            let map = model.map(app: app)
-            let users = map.classes.filter { $0.exit == exit }
+            let users = map.users[exit] ?? []
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("代理组").font(.caption).foregroundStyle(.secondary)
                         Text(exit).font(.title3.weight(.semibold))
-                        ChainView(chain: model.chain(exit, app: app))
+                        ChainView(chain: map.chains.chain(exit) ?? model.chain(exit, app: app))
                     }
                     if !users.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {

@@ -205,7 +205,7 @@ struct FlowLayer: NSViewRepresentable {
                 case let .band(link): color = palette.link(link) * SIMD4(1, 1, 1, palette.bandOpacity)
                 case let .link(index): color = palette.link(index) * SIMD4(1, 1, 1, index < input.dimmedLinks.count && input.dimmedLinks[index] ? 0.3 : 1)
                 case let .exit(index): color = index < palette.exits.count ? palette.exits[index] : palette.idle
-                case .centre: color = palette.centre
+                case .centre, .rule: color = palette.centre
                 case .idle: color = palette.idle
                 }
                 for point in piece.triangles where count < Self.meshCapacity {
@@ -216,7 +216,7 @@ struct FlowLayer: NSViewRepresentable {
             let isNode = { (paint: FlowMesh.Paint) in
                 switch paint {
                 case .band, .idle: false
-                case .link, .exit, .centre: true
+                case .link, .exit, .centre, .rule: true
                 }
             }
             for piece in pieces where !isNode(piece.paint) { write(piece) }
@@ -227,15 +227,15 @@ struct FlowLayer: NSViewRepresentable {
 
         private func fillDots(_ buffer: MTLBuffer, _ particles: [FlowParticles.Particle], layout: SankeyLayout, metrics m: FlowDiagram.Metrics) -> Int {
             guard !particles.isEmpty else { return 0 }
-            let exitCount = max(layout.right.count, 1)
-            // Bands by (link, exit), so finding a particle's band is one lookup.
-            var bands = [SankeyLayout.Band?](repeating: nil, count: max(layout.left.count, 1) * exitCount)
-            for band in layout.bands { bands[band.from * exitCount + band.to] = band }
+            // Bands by (from, to), so finding a particle's band is one lookup. A
+            // dictionary: in a three-column layout `to` is a band id, not an exit.
+            var bands: [Int: SankeyLayout.Band] = [:]
+            let stride = (layout.bands.map(\.to).max() ?? 0) + 1
+            for band in layout.bands { bands[band.from * stride + band.to] = band }
             let dots = buffer.contents().bindMemory(to: Vertex.self, capacity: FlowParticles.limit)
             var count = 0
             for particle in particles.prefix(FlowParticles.limit) {
-                let slot = particle.from * exitCount + particle.to
-                guard particle.from < palette.links.count, particle.to < exitCount, slot < bands.count, let band = bands[slot] else { continue }
+                guard particle.from < palette.links.count, particle.to < stride, let band = bands[particle.from * stride + particle.to] else { continue }
                 let first = particle.progress < 1
                 let t = first ? particle.progress : particle.progress - 1
                 let x0 = first ? m.leftX + m.bar : m.centreX + m.bar, x1 = first ? m.centreX : m.rightX

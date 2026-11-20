@@ -13,6 +13,8 @@ struct RoutingView: View {
     @State private var showInspector = true
     @State private var rerouting: TrafficClass?
     @State private var explainTarget = ""
+    /// The route map's latest sample, shared with the inspector (perf-routing-relayout).
+    @State private var steady = RoutingModel.SteadyMap()
 
     var body: some View {
         Group {
@@ -27,7 +29,7 @@ struct RoutingView: View {
             } else {
                 switch view {
                 case .map:
-                    RouteMapView(model: model, search: search, selectedExit: $selectedExit, reroute: { rerouting = $0 })
+                    RouteMapView(model: model, search: search, selectedExit: $selectedExit, map: $steady, reroute: { rerouting = $0 })
                 case .groups:
                     GroupsView(search: search)
                 case .explain:
@@ -60,7 +62,7 @@ struct RoutingView: View {
             }
         }
         .inspector(isPresented: Binding(get: { showInspector && view == .map && app.session.isRunning }, set: { showInspector = $0 })) {
-            ExitInspector(model: model, exit: selectedExit ?? model.profile.final ?? model.profile.rules.compactMap(\.outbound).first, reroute: { rerouting = $0 })
+            ExitInspector(model: model, map: steady, exit: selectedExit ?? model.profile.final ?? model.profile.rules.compactMap(\.outbound).first, reroute: { rerouting = $0 })
                 .inspectorColumnWidth(min: 300, ideal: 340, max: 420)
         }
         .sheet(item: $rerouting) { item in RerouteSheet(model: model, item: item) }
@@ -99,10 +101,10 @@ private struct RouteMapView: View {
     let model: RoutingModel
     let search: String
     @Binding var selectedExit: String?
+    @Binding var map: RoutingModel.SteadyMap
     let reroute: (TrafficClass) -> Void
     @Environment(AppModel.self) private var app
     @State private var selectedClass: String?
-    @State private var map = RoutingModel.SteadyMap()
     /// Shows the rules folded away past RouteMap.maxClasses.
     @State private var showsAll = false
 
@@ -134,7 +136,7 @@ private struct RouteMapView: View {
                                      select: { item in
                                          selectedClass = selectedClass == item.id ? nil : item.id
                                          if selectedClass != nil { selectedExit = item.exit }
-                                     }, reroute: reroute, chain: { model.chain($0, app: app) })
+                                     }, reroute: reroute, chain: { map.chains.chain($0) ?? ExitChain(hops: [$0], ending: .node) })
                         if hidden > 0 || showsAll, search.isEmpty {
                             Button(showsAll ? "收起没有流量的规则" : "显示其余 \(hidden) 条规则") { showsAll.toggle() }
                                 .buttonStyle(.bordered).buttonBorderShape(.capsule)

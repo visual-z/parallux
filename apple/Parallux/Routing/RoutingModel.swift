@@ -43,7 +43,14 @@ final class RoutingModel {
 
     private(set) var profile = RouteProfile(rules: [], final: nil)
     private(set) var profileError: String?
-    @ObservationIgnored private(set) var profileContent: String?
+    @ObservationIgnored private(set) var profileContent: String? {
+        // Parsed here, once per load, not every time a view asks
+        // (docs/tasks/perf-routing-relayout.md).
+        didSet { parsedTags = Self.outboundTags(in: profileContent); effective = nil }
+    }
+    @ObservationIgnored private var parsedTags: [String] = []
+    /// The overridden profile and the overrides it was made from.
+    @ObservationIgnored private var effective: (overrides: RouteOverrides, profile: RouteProfile)?
 
     func load(_ app: AppModel) async {
         #if DEBUG
@@ -69,9 +76,10 @@ final class RoutingModel {
     }
 
     /// All outbound tags of the profile, for 「改走」 targets and chain resolution.
-    var outboundTags: [String] {
-        guard let content = profileContent,
-              let root = (try? JSONSerialization.jsonObject(with: Data(content.utf8))) as? [String: Any] else { return [] }
+    var outboundTags: [String] { parsedTags }
+
+    private static func outboundTags(in content: String?) -> [String] {
+        guard let content, let root = (try? JSONSerialization.jsonObject(with: Data(content.utf8))) as? [String: Any] else { return [] }
         return ((root["outbounds"] as? [[String: Any]]) ?? []).compactMap { $0["tag"] as? String }
     }
 
@@ -91,6 +99,10 @@ final class RoutingModel {
         var idle: [TrafficClass] = []
         /// Each class's share of the smoothed traffic, 0...1, by class id.
         var shares: [String: Double] = [:]
+        /// Every exit's chain for this sample: layout reads, never computes.
+        var chains = ExitChains(outboundTags: [], groups: [], exits: [])
+        /// The classes per exit, for the inspector.
+        var users: [String: [TrafficClass]] = [:]
         var isEmpty: Bool { active.isEmpty && idle.isEmpty }
     }
 
@@ -109,7 +121,10 @@ final class RoutingModel {
         rates.update(classes.map { (id: $0.id, rate: Double($0.rate)) }, at: time)
         let total = rates.slots.map(\.rate).reduce(0, +)
         let shares = total > 0 ? Dictionary(uniqueKeysWithValues: rates.slots.map { ($0.id, $0.rate / total) }) : [:]
-        return SteadyMap(active: rows.active.compactMap { byID[$0] }, idle: rows.idle.compactMap { byID[$0] }, shares: shares)
+        let exits = classes.map(\.exit) + (profile.final.map { [$0] } ?? [])
+        return SteadyMap(active: rows.active.compactMap { byID[$0] }, idle: rows.idle.compactMap { byID[$0] }, shares: shares,
+                         chains: ExitChains(outboundTags: parsedTags, groups: app.session.groups, exits: exits),
+                         users: Dictionary(grouping: classes, by: \.exit))
     }
 
     func map(app: AppModel) -> RouteMap {
@@ -119,11 +134,16 @@ final class RoutingModel {
     }
 
     /// The profile with overrides applied, as the core runs it.
+    /// Re-applied only when the overrides change: applying them rewrites and
+    /// re-parses the whole profile.
     func effectiveProfile(app: AppModel) -> RouteProfile {
         guard let content = profileContent else { return profile }
         let overrides = app.routeOverrides.overrides(for: app.profiles.store.selectedID)
+        if let effective, effective.overrides == overrides { return effective.profile }
         let result = RouteOverrides.apply(overrides, to: content)
-        return result.applied.isEmpty ? profile : RouteProfile.parse(result.config)
+        let profile = result.applied.isEmpty ? self.profile : RouteProfile.parse(result.config)
+        effective = (overrides, profile)
+        return profile
     }
 
     func chain(_ exit: String, app: AppModel) -> ExitChain {

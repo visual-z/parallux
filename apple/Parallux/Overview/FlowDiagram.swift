@@ -14,6 +14,15 @@ struct FlowNode: Identifiable, Equatable {
     var isDimmed = false
 }
 
+/// Traffic from one rule to one node (three-column diagram).
+struct FlowLink: Equatable {
+    var id: String
+    var rule: Int
+    var node: Int
+    /// Bytes per second.
+    var rate: Double
+}
+
 /// Colours of the flow diagram, from design v0.2's light and dark palettes.
 /// Chart colours are the one place hex values are allowed
 /// (docs/design/copy-and-style.md §2); everything else is semantic.
@@ -38,13 +47,20 @@ enum FlowPalette {
     }
 }
 
-/// Links → centre bar → exits, band width = share of the traffic (design
-/// v0.2; by share since docs/tasks/fix-flow-stability.md). Geometry comes from SankeyLayout (INV-3, INV-7) and the dots
+/// Links → rules → nodes (or links → one bar → exits in the panel), band
+/// width = share of the traffic (design v0.2; by share since
+/// docs/tasks/fix-flow-stability.md, three columns since
+/// docs/tasks/fix-overview-layout-and-flow.md). Geometry comes from SankeyLayout (INV-3, INV-7) and the dots
 /// from FlowParticles (INV-8); this view only paints them. It takes plain
 /// values, so it can be rendered on its own with any numbers.
 struct FlowDiagram: View {
     let links: [FlowNode]
     let exits: [FlowNode]
+    /// The middle column, and what flows from it to `exits`: with rules the
+    /// picture is links → rules → nodes (fix-overview-layout-and-flow);
+    /// without, links → one bar → exits (the panel's strip).
+    var rules: [FlowNode] = []
+    var flows: [FlowLink] = []
     var centerLabel: String?
     /// How busy the dots are, 0...1 (FlowParticles.intensity): widths are
     /// shares, so this is what shows how much traffic there is.
@@ -73,7 +89,9 @@ struct FlowDiagram: View {
     var body: some View {
         GeometryReader { proxy in
             let metrics = Metrics(size: proxy.size, isCompact: isCompact)
-            let target = FlowMotion.Target(linkIDs: links.map(\.id), links: links.map(\.rate), exitIDs: exits.map(\.id), exits: exits.map(\.rate), intensity: intensity)
+            let target = FlowMotion.Target(linkIDs: links.map(\.id), links: links.map(\.rate), exitIDs: exits.map(\.id), exits: exits.map(\.rate),
+                                           ruleIDs: rules.map(\.id), flowIDs: flows.map(\.id), flowRules: flows.map(\.rule),
+                                           flowNodes: flows.map(\.node), flowRates: flows.map(\.rate), intensity: intensity)
             ZStack(alignment: .topLeading) {
                 // Everything that moves is one GPU layer (FlowLayer); SwiftUI
                 // adds the labels on top, placed for the new sample at once.
@@ -87,8 +105,7 @@ struct FlowDiagram: View {
                 } else {
                     // No GPU to draw with: a still picture of the current sample.
                     Canvas { context, _ in
-                        let layout = SankeyLayout.make(leftShares: target.links, rightShares: target.exits, height: Double(metrics.region), gap: metrics.gap)
-                        drawBandsAndNodes(layout, metrics: metrics, in: &context)
+                        drawBandsAndNodes(target.layout(metrics), metrics: metrics, in: &context)
                     }
                 }
                 if !isCompact { labels(metrics, target: target) }
@@ -107,27 +124,52 @@ struct FlowDiagram: View {
         .accessibilityLabel(accessibilityText)
     }
 
-    /// The text next to the nodes and above the centre bar, at the places the
-    /// new sample gives them. They do not ride the 0.4 s ease: moving text
-    /// every frame was the costliest part of the old Canvas, and the nodes'
-    /// centres shift by a few points at most from one second to the next.
+    /// The text next to the nodes (and, with three columns, the column
+    /// headers), at the places the new sample gives them. They do not ride
+    /// the 0.4 s ease: moving text every frame was the costliest part of the
+    /// old Canvas, and the nodes' centres shift by a few points at most from
+    /// one second to the next.
     private func labels(_ m: Metrics, target: FlowMotion.Target) -> some View {
-        let layout = SankeyLayout.make(leftShares: target.links, rightShares: target.exits, height: Double(m.region), gap: m.gap)
+        let layout = target.layout(m)
         let mid = { (span: Span) in m.inset + CGFloat((span.lower + span.upper) / 2) }
+        let middleWidth = max(0, m.rightX - m.centreX - m.bar - 28)
         return ZStack(alignment: .topLeading) {
             ForEach(Array(zip(links, layout.left)), id: \.0.id) { node, span in
                 label(node, alignment: .trailing).frame(width: m.leftLabelWidth, alignment: .trailing)
                     .position(x: m.leftX - 12 - m.leftLabelWidth / 2, y: mid(span))
             }
+            // A rule's name sits beside its bar, over the bands that leave
+            // it, on a plate so it stays readable (the author's reference).
+            ForEach(Array(zip(rules, layout.middle)), id: \.0.id) { node, span in
+                label(node, alignment: .leading)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(.background.opacity(0.78), in: RoundedRectangle(cornerRadius: 6))
+                    .frame(width: middleWidth, alignment: .leading)
+                    .position(x: m.centreX + m.bar + 8 + middleWidth / 2, y: mid(span))
+            }
             ForEach(Array(zip(exits, layout.right)), id: \.0.id) { node, span in
                 label(node, alignment: .leading).frame(width: m.rightLabelWidth, alignment: .leading)
                     .position(x: m.rightX + m.bar + 12 + m.rightLabelWidth / 2, y: mid(span))
             }
-            if let centerLabel {
-                Text(centerLabel).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary).monospacedDigit().lineLimit(1).fixedSize()
-                    .position(x: m.centreX + m.bar / 2, y: max(8, m.centreTop(layout.total) - 12))
+            if rules.isEmpty {
+                if let centerLabel {
+                    Text(centerLabel).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary).monospacedDigit().lineLimit(1).fixedSize()
+                        .position(x: m.centreX + m.bar / 2, y: max(8, m.centreTop(layout.total) - 12))
+                }
+            } else {
+                // Column headers (the reference's 「Source / Node / …」): what each column is.
+                header(centerLabel.map { "线路 · \($0)" } ?? "线路").frame(width: m.leftX + m.bar, alignment: .trailing)
+                    .position(x: (m.leftX + m.bar) / 2, y: 8)
+                header("规则").frame(width: middleWidth, alignment: .leading)
+                    .position(x: m.centreX + middleWidth / 2, y: 8)
+                header("出口").frame(width: m.rightLabelWidth + m.bar + 12, alignment: .leading)
+                    .position(x: m.rightX + (m.rightLabelWidth + m.bar + 12) / 2, y: 8)
             }
         }
+    }
+
+    private func header(_ text: String) -> some View {
+        Text(text).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
     }
 
     private func label(_ node: FlowNode, alignment: HorizontalAlignment) -> some View {
@@ -170,7 +212,13 @@ struct FlowDiagram: View {
             context.fill(Path(roundedRect: nodeRect(x: m.leftX, span, centre: mid(span)), cornerRadius: 2),
                          with: .color(links[index].color.opacity(links[index].isDimmed ? 0.3 : 1)))
         }
-        context.fill(Path(roundedRect: nodeRect(x: m.centreX, m.centreSpan(layout.total), centre: middle), cornerRadius: 2), with: .style(.primary))
+        if layout.middle.isEmpty {
+            context.fill(Path(roundedRect: nodeRect(x: m.centreX, m.centreSpan(layout.total), centre: middle), cornerRadius: 2), with: .style(.primary))
+        } else {
+            for span in layout.middle {
+                context.fill(Path(roundedRect: nodeRect(x: m.centreX, span, centre: mid(span)), cornerRadius: 2), with: .style(.primary))
+            }
+        }
         for (index, span) in layout.right.enumerated() where index < exits.count {
             context.fill(Path(roundedRect: nodeRect(x: m.rightX, span, centre: mid(span)), cornerRadius: 2), with: .color(exits[index].color))
         }
@@ -256,7 +304,24 @@ final class FlowMotion {
         var links: [Double]
         var exitIDs: [String]
         var exits: [Double]
+        /// Three columns when not empty: the rules, and the flows from them to the exits.
+        var ruleIDs: [String] = []
+        var flowIDs: [String] = []
+        var flowRules: [Int] = []
+        var flowNodes: [Int] = []
+        var flowRates: [Double] = []
         var intensity = 1.0
+
+        /// The layout for these rates (flows given separately: eased ones while animating).
+        func layout(_ metrics: FlowDiagram.Metrics, links: [Double]? = nil, flows: [Double]? = nil, exits: [Double]? = nil) -> SankeyLayout {
+            if ruleIDs.isEmpty {
+                return SankeyLayout.make(leftShares: links ?? self.links, rightShares: exits ?? self.exits, height: Double(metrics.region), gap: metrics.gap)
+            }
+            let rates = flows ?? flowRates
+            let triples = flowRules.indices.map { (rule: flowRules[$0], node: flowNodes[$0], rate: $0 < rates.count ? rates[$0] : 0) }
+            return SankeyLayout.make(links: links ?? self.links, rules: ruleIDs.count, nodes: exitIDs.count, flows: triples,
+                                     height: Double(metrics.region), gap: metrics.gap)
+        }
         /// Bands exist only with traffic on both sides; without them there is nothing to animate.
         var hasTraffic: Bool { links.contains { $0 > 0 } && exits.contains { $0 > 0 } }
     }
@@ -279,6 +344,8 @@ final class FlowMotion {
 
     private var linkIDs: [String] = []
     private var exitIDs: [String] = []
+    private var flowEase = FlowEase()
+    private var flowIDs: [String] = []
 
     /// A node that just appeared grows from nothing and the others make room,
     /// rather than the whole picture jumping to the new set.
@@ -293,20 +360,23 @@ final class FlowMotion {
     func layout(at date: Date, target: Target, metrics: FlowDiagram.Metrics, easing: Bool) -> SankeyLayout {
         retarget(&linkEase, ids: &linkIDs, to: target.links, target.linkIDs)
         retarget(&exitEase, ids: &exitIDs, to: target.exits, target.exitIDs)
+        retarget(&flowEase, ids: &flowIDs, to: target.flowRates, target.flowIDs)
         if easing {
             let dt = max(0, easedAt.map { date.timeIntervalSince($0) } ?? 0)
             linkEase.advance(by: dt)
             exitEase.advance(by: dt)
+            flowEase.advance(by: dt)
             easedAt = max(date, easedAt ?? date)
         } else {
             // Not animating (or the ease is over): draw the sample itself.
             linkEase.finish()
             exitEase.finish()
+            flowEase.finish()
             easedAt = nil
         }
-        let isSettled = linkEase.isSettled && exitEase.isSettled
+        let isSettled = linkEase.isSettled && exitEase.isSettled && flowEase.isSettled
         if isSettled, let settled, settled.target == target, settled.metrics == metrics { return settled.layout }
-        let layout = SankeyLayout.make(leftShares: linkEase.value, rightShares: exitEase.value, height: Double(metrics.region), gap: metrics.gap)
+        let layout = target.layout(metrics, links: linkEase.value, flows: flowEase.value, exits: exitEase.value)
         settled = isSettled ? (target, metrics, layout) : nil
         return layout
     }

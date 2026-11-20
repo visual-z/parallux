@@ -13,8 +13,10 @@ public enum FlowMesh {
         case link(Int)
         /// An exit's node.
         case exit(Int)
-        /// The centre bar.
+        /// The centre bar (two columns).
         case centre
+        /// A rule's node (three columns).
+        case rule(Int)
         /// The dashed lines from links that carry nothing.
         case idle
     }
@@ -81,8 +83,12 @@ public enum FlowMesh {
         add(.idle, dashes, bounded: true)
 
         for (index, span) in layout.left.enumerated() { add(.link(index), node(x: f.leftX, span, f), bounded: false) }
-        let total = layout.total.length > 0 ? layout.total : Span(f.region / 2, f.region / 2)
-        add(.centre, node(x: f.centreX, total, f), bounded: false)
+        if layout.middle.isEmpty {
+            let total = layout.total.length > 0 ? layout.total : Span(f.region / 2, f.region / 2)
+            add(.centre, node(x: f.centreX, total, f), bounded: false)
+        } else {
+            for (index, span) in layout.middle.enumerated() { add(.rule(index), node(x: f.centreX, span, f), bounded: false) }
+        }
         for (index, span) in layout.right.enumerated() { add(.exit(index), node(x: f.rightX, span, f), bounded: false) }
         return pieces
     }

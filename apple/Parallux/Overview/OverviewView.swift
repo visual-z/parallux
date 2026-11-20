@@ -27,27 +27,34 @@ struct OverviewView: View {
             }
             .navigationSubtitle(app.statusLine)
         } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    if !session.deprecatedNotes.isEmpty, !app.settings.value.hideDeprecatedNotes {
-                        DeprecationBanner(notes: session.deprecatedNotes) { app.settings.value.hideDeprecatedNotes = true }
-                    }
-                    // Design v0.2: the diagram sits straight on the content
-                    // layer, 330 pt tall, no box around it.
-                    SteadyFlowDiagram(app: app)
-                        .frame(height: 330)
-                    OverviewCardRow {
-                        ForEach(app.settings.value.dashboard.visible) { card in
-                            switch card {
-                            case .traffic: trafficCard
-                            case .routeMode: routeModeCard
-                            case .profile: profileCard
+            // Design v0.2, reworked after the author's feedback (fix-overview-
+            // layout-and-flow): the cards sit at the bottom of the window and
+            // the diagram takes all the height above them, so the page has no
+            // empty lower half. Only a window too short for both scrolls.
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if !session.deprecatedNotes.isEmpty, !app.settings.value.hideDeprecatedNotes {
+                            DeprecationBanner(notes: session.deprecatedNotes) { app.settings.value.hideDeprecatedNotes = true }
+                        }
+                        SteadyFlowDiagram(app: app)
+                            .frame(minHeight: Self.minimumDiagramHeight, maxHeight: .infinity)
+                        OverviewCardRow {
+                            ForEach(app.settings.value.dashboard.visible) { card in
+                                switch card {
+                                case .traffic: trafficCard
+                                case .routeMode: routeModeCard
+                                case .profile: profileCard
+                                }
                             }
                         }
+                        .contextMenu { DashboardMenu(app: app) }
                     }
-                    .contextMenu { DashboardMenu(app: app) }
+                    .padding(.horizontal, DesignMetrics.pageInset).padding(.top, 8).padding(.bottom, 16)
+                    // At least the visible height: the diagram grows into what the cards leave.
+                    .frame(minHeight: proxy.size.height, alignment: .top)
                 }
-                .padding(.horizontal, DesignMetrics.pageInset).padding(.bottom, 16)
+                .scrollBounceBehavior(.basedOnSize)
             }
             .navigationSubtitle(OverviewCopy.subtitle(links: app.activeLinks.count, mode: app.effectiveMode, server: bondServerName, problem: problem))
             .toolbar {
@@ -66,6 +73,11 @@ struct OverviewView: View {
             .onDisappear { session.releaseConnections() }
         }
     }
+
+    /// Why 240: the height at which the diagram's labels (two lines, 34 pt
+    /// apart) still fit five exits and 其他. At the window's minimum height
+    /// (520 pt) that leaves room for the cards; below it the page scrolls.
+    static let minimumDiagramHeight: CGFloat = 240
 
     /// What the status line would say instead of 「已连接 · …」: a failed
     /// action, an extension that needs approval or failed, or a core the app

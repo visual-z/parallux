@@ -105,9 +105,28 @@ public struct ExitChain: Equatable, Sendable {
 
 /// Every exit's flattened chain, computed once for the current groups
 /// (docs/tasks/perf-routing-relayout.md).
+///
+/// The route map used to flatten each row's chain while laying the row out,
+/// and each flattening re-parsed the whole profile for its outbound tags. So
+/// every frame of a sidebar animation parsed the profile once per row. This
+/// does the work once per data sample; layout only looks the result up.
 public struct ExitChains: Equatable, Sendable {
-    public init(outboundTags: [String], groups: [OutboundGroupModel], exits: [String]) {}
-    public func chain(_ exit: String) -> ExitChain? { nil }
+    private var chains: [String: ExitChain] = [:]
+
+    /// - Parameters:
+    ///   - outboundTags: the profile's outbound tags (parsed once, when it loads).
+    ///   - groups: the core's groups with their current selections.
+    ///   - exits: the exits to flatten.
+    public init(outboundTags: [String], groups: [OutboundGroupModel], exits: [String]) {
+        var known = Set(outboundTags)
+        known.formUnion(groups.map(\.tag))
+        for group in groups { known.formUnion(group.items.map(\.tag)) }
+        for exit in exits where chains[exit] == nil {
+            chains[exit] = ExitChain.flatten(exit, groups: groups, outbounds: known)
+        }
+    }
+
+    public func chain(_ exit: String) -> ExitChain? { chains[exit] }
 }
 
 /// A traffic class on the route map: one rule (or route.final) and its live rate.
@@ -199,6 +218,30 @@ public enum TrafficLabel {
         var name = tag
         for prefix in ["geosite-", "geoip-"] where name.hasPrefix(prefix) { name.removeFirst(prefix.count) }
         return known[name] ?? name
+    }
+
+    /// The class name for a connection's `rule` field, which is the
+    /// matched rule printed by sing-box (`key=value`, lists in brackets,
+    /// long domain lists cut with "..."): the same name the route page gives
+    /// that rule, without needing the profile (fix-overview-layout-and-flow).
+    public static func name(connectionRule rule: String) -> String {
+        guard !rule.isEmpty else { return finalName }
+        var items: [String: [String]] = [:]
+        for item in RuleSummary.items(of: rule) {
+            guard let equals = item.firstIndex(of: "=") else { continue }
+            let key = String(item[..<equals])
+            var value = String(item[item.index(after: equals)...])
+            if value.hasPrefix("["), value.hasSuffix("]") {
+                value = String(value.dropFirst().dropLast())
+                // sing-box cuts long domain lists to three and adds "...":
+                // the name counts what it shows, not how many there were.
+                if value.hasSuffix("...") { value = String(value.dropLast(3)) }
+            }
+            items[key, default: []] += value.split(separator: " ").map(String.init)
+        }
+        // The condition itself when nothing in it can be named: never a made-up rule number.
+        let named = Self.name(for: RouteRule(index: 0, condition: rule, items: items, outbound: nil, action: "route"))
+        return named == "规则 1" ? rule : named
     }
 
     public static func name(for rule: RouteRule) -> String {

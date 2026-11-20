@@ -407,5 +407,57 @@ import Testing
             }
         }
     }
+
+    @Test func threeColumnBandsRunFromLinkThroughRuleToNode() throws {
+        var rng = SplitMix64(seed: 0x3B4)
+        let height = 400.0, gap = 30.0
+        #expect(SankeyLayout.make(links: [0, 0], rules: 2, nodes: 2, flows: [(0, 0, 5)], height: height, gap: gap).bands.isEmpty, "no link traffic, no bands")
+        #expect(SankeyLayout.make(links: [5], rules: 2, nodes: 2, flows: [], height: height, gap: gap).bands.isEmpty, "no rule traffic, no bands")
+        for round in 0..<300 {
+            let linkCount = 1 + rng.int(3), ruleCount = 1 + rng.int(5), nodeCount = 1 + rng.int(5)
+            let links = (0..<linkCount).map { _ in [0.0, 1, 95, 420][rng.int(4)] }
+            var flows: [(rule: Int, node: Int, rate: Double)] = []
+            for rule in 0..<ruleCount { for node in 0..<nodeCount where rng.int(3) == 0 { flows.append((rule, node, [1.0, 95, 420, 1e6][rng.int(4)])) } }
+            let layout = SankeyLayout.make(links: links, rules: ruleCount, nodes: nodeCount, flows: flows, height: height, gap: gap)
+            let context = Comment(rawValue: "round \(round): links \(links) flows \(flows.count)")
+            try #require(layout.left.count == linkCount && layout.middle.count == ruleCount && layout.right.count == nodeCount, context)
+            if links.reduce(0, +) == 0 || flows.isEmpty { #expect(layout.bands.isEmpty, context); continue }
+            let tolerance = 1e-6 * height
+            // One band runs the whole way at one thickness.
+            for band in layout.bands {
+                #expect(abs(band.left.length - band.center.length) <= tolerance && abs(band.right.length - band.center.length) <= tolerance, context)
+                #expect(band.from >= 0 && band.from < linkCount, context)
+                #expect(layout.middle.contains { band.center.lower >= $0.lower - tolerance && band.center.upper <= $0.upper + tolerance }, "a band misses every rule (\(context))")
+                #expect(layout.right.contains { band.right.lower >= $0.lower - tolerance && band.right.upper <= $0.upper + tolerance }, context)
+                #expect(band.left.lower >= layout.left[band.from].lower - tolerance && band.left.upper <= layout.left[band.from].upper + tolerance, context)
+            }
+            // Every node is exactly tiled by the bands through it, on every column.
+            for (column, part) in [(layout.left, \SankeyLayout.Band.left), (layout.middle, \SankeyLayout.Band.center), (layout.right, \SankeyLayout.Band.right)] {
+                for node in column {
+                    let inside = layout.bands.map { $0[keyPath: part] }.filter { $0.lower >= node.lower - tolerance && $0.upper <= node.upper + tolerance }
+                    #expect(abs(inside.map(\.length).reduce(0, +) - node.length) <= tolerance, "a node is not tiled (\(context))")
+                }
+            }
+            // Ids are unique, so a dot knows which band it rides.
+            #expect(Set(layout.bands.map { "\($0.from)|\($0.to)" }).count == layout.bands.count, context)
+            // The rules' heights follow their traffic: a busier rule is never drawn thinner.
+            var ruleRate = [Double](repeating: 0, count: ruleCount)
+            for flow in flows { ruleRate[flow.rule] += flow.rate }
+            for i in 0..<ruleCount { for j in 0..<ruleCount where ruleRate[i] > ruleRate[j] { #expect(layout.middle[i].length >= layout.middle[j].length - tolerance, context) } }
+        }
+    }
+
+    @Test func connectionRulesReadAsTrafficClasses() {
+        #expect(TrafficLabel.name(connectionRule: "") == TrafficLabel.finalName)
+        #expect(TrafficLabel.name(connectionRule: "rule_set=geosite-cn") == "中国大陆")
+        #expect(TrafficLabel.name(connectionRule: "rule_set=[geosite-youtube geosite-netflix]") == "YouTube / Netflix")
+        #expect(TrafficLabel.name(connectionRule: "ip_is_private=true") == "局域网")
+        #expect(TrafficLabel.name(connectionRule: "domain_suffix=[claude.ai claude.com claude.app...]") == "claude.ai 等 3 项")
+        #expect(TrafficLabel.name(connectionRule: "process_name=curl") == "curl")
+        #expect(TrafficLabel.name(connectionRule: "ip_cidr=172.16.0.0/12") == "172.16.0.0/12")
+        // Something it cannot name reads as the condition itself, never as a made-up rule number.
+        #expect(TrafficLabel.name(connectionRule: "network=udp port=443") == "network=udp port=443" || TrafficLabel.name(connectionRule: "network=udp port=443") == "端口 443")
+        #expect(!TrafficLabel.name(connectionRule: "network=udp").hasPrefix("规则 "))
+    }
 }
 
