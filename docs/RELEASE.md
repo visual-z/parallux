@@ -32,7 +32,7 @@ scripts/release.sh 0.2.0             # 正式：公证并装订 App 与 DMG，�
 - `appcast/appcast.xml`：Sparkle 读取的更新源，条目已用上面的密钥签名，下载地址指向 GitHub Releases 上这个版本的 DMG。
 - `export/Parallux.app`：`scripts/check-release.sh` 核对过的 App。
 
-缺凭据时脚本退出 2，并打印要运行的命令。发布门：`keel gate --tier release` 会对 `.build/release/latest/Parallux.app` 跑 `check-release.sh`。
+公证的上传偶尔会中断：脚本会重试，最多 3 次；公证服务明确拒绝时不重试，按提示用 `xcrun notarytool log` 看原因。缺凭据时脚本退出 2，并打印要运行的命令。发布门：`keel gate --tier release` 会对 `.build/release/latest/Parallux.app` 跑 `check-release.sh`。
 
 ## 上传（手动）
 

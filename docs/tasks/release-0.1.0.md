@@ -61,6 +61,8 @@ baseline: d63daf464b7b
 - **D6** 作者的电脑上装的是 0.1.0 发布版：`/Applications/Parallux.app` 版本 0.1.0、Developer ID、已公证；系统扩展是同一个构建并已启用；能上网。
   - 检：cmd `spctl -a -vv -t exec /Applications/Parallux.app`
   - 检：author 设置 › 通用 › 更新：显示更新渠道，点「检查更新」提示已是最新
+- **D8** 公证的提交没有完成（上传中断、等待超时）时脚本重试，最多 3 次，两次之间停顿；公证服务给出结论（非 Accepted）时不重试，报出结论；3 次都没完成时退出并说明；每次提交的输出都留在日志里。
+  - 检：cmd `scripts/test-release-notarize.sh`
 - **D7** gate 全绿，测试计数不变（Go 625、Swift 179）。
   - 检：cmd `keel gate --tier release`
 
@@ -89,6 +91,10 @@ keel gate --tier release --record docs/tasks/release-0.1.0.md
 RED: none 发布卡：改的是发布脚本与文档，判据是真实跑出来的产物
 
 ## 修订
+
+- D8（冻结之后加的判据，只加严）：第二次正式构建（2026-11-20）里 App 公证通过，DMG 的上传在 `HTTPClientError.connectTimeout` 上中断，脚本退出 1，前面二十多分钟的构建作废。这是传输失败，不是公证服务的结论。改为有上限的重试（3 次、间隔 20 秒、每次等待最多 30 分钟，都是假设值，理由写在脚本里），结论不重试。`scripts/test-release-notarize.sh` 把脚本里的函数原样切出来，用假的 notarytool 跑七种情形；加它时先把函数改坏四处（不重试、对结论也重试、有结论就算通过、不停顿），四次它都红。它没有接进 gate，由作者定。
+- D7 里的测试计数「Go 625、Swift 179」是开卡时的数。开卡之后 `fix-route-modes` 与 `fix-overview-responsive` 两张卡各自加了测试，现在是 Go 627、Swift 191；本卡自己没有增减测试。按冻结规则 D7 的文字没有改。
+- 第一次正式构建（提交 `24eef98`）全程通过，但它不含之后的修复，没有发布；那次的产物已被第二次覆盖。
 
 ## 交接
 

@@ -79,6 +79,50 @@ if [ "$dry_run" = 0 ] && [ -z "$public_key" ]; then
   exit 1
 fi
 
+# >>> notarize
+# Uploads to the notary service fail now and then for reasons that have
+# nothing to do with the file: on 2026-11-20 a connect timeout in the DMG's
+# upload failed a release after everything else had passed. A submission
+# that did not complete is tried again; a verdict is not, because an Invalid
+# submission stays invalid however often it is sent.
+#
+# Why 3 attempts: one flaky upload in a row is ordinary, three in a row means
+# the network or the service is down and someone should look. Why 20 s
+# between them: long enough for a dropped route to come back, short next to
+# the minutes a submission takes. Why 30 minutes per wait: Apple's notary
+# service usually answers in 2 to 5; without a limit a stuck submission would
+# hold the release forever. All three are assumed values.
+notary_attempts=3
+notary_retry_delay=20
+notary_wait_limit=30m
+
+# notarize <file>: submits it and waits. Succeeds only when the service
+# says "status: Accepted".
+notarize() {
+  local file="$1" attempt output verdict
+  for attempt in $(seq 1 "$notary_attempts"); do
+    output="$(xcrun notarytool submit "$file" --keychain-profile "$notary_profile" --wait --timeout "$notary_wait_limit" 2>&1)" || true
+    printf '%s\n' "$output" >>"$log"
+    # The verdict is a line of its own ("  status: Accepted"); the progress
+    # line ("Current status: In Progress...") does not start with it.
+    verdict="$(sed -n 's/^ *status: *//p' <<<"$output" | tail -n 1)"
+    if [ "$verdict" = "Accepted" ]; then
+      return 0
+    fi
+    if [ -n "$verdict" ]; then
+      echo "the notary service answered \"$verdict\" for $(basename "$file"); see $log and: xcrun notarytool log <id> --keychain-profile $notary_profile" >&2
+      return 1
+    fi
+    echo "NOTE  the submission of $(basename "$file") did not complete (attempt $attempt of $notary_attempts)" >&2
+    if [ "$attempt" -lt "$notary_attempts" ]; then
+      sleep "$notary_retry_delay"
+    fi
+  done
+  echo "notarization of $(basename "$file") failed: no submission completed in $notary_attempts attempts; see $log" >&2
+  return 1
+}
+# <<< notarize
+
 out=".build/release/$version"
 rm -rf "$out"
 mkdir -p "$out" .build/logs
@@ -158,10 +202,7 @@ fi
 if [ "$dry_run" = 0 ]; then
   echo "==> notarize app"
   ditto -c -k --keepParent "$app" "$out/Parallux.zip"
-  xcrun notarytool submit "$out/Parallux.zip" --keychain-profile "$notary_profile" --wait >>"$log" 2>&1 || {
-    echo "notarization of the app failed; see $log (xcrun notarytool log <id> --keychain-profile $notary_profile)" >&2
-    exit 1
-  }
+  notarize "$out/Parallux.zip" || exit 1
   xcrun stapler staple "$app" >>"$log" 2>&1
   rm -f "$out/Parallux.zip"
 fi
@@ -178,10 +219,7 @@ rm -rf "$staging"
 if [ "$dry_run" = 0 ]; then
   echo "==> notarize dmg"
   codesign --sign "Developer ID Application" --timestamp "$dmg"
-  xcrun notarytool submit "$dmg" --keychain-profile "$notary_profile" --wait >>"$log" 2>&1 || {
-    echo "notarization of the DMG failed; see $log" >&2
-    exit 1
-  }
+  notarize "$dmg" || exit 1
   xcrun stapler staple "$dmg" >>"$log" 2>&1
 
   echo "==> appcast"
