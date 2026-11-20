@@ -46,6 +46,22 @@ public enum OverviewCopy {
     /// connections. A connection carries the rule it matched (libbox
     /// Connection.rule: the condition only), so this needs nothing from the
     /// profile. nil when no connection matched a rule (only route.final).
+    /// The most-hit rule in parts, for a card that lays them out in rows. stub
+    public struct TopRule: Equatable, Sendable {
+        public var rule: String
+        public var exit: String
+        public var share: Int
+        public init(rule: String, exit: String, share: Int) {
+            self.rule = rule
+            self.exit = exit
+            self.share = share
+        }
+        public var route: String { "" }
+        public var percent: String { "" }
+    }
+
+    public static func topRuleParts(_ connections: [ConnectionRow]) -> TopRule? { nil }
+
     public static func topRule(_ connections: [ConnectionRow]) -> String? {
         // Without DNS lookups (the connections page's 隐藏 DNS test): on a
         // profile that routes DNS by rule they would nearly always win, and

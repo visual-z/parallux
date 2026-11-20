@@ -61,6 +61,9 @@ public struct SubscriptionUsage: Codable, Equatable, Sendable {
 /// The profile card's usage line and bar (overview).
 public struct UsageSummary: Equatable, Sendable {
     public var text: String
+    /// `text` in two parts, for a row with the label on one side. stub
+    public var label: String { "" }
+    public var value: String { "" }
     /// Used share of the quota, 0...1; nil when there is no quota to draw.
     public var fraction: Double?
     /// The expiry, when the server states one.
