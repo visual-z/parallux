@@ -53,11 +53,15 @@
       "backup" : [
         "link-en7"
       ],
+      "bond" : "parallux-bond",
+      "bond_bypass" : [
+        "203.0.113.10"
+      ],
       "links" : [
         "link-en0",
         "link-en7"
       ],
-      "mode" : "failover",
+      "mode" : "bond",
       "tag" : "direct",
       "type" : "aggregate"
     },

@@ -144,7 +144,7 @@ struct DiagnosticsView: View {
     }
 
     private var speedPaths: [(label: String, outbound: String, isBond: Bool)] {
-        var paths = app.activeLinks.map { (label: "\($0.kind.title)（\($0.name)）", outbound: ProfileComposer.linkTag($0.name), isBond: false) }
+        var paths = app.activeLinks.map { (label: $0.kind == .relay ? "\($0.kind.title) \($0.title)" : "\($0.kind.title)（\($0.name)）", outbound: ProfileComposer.linkTag($0.name), isBond: false) }
         if app.effectiveMode == .bond {
             paths.append((label: "叠加", outbound: AggregationServer.bondTag, isBond: true))
         }

@@ -176,17 +176,62 @@ extension LinkCompositionTests {
 }
 
 extension LinkCompositionTests {
-    /// Direct traffic (LAN, domestic) must not go to the aggregation server:
-    /// the transport is unencrypted and the design draws 直连 as its own exit.
-    @Test func bondModeKeepsDirectTrafficOffTheServer() throws {
+    /// 同机节点 (decision 25): however the profile writes the node's server —
+    /// the server's own address, a name, with relays in the mix — the
+    /// aggregate the nodes detour through never carries a bypass, and every
+    /// node still detours through it.
+    @Test func aNodeOnTheAggregationServersMachineDetoursThroughABondWithoutBypass() throws {
+        let server = "203.0.113.10"
+        for nodeServer in [server, "node.example.com", "2001:db8::10"] {
+            let profile = """
+            {"outbounds": [
+              {"type": "vless", "tag": "same-machine", "server": "\(nodeServer)", "server_port": 443, "uuid": "00000000-0000-0000-0000-000000000000", "domain_resolver": "local"},
+              {"type": "direct", "tag": "direct"}
+            ], "dns": {"servers": [{"type": "local", "tag": "local"}]}}
+            """
+            let after = try outbounds(ProfileComposer.compose(profile, links: twoLinks, backup: [], mode: .bond, bond: Self.bondFixture))
+            let node = try #require(after.first { $0["tag"] as? String == "same-machine" })
+            #expect(node["detour"] as? String == ProfileComposer.aggregateTag, "\(nodeServer)")
+            let nodes = try #require(after.first { $0["tag"] as? String == ProfileComposer.aggregateTag })
+            #expect(nodes["bond"] as? String == "parallux-bond", "\(nodeServer)")
+            #expect(nodes["bond_bypass"] == nil, "\(nodeServer)")
+            let direct = try #require(after.first { $0["tag"] as? String == "direct" })
+            #expect((direct["bond_bypass"] as? [String]) == [server], "direct traffic to the server itself stays off the bond")
+        }
+        // Balance and failover never had a bypass on either.
+        for mode in [AggregationMode.balance, .failover] {
+            let after = try outbounds(ProfileComposer.compose(userProfile, links: twoLinks, backup: [], mode: mode, bond: Self.bondFixture))
+            #expect(after.allSatisfy { $0["bond_bypass"] == nil }, "\(mode)")
+        }
+    }
+}
+
+extension LinkCompositionTests {
+    /// feat-bond-direct (author 2026-11-20): direct traffic goes through the
+    /// aggregation server too; the core keeps LAN and the server itself off it.
+    @Test func bondModeCarriesDirectTrafficToo() throws {
         let composed = try ProfileComposer.compose(userProfile, links: twoLinks, backup: [], mode: .bond, bond: Self.bondFixture)
         let after = try outbounds(composed)
+        let server = try #require(Self.bondFixture.outbound["server"].flatMap { if case let .string(host) = $0 { host } else { nil } })
+        for tag in ["direct", ProfileComposer.aggregateTag] {
+            let aggregate = try #require(after.first { $0["tag"] as? String == tag })
+            #expect(aggregate["mode"] as? String == "bond", "\(tag)")
+            #expect(aggregate["bond"] as? String == "parallux-bond", "\(tag)")
+        }
+        // Direct traffic keeps the server itself off the bond. The nodes'
+        // detour does not (feat-node-hosted-aggregation, author 2026-11-20):
+        // a node at the server's address is a node on the same machine.
         let direct = try #require(after.first { $0["tag"] as? String == "direct" })
-        #expect(direct["bond"] == nil, "the direct replacement must not use the bond")
-        #expect(direct["mode"] as? String == "failover")
-        let links = try #require(after.first { $0["tag"] as? String == ProfileComposer.aggregateTag })
-        #expect(links["bond"] as? String == "parallux-bond")
-        #expect(links["mode"] as? String == "bond")
+        #expect((direct["bond_bypass"] as? [String]) == [server])
+        let nodes = try #require(after.first { $0["tag"] as? String == ProfileComposer.aggregateTag })
+        #expect(nodes["bond_bypass"] == nil, "the nodes' detour must bond a node on the aggregation server's machine")
+        // Without a server nothing carries a bond.
+        let plain = try outbounds(ProfileComposer.compose(userProfile, links: twoLinks, backup: [], mode: .bond))
+        for aggregate in plain where aggregate["type"] as? String == "aggregate" {
+            #expect(aggregate["bond"] == nil)
+            #expect(aggregate["bond_bypass"] == nil)
+            #expect(aggregate["mode"] as? String == "failover")
+        }
     }
 }
 

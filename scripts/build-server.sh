@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Cross-compiles the aggregation server for the Linux VPSes it runs on and
-# lints its installer (gate step "server-build"; docs/tasks/feat-bond.md).
+# lints and runs its installer (gate step "server-build"; docs/tasks/feat-bond.md).
 #   scripts/build-server.sh           build into .build/server
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
@@ -15,4 +15,7 @@ sh -n server/install.sh
 if command -v shellcheck >/dev/null 2>&1; then
   shellcheck -s sh server/install.sh
 fi
+# The installer run for real into a scratch root (key handling, the unit's
+# command line, the link).
+scripts/test-install.sh
 echo "built $out/parallux-server-linux-{amd64,arm64}; install.sh ok"

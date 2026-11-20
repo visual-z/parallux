@@ -41,7 +41,7 @@ struct ExitInspector: View {
                         NodePicker(group: group)
                     } else if exit.hasPrefix("direct") {
                         GroupBox {
-                            Text("\(app.effectiveMode?.title ?? "直接连接") · \(app.activeLinks.map(\.kind.title).joined(separator: " + "))")
+                            Text("\(app.effectiveMode?.title ?? "直接连接") · \(app.activeLinks.map(\.title).joined(separator: " + "))")
                                 .font(.callout).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }

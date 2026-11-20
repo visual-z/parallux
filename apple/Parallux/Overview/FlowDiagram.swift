@@ -36,6 +36,9 @@ enum FlowPalette {
     static let wifi = dynamic(light: 0x2FA6C4, dark: 0x40C8E0)
     static let wired = dynamic(light: 0xF08C00, dark: 0xFF9F0A)
     static let cellular = dynamic(light: 0xF2385F, dark: 0xFF375F)
+    /// Relay links (feat-relay-links): the purple the author's sketch of
+    /// scheme D draws them in; not one of the exits' green or grey.
+    static let relay = dynamic(light: 0x6E56CF, dark: 0x9E8CFC)
     static let proxy = dynamic(light: 0x30A14E, dark: 0x30D158)
     static let direct = dynamic(light: 0x8E8E93, dark: 0x98989D)
 

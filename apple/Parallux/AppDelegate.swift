@@ -137,16 +137,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(submenu("聚合方式", aggregation))
 
         let links = NSMenu()
-        for link in app.links.links {
+        for link in app.allLinks {
             let enabled = !app.linkSettings.value.preferences.disabled.contains(link.name)
-            let item = ActionItem("\(link.kind.title) · \(link.name)") { [app] in
+            let item = ActionItem(link.kind == .relay ? "\(link.kind.title) · \(link.title)" : "\(link.kind.title) · \(link.name)") { [app] in
                 if enabled { app.linkSettings.value.preferences.disabled.insert(link.name) } else { app.linkSettings.value.preferences.disabled.remove(link.name) }
                 Task { await app.applyLinkChanges() }
             }
             item.state = enabled ? .on : .off
             links.addItem(item)
         }
-        if app.links.links.isEmpty { links.addItem(disabled("不可用")) }
+        if app.allLinks.isEmpty { links.addItem(disabled("不可用")) }
         menu.addItem(submenu("线路", links))
 
         let modes = NSMenu()

@@ -3,6 +3,9 @@
 // inbound, reassembles them, and sends the stream on through a direct
 // outbound.
 //
+// With -role relay it is a relay host instead (中继主机, decision 24): see
+// relay.go.
+//
 // It runs from a full sing-box configuration file (-config), or builds the
 // minimal one from flags. The pre-shared key is read from a file only, so it
 // never appears in the process list, and it is never logged.
@@ -17,6 +20,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"net/netip"
 	"os"
 	"os/signal"
 	"strings"
@@ -32,6 +37,14 @@ import (
 
 // Version is set by release builds: -ldflags "-X main.Version=…".
 var Version = "0.0.0-dev"
+
+const (
+	roleAggregation = "aggregation"
+	roleRelay       = "relay"
+)
+
+// stdout is where -link and -version print; tests replace it.
+var stdout io.Writer = os.Stdout
 
 // minPSKLength: shorter keys are guessable; upstream recommends a long random
 // string, and install.sh generates 43 characters (32 random bytes, base64url).
@@ -54,11 +67,45 @@ func run(args []string) error {
 	logLevel := flags.String("log-level", "info", "log level")
 	check := flags.Bool("check", false, "validate the configuration and exit")
 	version := flags.Bool("version", false, "print the version and exit")
+	role := flags.String("role", roleAggregation, "aggregation or relay")
+	keyFile := flags.String("key-file", "", "relay: file holding the relay key")
+	generateKey := flags.Bool("generate-key", false, "relay: write a new key to -key-file unless it exists, then exit")
+	printLink := flags.Bool("link", false, "relay: print the import link for -host and exit")
+	host := flags.String("host", "", "relay: the address the Mac reaches this machine at, for -link")
+	name := flags.String("name", "", "relay: display name for -link")
+	self := flags.String("self", "", "comma-separated addresses or names clients know this machine by")
+	selfTarget := flags.String("self-target", "", "local address tried first for connections to -self (default: the address this machine sends from)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if *version {
-		fmt.Println("parallux-server", Version)
+		fmt.Fprintln(stdout, "parallux-server", Version)
+		return nil
+	}
+	if *role != roleAggregation && *role != roleRelay {
+		return fmt.Errorf("unknown role %q, want %s or %s", *role, roleAggregation, roleRelay)
+	}
+	if *role == roleRelay && *generateKey {
+		return generateRelayKey(*keyFile)
+	}
+	// -port's default is the aggregation server's; a relay has its own.
+	portSet := false
+	flags.Visit(func(f *flag.Flag) { portSet = portSet || f.Name == "port" })
+	if *role == roleRelay && !portSet {
+		*port = defaultRelayPort
+	}
+	if *port == 0 || *port > 65535 {
+		return fmt.Errorf("port %d is not 1–65535", *port)
+	}
+	if *role == roleRelay && *printLink {
+		if *host == "" {
+			return errors.New("-link needs -host, the address the Mac reaches this machine at")
+		}
+		key, err := readRelayKey(*keyFile)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, RelayLink(*host, uint16(*port), key, *name))
 		return nil
 	}
 
@@ -69,12 +116,30 @@ func run(args []string) error {
 		if err != nil {
 			return fmt.Errorf("read config: %w", err)
 		}
+	} else if *role == roleRelay {
+		key, err := readRelayKey(*keyFile)
+		if err != nil {
+			return err
+		}
+		content, err = RelayConfig(RelayOptions{Listen: *listen, Port: uint16(*port), Key: key, LogLevel: *logLevel})
+		if err != nil {
+			return err
+		}
 	} else {
 		psk, err := readPSK(*pskFile)
 		if err != nil {
 			return err
 		}
-		content, err = Config(ConfigOptions{Listen: *listen, Port: uint16(*port), PSK: psk, AllowedIPs: splitList(*allowed), LogLevel: *logLevel})
+		// Refuse a malformed entry before spending a lookup on it.
+		if _, _, err := parseSelf(splitList(*self)); err != nil {
+			return err
+		}
+		// Names in -self also cover the addresses they resolve to now.
+		lookup, cancelLookup := context.WithTimeout(context.Background(), selfLookupTimeout)
+		identities := expandSelf(lookup, splitList(*self), lookupSelf)
+		cancelLookup()
+		content, err = Config(ConfigOptions{Listen: *listen, Port: uint16(*port), PSK: psk, AllowedIPs: splitList(*allowed), LogLevel: *logLevel,
+			Self: identities, SelfTarget: *selfTarget})
 		if err != nil {
 			return err
 		}
@@ -134,10 +199,33 @@ type ConfigOptions struct {
 	PSK        string
 	AllowedIPs []string
 	LogLevel   string
+	// Self lists the addresses and names clients know this machine by
+	// (-self; install.sh passes the link's host). Connections to them are
+	// delivered on this machine (self.go).
+	Self []string
+	// SelfTarget overrides the local address self delivery tries first.
+	SelfTarget string
 }
 
-// Config builds the minimal server configuration: one multipath inbound and
-// one direct outbound.
+// cgnat is RFC 6598 shared address space. sing-box's ip_is_private leaves
+// it out; it holds cloud metadata services and overlay networks.
+const cgnat = "100.64.0.0/10"
+
+// Config builds the server configuration: one multipath inbound, a direct
+// outbound, and the route rules that decide what a client may reach.
+//
+// The order of the rules is the contract (decision 25):
+//
+//  1. Names are resolved, so the checks below see addresses.
+//  2. Private, loopback and link-local destinations are refused, and so is
+//     carrier-grade NAT space. The client never bonds a local destination,
+//     so what arrives here asking for one is someone using this machine to
+//     reach its loopback-only services, the cloud's metadata service or its
+//     private network.
+//  3. Destinations that are this machine itself go to self delivery. It
+//     comes last because it lands on a private address: a rule after an
+//     address rewrite sees the rewritten address, and refusing after
+//     delivering would refuse the node.
 func Config(o ConfigOptions) ([]byte, error) {
 	if o.Port == 0 {
 		return nil, errors.New("port must not be 0")
@@ -159,9 +247,42 @@ func Config(o ConfigOptions) ([]byte, error) {
 	if level == "" {
 		level = "info"
 	}
+	addresses, names, err := parseSelf(o.Self)
+	if err != nil {
+		return nil, err
+	}
+	if o.SelfTarget != "" {
+		if _, err := netip.ParseAddr(o.SelfTarget); err != nil {
+			return nil, fmt.Errorf("self target %q is not an address", o.SelfTarget)
+		}
+	}
+	outbounds := []any{map[string]any{"type": "direct", "tag": "direct"}}
+	rules := []any{
+		map[string]any{"action": "resolve"},
+		map[string]any{"ip_is_private": true, "action": "reject"},
+		map[string]any{"ip_cidr": []string{cgnat}, "action": "reject"},
+	}
+	if len(addresses)+len(names) > 0 {
+		self := map[string]any{"type": selfType, "tag": selfTag, "listen_port": o.Port}
+		if o.SelfTarget != "" {
+			self["target"] = o.SelfTarget
+		}
+		outbounds = append(outbounds, self)
+		if len(addresses) > 0 {
+			prefixes := make([]string, len(addresses))
+			for i, address := range addresses {
+				prefixes[i] = netip.PrefixFrom(address, address.BitLen()).String()
+			}
+			rules = append(rules, map[string]any{"ip_cidr": prefixes, "outbound": selfTag})
+		}
+		if len(names) > 0 {
+			rules = append(rules, map[string]any{"domain": names, "outbound": selfTag})
+		}
+	}
 	return stdjson.MarshalIndent(map[string]any{
 		"log":       map[string]any{"level": level, "timestamp": true},
 		"inbounds":  []any{inbound},
-		"outbounds": []any{map[string]any{"type": "direct", "tag": "direct"}},
+		"outbounds": outbounds,
+		"route":     map[string]any{"rules": rules},
 	}, "", "  ")
 }

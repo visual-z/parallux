@@ -87,7 +87,7 @@ func TestAProbeSurvivesOneLostConnectionAttempt(t *testing.T) {
 	for _, n := range []int{1, 2, 3} {
 		dialer := &lossyDialer{lose: 1}
 		start := time.Now()
-		if !probeOnce(context.Background(), dialer, probeTargets(n)) {
+		if !probeOnce(context.Background(), dialer, probeTargets(n), false) {
 			t.Fatalf("%d target(s), first attempt to each lost: probe failed, want the retry to succeed", n)
 		}
 		if took := time.Since(start); took >= probeTimeout {
@@ -104,7 +104,7 @@ func TestAProbeOfADeadLinkFailsWithinItsTimeoutAndLeavesNoDialRunning(t *testing
 	for _, n := range []int{0, 1, 3} {
 		hanging := &lossyDialer{lose: 1 << 30}
 		start := time.Now()
-		if probeOnce(context.Background(), hanging, probeTargets(n)) {
+		if probeOnce(context.Background(), hanging, probeTargets(n), false) {
 			t.Fatalf("%d target(s), every dial hangs: probe succeeded", n)
 		}
 		if took := time.Since(start); took > probeTimeout+slack {
@@ -116,7 +116,7 @@ func TestAProbeOfADeadLinkFailsWithinItsTimeoutAndLeavesNoDialRunning(t *testing
 
 		refused := &lossyDialer{failFast: true}
 		start = time.Now()
-		if probeOnce(context.Background(), refused, probeTargets(n)) {
+		if probeOnce(context.Background(), refused, probeTargets(n), false) {
 			t.Fatalf("%d target(s), every dial errors: probe succeeded", n)
 		}
 		if took := time.Since(start); took >= probeRetryAfter {

@@ -52,6 +52,9 @@ log stream --predicate 'subsystem BEGINSWITH "io.github.visual-z.parallux"'
 | 3.1 | 线路页：列出 Wi‑Fi、有线、iPhone；开关、拖动排序、仅备用；「检测出口」 | 改动立即生效不断线；同一出口时有提示 | `feat-links-interface` D5 |
 | 3.2 | 面板选「分流」，开多个下载 | 连接分到两条线路，概览左列两股 | `feat-links-aggregate` D10 |
 | 3.3 | 选「主备」，拔掉首选线路 | 2 秒内新连接走另一条；收到「线路不可用」通知 | `feat-links-aggregate` D10 |
+| 3.4 | 中继线路（需要局域网里至少两台 Linux 机器，时钟开着 NTP）。**先在一台节点上跑 `dig +tcp . NS @223.5.5.5`**：1 秒内没有回答就停下告诉我，中继线路的健康检查靠它，办公网不放行的话要换探测目标。然后 `scripts/build-server.sh`，把 `parallux-server` 与 `server/install.sh` 拷到每台机器，`sudo sh install.sh --relay --binary ./parallux-server --name worker-1`；线路页「添加中继线路 › 添加」，把几条链接一起粘进去 | 每台打印一条 `parallux://relay?…`；线路页多出几行，第二行写着「中继 · 经有线（en…）」，几秒内状态变成「已连接」；面板与概览的流向图左列有它们 | `feat-relay-links` D19、D20 |
+| 3.5 | 选「分流」，开多线程下载（或诊断 › 测速逐条线路） | 中继线路各自有速率，合计超过单台设备的配额；有线那一行显示的是它自己承载的部分 | `feat-relay-links` D19 |
+| 3.6 | 在一台中继主机上 `sudo systemctl stop parallux-relay`；访问 NAS 或打印机；关掉线路页的「有线」 | 2 秒内那条中继线路「不可用」并收到通知，其余连接照常；局域网设备照常访问；关掉有线后经它的中继线路变成「未使用」 | `feat-relay-links` D19 |
 
 ## 4. M4 叠加（需要一台 Linux VPS）
 
@@ -61,6 +64,10 @@ log stream --predicate 'subsystem BEGINSWITH "io.github.visual-z.parallux"'
 | 4.2 | 聚合服务器页粘贴链接 | 显示延迟，自动设为叠加服务器 | `feat-bond-interface` D6 |
 | 4.3 | 面板选「叠加」；诊断 › 单线程下载测速 | 叠加 ≥ 最快单线路的 1.6 倍（PLAN 目标） | `feat-bond-interface` D6、`feat-bond` D8 |
 | 4.4 | 诊断 › 网络质量、STUN | 有结果 | `feat-parity-polish` 修订 |
+| 4.5 | 同机节点：在**自己的代理节点那台机器**上跑 4.1 的安装命令（公网 IP 不在网卡上的云主机要加 `--host <公网地址>`）；App 里选这个节点，聚合方式选叠加；诊断 › 单线程下载测速 | 安装不动节点原有的服务；测速里「叠加」比最快单线路快，连接页里这个节点的连接经 parallux-bond | `feat-node-hosted-aggregation` D12 |
+| 4.6 | 节点机器上起一个只听 127.0.0.1 的服务（`python3 -m http.server --bind 127.0.0.1 8099`）；Mac 上叠加开着，访问 `http://<节点公网地址>:8099` | 打不开。注意这一步服务端做什么都会通过（卡的修订里有说明），真正的证据是自动测试；走一遍只是确认没有意外 | `feat-node-hosted-aggregation` D12 |
+| 4.7 | 之前按 4.1 装过的服务器：重跑一次安装命令 | 打印的链接和原来的一样（密钥沿用），`/etc/parallux-server/config.json` 没有了，服务在跑 | `feat-node-hosted-aggregation` D12 |
+| 4.8 | 看清本机投递的边界：节点机器上 `python3 -m http.server 8099`（听所有网卡），云安全组**不**放行 8099；Mac 上叠加开着，访问 `http://<节点公网地址>:8099`，再关掉叠加访问一次 | 叠加开着时**打得开**，关掉打不开。这是预期的：经聚合服务器到本机的连接不过安全组。你不接受的话告诉我，要另想办法 | `feat-node-hosted-aggregation` D16 |
 
 ## 5. M5 全量
 

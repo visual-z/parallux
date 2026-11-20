@@ -14,7 +14,7 @@ final class LinkNotifier {
         defer { last = current }
         guard enabled, !last.isEmpty else { return }
         for (tag, healthy) in current where last[tag] != nil && last[tag] != healthy {
-            let name = links.first { ProfileComposer.linkTag($0.name) == tag }.map { "\($0.kind.title)（\($0.name)）" } ?? tag
+            let name = links.first { ProfileComposer.linkTag($0.name) == tag }.map { $0.kind == .relay ? "中继线路 \($0.title)" : "\($0.kind.title)（\($0.name)）" } ?? tag
             post(title: healthy ? "线路已恢复" : "线路不可用", body: healthy ? "\(name)重新参与聚合。" : "\(name)暂时不可用，新连接改走其他线路。")
         }
     }

@@ -3,6 +3,9 @@ import Foundation
 /// The kind of a physical link, as the panel and links page show it.
 public enum LinkKind: String, Codable, Sendable, CaseIterable {
     case wifi, ethernet, iPhone, other
+    /// A relay link (中继线路, PLAN decision 24): not an interface of this
+    /// Mac but a relay host on the LAN, reached over one of the others.
+    case relay
 
     public var title: String {
         switch self {
@@ -10,6 +13,7 @@ public enum LinkKind: String, Codable, Sendable, CaseIterable {
         case .ethernet: "有线"
         case .iPhone: "iPhone"
         case .other: "其他"
+        case .relay: "中继"
         }
     }
 
@@ -19,11 +23,13 @@ public enum LinkKind: String, Codable, Sendable, CaseIterable {
         case .ethernet: "cable.connector"
         case .iPhone: "iphone"
         case .other: "network"
+        case .relay: "point.3.connected.trianglepath.dotted"
         }
     }
 }
 
-/// One candidate link: a physical interface that can reach the Internet.
+/// One link: a physical interface that can reach the Internet, or a relay
+/// link (RelayLink.link), whose `name` is not an interface.
 public struct LinkInterface: Codable, Equatable, Identifiable, Sendable {
     public var name: String
     public var kind: LinkKind
@@ -31,6 +37,10 @@ public struct LinkInterface: Codable, Equatable, Identifiable, Sendable {
     public var displayName: String
     public var address: String?
     public var id: String { name }
+    /// What rows and the diagram call this link: its kind for a physical
+    /// link ("Wi‑Fi", "有线"), its own name for a relay link, of which there
+    /// are usually several.
+    public var title: String { kind == .relay ? displayName : kind.title }
 
     public init(name: String, kind: LinkKind, displayName: String, address: String? = nil) {
         self.name = name

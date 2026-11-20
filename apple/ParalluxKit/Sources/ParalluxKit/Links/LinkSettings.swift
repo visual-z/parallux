@@ -62,7 +62,7 @@ public enum LinkFlow {
             // diagram still shows traffic. Any counter present wins.
             let anyMeasured = links.contains { linkRates[ProfileComposer.linkTag($0.name)] != nil }
             let rate = measured?.total ?? (anyMeasured ? 0 : totalRate / Int64(max(links.count, 1)))
-            return Node(id: link.name, title: link.kind.title, detail: "\(link.displayName) · \(link.name)", rate: max(0, rate))
+            return Node(id: link.name, title: link.title, detail: "\(link.displayName) · \(link.name)", rate: max(0, rate))
         }
         let right = exits.map { Node(id: $0.name, title: $0.name, detail: "", rate: $0.rate) }
         return (left, right)

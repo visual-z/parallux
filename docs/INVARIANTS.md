@@ -12,7 +12,7 @@
 | INV-2 | 日志与速率历史的环形缓冲长度不超过容量，并按到达顺序保留最新的条目 | 代码断言 + property | `aRingBufferKeepsTheNewestEntriesInOrder` |
 | INV-3 | 流向图里每个节点高度等于流经它的流带宽度之和，左右两侧总高度相等 | 代码断言 + property | `aSankeyLayoutConservesWidth` |
 | INV-4 | 选线顺序是全部线路的排列；有健康的非备用线路时，第一条一定是它 | 代码断言 + property | `TestLinkOrderIsAPermutationThatStartsHealthy` |
-| INV-5 | 组合后的配置保留用户的每个出站 tag，且没有 detour、成员或 links 指向不存在的 tag | property | `composingKeepsEveryTagAndNoDanglingDetour` |
+| INV-5 | 组合后的配置保留用户的每个出站 tag，且没有 detour、成员或 links 指向不存在的 tag；带中继线路时，出站之间的引用（detour、成员、links、bond）不成环 | property | `composingKeepsEveryTagAndNoDanglingDetour`、`composingWithRelaysKeepsEveryTagAndNeverLoops` |
 | INV-6 | 路由覆盖只改写对应规则的出站，其余规则不变，且不产生指向不存在出站的规则 | property | `overridesOnlyTouchTheirRulesAndNeverDangle` |
 | INV-7 | 带量程的流向图里，节点、中柱与流带都不超出绘图高度，同列相邻节点间距不小于最小间距，中柱上的流带首尾相接且总和等于中柱 | 代码断言 + property | `aFlowLayoutWithCapacityIsProportionalAndNeverOverflows` |
 | INV-8 | 流向图的粒子数不超过上限，每个粒子都落在一股现存流带的范围内 | property | `flowParticlesStayBoundedAndInsideTheirBands` |
@@ -21,6 +21,7 @@
 | INV-11 | 菜单栏只在连接且代理开关开启时标记代理；运行中的异常保留有效聚合方式和代理标记，关闭聚合后的旧线路告警不污染仅代理状态 | 穷举开关、连接、有效方式和错误组合 | `theIconFollowsTheEffectiveModeAndDisplayedSwitches` |
 | INV-12 | 三栏流向图每一栏的节点高度之和相等，每个节点等于流经它的流带之和，每股流带在三处一样厚 | property | `threeColumnFlowConservesWidthEverywhere` |
 | INV-13 | 菜单栏开启代理只填入原图包围的空白，异常只减去原有墨色。两者都在错相标志内部表达 | 两种原生比例下比较各组轮廓内外的像素集合 | `turningOnTheProxyFillsOnlyAnEnclosedPartOfTheMark`、`aFaultOnlyRemovesInkFromTheHealthyMark` |
+| INV-14 | 目标在局域网时，拨号顺序等于完整选线顺序去掉中继线路（其余线路相对顺序不变）；其他目标的拨号顺序就是完整选线顺序 | property | `TestLocalDialOrderDropsOnlyRelaysAndKeepsTheRest` |
 
 ## 写法提示
 
