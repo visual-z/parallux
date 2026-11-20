@@ -87,16 +87,18 @@ final class FlowModel {
         let exitNodes = exits.slots.map { slot in
             let direct = slot.id == FlowSummary.directName
             let plain = direct || slot.isOther
-            // The label prints the latest sample; the width follows the smoothed rate.
+            // Label and width both follow the smoothed rate: with the latest
+            // sample in the label, a node still drawn thick read 「0 bps」
+            // (seen on the installed build, 2026-11-20).
             return FlowNode(id: slot.id,
                             name: slot.isOther ? FlowSummary.otherName : direct ? slot.id : OverviewCopy.exitName(node: slot.id, server: server, mode: mode),
-                            detail: OverviewCopy.exitDetail(direct: plain, mode: mode, rate: Int64(slot.current)),
+                            detail: OverviewCopy.exitDetail(direct: plain, mode: mode, rate: Int64(slot.rate)),
                             rate: slot.rate,
                             color: direct ? FlowPalette.direct : slot.isOther ? FlowPalette.direct.opacity(0.6) : FlowPalette.proxy)
         }
         let ruleNodes = rules.slots.map { slot in
             FlowNode(id: slot.id, name: slot.isOther ? FlowSummary.otherName : slot.id,
-                     detail: RateFormat.bitsPerSecond(Int64(slot.current)), rate: slot.rate, color: .primary)
+                     detail: RateFormat.bitsPerSecond(Int64(slot.rate)), rate: slot.rate, color: .primary)
         }
         let ruleIndex = Dictionary(uniqueKeysWithValues: rules.slots.enumerated().map { ($1.id, $0) })
         let nodeIndex = Dictionary(uniqueKeysWithValues: exits.slots.enumerated().map { ($1.id, $0) })
