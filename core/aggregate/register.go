@@ -42,6 +42,9 @@ type Options struct {
 	// links (a multipath outbound, PLAN decision 17). Required in bond mode;
 	// when it fails, connections fall back to the links in failover order.
 	Bond string `json:"bond,omitempty"`
+	// BondBypass lists hosts never sent through the bond (the aggregation
+	// server itself), besides local destinations (feat-bond-direct).
+	BondBypass []string `json:"bond_bypass,omitempty"`
 	// ProbeTargets override the health-check destinations ("host:port").
 	ProbeTargets []string `json:"probe_targets,omitempty"`
 }

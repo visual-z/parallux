@@ -176,17 +176,25 @@ extension LinkCompositionTests {
 }
 
 extension LinkCompositionTests {
-    /// Direct traffic (LAN, domestic) must not go to the aggregation server:
-    /// the transport is unencrypted and the design draws 直连 as its own exit.
-    @Test func bondModeKeepsDirectTrafficOffTheServer() throws {
+    /// feat-bond-direct (author 2026-11-20): direct traffic goes through the
+    /// aggregation server too; the core keeps LAN and the server itself off it.
+    @Test func bondModeCarriesDirectTrafficToo() throws {
         let composed = try ProfileComposer.compose(userProfile, links: twoLinks, backup: [], mode: .bond, bond: Self.bondFixture)
         let after = try outbounds(composed)
-        let direct = try #require(after.first { $0["tag"] as? String == "direct" })
-        #expect(direct["bond"] == nil, "the direct replacement must not use the bond")
-        #expect(direct["mode"] as? String == "failover")
-        let links = try #require(after.first { $0["tag"] as? String == ProfileComposer.aggregateTag })
-        #expect(links["bond"] as? String == "parallux-bond")
-        #expect(links["mode"] as? String == "bond")
+        let server = try #require(Self.bondFixture.outbound["server"].flatMap { if case let .string(host) = $0 { host } else { nil } })
+        for tag in ["direct", ProfileComposer.aggregateTag] {
+            let aggregate = try #require(after.first { $0["tag"] as? String == tag })
+            #expect(aggregate["mode"] as? String == "bond", "\(tag)")
+            #expect(aggregate["bond"] as? String == "parallux-bond", "\(tag)")
+            #expect((aggregate["bond_bypass"] as? [String]) == [server], "\(tag)")
+        }
+        // Without a server nothing carries a bond.
+        let plain = try outbounds(ProfileComposer.compose(userProfile, links: twoLinks, backup: [], mode: .bond))
+        for aggregate in plain where aggregate["type"] as? String == "aggregate" {
+            #expect(aggregate["bond"] == nil)
+            #expect(aggregate["bond_bypass"] == nil)
+            #expect(aggregate["mode"] as? String == "failover")
+        }
     }
 }
 

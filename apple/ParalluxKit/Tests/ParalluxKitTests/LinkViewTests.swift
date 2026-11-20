@@ -83,11 +83,13 @@ import Testing
         #expect(FlowHold.next(current: [Int](), last: [Int](), lastAt: nil, now: t0).shown.isEmpty)
     }
 
-    @Test func aggregationOnlyBondSaysItRunsAsFailover() {
-        #expect(AggregationNotice.text(chosen: .bond, effective: .failover, proxy: false) == "只开聚合时，直连流量不经过聚合服务器，暂按主备运行")
-        #expect(AggregationNotice.text(chosen: .bond, effective: .failover, proxy: true) == "尚未设置聚合服务器，暂按主备运行")
-        #expect(AggregationNotice.text(chosen: .balance, effective: .balance, proxy: false) == nil)
-        #expect(AggregationNotice.text(chosen: .bond, effective: nil, proxy: false) == nil)
-        #expect(AggregationNotice.text(chosen: .bond, effective: .bond, proxy: true) == nil)
+    /// feat-bond-direct: with 代理 off, direct traffic is bonded too, so the
+    /// only reason left to run 叠加 as 主备 is a missing server.
+    @Test func aggregationOnlyBondRunsAsBond() {
+        #expect(AggregationNotice.text(chosen: .bond, effective: .bond) == nil)
+        #expect(AggregationNotice.text(chosen: .bond, effective: .failover) == "尚未设置聚合服务器，暂按主备运行")
+        #expect(AggregationNotice.text(chosen: .balance, effective: .balance) == nil)
+        #expect(AggregationNotice.text(chosen: .bond, effective: nil) == nil)
+        #expect(ProfileComposer.bondCarriesDirect, "direct aggregates take the bond")
     }
 }

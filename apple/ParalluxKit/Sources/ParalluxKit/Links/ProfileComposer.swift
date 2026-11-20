@@ -27,6 +27,8 @@ public struct LinkPreferences: Codable, Equatable, Sendable {
 /// without a detour pointed at the aggregate.
 public enum ProfileComposer {
     public static let aggregateTag = "parallux-links"
+    /// Whether the user's direct outbounds go through the bond (feat-bond-direct). stub
+    public static let bondCarriesDirect = false
     public static func linkTag(_ interface: String) -> String { "link-\(interface)" }
 
     /// Outbound types that carry their own server connection and can take a detour.
