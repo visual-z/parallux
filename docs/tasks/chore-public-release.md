@@ -1,6 +1,6 @@
 ---
 type: chore
-status: doing        # todo | doing | blocked | awaiting-author | done
+status: done        # todo | doing | blocked | awaiting-author | done
 weight: full
 created: 2026-11-20
 baseline: 7bb05c121690
@@ -61,10 +61,13 @@ keel gate --record docs/tasks/chore-public-release.md
 
 RED: none 只改注释、文档与许可证，没有行为改动可以先红后绿
 
-检查器先红过一次：往 `core/tools.go` 加一行 `// see docs/tasks/fix-not-there.md`，`scripts/check-card-refs.sh` 退出 1，打印 `FAIL core/tools.go names docs/tasks/fix-not-there.md, which does not exist`；撤掉后退出 0。
+检查器先红过一次：往 `core/tools.go` 加一行注释，指向 `docs/tasks/` 下一张不存在的 fix 卡，`scripts/check-card-refs.sh` 退出 1，打印 `FAIL core/tools.go names …, which does not exist`；撤掉后退出 0。（这里不写出那个路径：检查器也扫本卡，它第一次跑就因为本卡原样引用了那个路径而红了一次。）
+GATE: 943e63cb670c+dirty ok tree:ef896d554d55 build=0 vet=0 test=0[625p/0f] fmt=0 swift-test=0[176p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-20)
 
 ## 修订
 
 ## 交接
 
-开卡。下一步：提交注释与文档的清理、许可证、检查脚本，跑 `gate --record`。
+- 做了什么：补了 `LICENSE` 与 README 的许可证一节；代码注释、脚本、PLAN、手测清单与调研笔记里对旧任务卡的引用都去掉了，理由、实测数字与决策号保留；加了 `scripts/check-card-refs.sh`。gate 全绿，测试计数未变。
+- 卡在哪：无。
+- 下一步：`scripts/check-card-refs.sh` 要不要接进 gate 由作者定；裸的卡名引用它查不了。
