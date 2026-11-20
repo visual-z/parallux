@@ -142,10 +142,15 @@ struct ProfileCard: View {
                 // The usage sits at the card's foot; the spacer takes
                 // whatever height the row's tallest card adds.
                 Spacer(minLength: 2)
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     UsageRing(fraction: usage.fraction)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(usage.text).font(.subheadline.weight(.medium)).monospacedDigit().lineLimit(2)
+                        // One line at the usual card width: the longest
+                        // wording (「本次会话已用 … / 无限」) broke at the
+                        // slash on the installed build. It may shrink a
+                        // little first, and wraps only in a narrow window.
+                        Text(usage.text).font(.subheadline.weight(.medium)).monospacedDigit()
+                            .lineLimit(2).minimumScaleFactor(0.85)
                         if let note = usage.note {
                             Text(note).font(.caption).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
                         }
@@ -161,9 +166,10 @@ struct ProfileCard: View {
 /// ring with ∞ when there is no quota to take a share of.
 struct UsageRing: View {
     let fraction: Double?
-    /// Why 52: two lines of the usage text beside it are about this tall,
-    /// and the percentage still fits inside at callout size.
-    static let diameter: CGFloat = 52
+    /// Why 46: two lines of the usage text beside it are about this tall,
+    /// "100%" still fits inside at callout size, and at the overview's
+    /// usual width it leaves the text enough room for one line.
+    static let diameter: CGFloat = 46
     private static let lineWidth: CGFloat = 6
 
     var body: some View {
