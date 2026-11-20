@@ -34,6 +34,8 @@ type linkHealth struct {
 	// streak, so recovery needs recoverAfter fresh successes.
 	dialFailed atomic.Bool
 	successes  int
+	// relay is set once, before the prober starts (feat-relay-links).
+	relay bool
 }
 
 // probeLoop probes `dialer` until ctx ends. One probe at a time, so a slow
@@ -50,7 +52,7 @@ func probeLoop(ctx context.Context, dialer N.Dialer, targets []M.Socksaddr, heal
 		if health.dialFailed.Swap(false) {
 			health.successes = 0
 		}
-		if probeOnce(ctx, dialer, targets) {
+		if probeOnce(ctx, dialer, targets, health.relay) {
 			health.successes++
 			if health.successes >= recoverAfter {
 				health.healthy.Store(true)
@@ -64,7 +66,7 @@ func probeLoop(ctx context.Context, dialer N.Dialer, targets []M.Socksaddr, heal
 
 // probeOnce succeeds when any target accepts a TCP connection over the link.
 // The targets share one probeTimeout so a dead link costs at most one tick.
-func probeOnce(ctx context.Context, dialer N.Dialer, targets []M.Socksaddr) bool {
+func probeOnce(ctx context.Context, dialer N.Dialer, targets []M.Socksaddr, roundTrip bool) bool {
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 	for _, target := range targets {

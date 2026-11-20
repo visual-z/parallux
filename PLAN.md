@@ -37,6 +37,8 @@
   - 主备：按优先级用第一条可用线路。
   - 叠加：同一连接拆到多条线路，在用户自己的聚合服务器上重组。先基于 singbox-multipath（两条线路，**只聚合 TCP，协议本身不加密**，需由子协议加密），之后换支持 N 条线路的多路径传输；叠加传输按「以出站为 leg」抽象，换实现不动配置格式。
 
+- **中继线路出站**（决策 24）：局域网里的中继主机各算一条线路。出站是 sing-box 自带的 `shadowsocks`，`detour` 指向承载它的物理线路出站；tag 同样列进聚合出站的 `links`，并在 `relays` 里标明，内核据此不让它承载局域网目标。
+
 聚合出站类型要注册进 sing-box，而 libbox 每次新建注册表、不能从外部扩展，所以用 fork 加一个注册钩子（决策 10）。
 
 App 与扩展之间照 SFM：扩展在版本化的 `NEMachServiceName` 上开 XPC 监听，把它内部 command server 的 socket 文件描述符传给 App，App 用 libbox 的 command client（`SetXPCDialer`）说官方 StartedService gRPC（决策 11）。线路统计不在 StartedService 里，走同一条 XPC 连接上的额外方法。
@@ -95,3 +97,4 @@ App 与扩展之间照 SFM：扩展在版本化的 `NEMachServiceName` 上开 XP
 | 21 | 2026-11-19 | 聚合与代理拆成两个独立开关（`ConnectionSwitches`）：只开聚合时用由用户配置派生的直连配置并交给线路；只开代理时不交线路；两个都关即断开；电源按钮与「启动」沿用上次的组合 | 作者提出并确认语义（feat-split-switches）；Clash Verge Rev 也把系统代理与 TUN 做成两个独立开关；Speedify 没有「聚合但不加密」的组合 | 生效 |
 | 22 | 2026-11-19 | 主窗口各页、面板与设置窗口的排版与用词以设计稿 v0.2 为准（决策 7 的重申）；`docs/design/copy-and-style.md` 只管设计稿没有画到的地方。控件仍用系统控件，容器（列表卡片、标记、代码块）照设计稿自己画；路由页仍按决策 20 的 v0.3 | 作者看过照 `copy-and-style.md` 改成系统列表与表单的页面后选定（「跟设计稿的风格很不契合」「以设计稿为准」）；`fix-pages-design-parity` | 生效 |
 | 23 | 2026-11-20 | 叠加时直连流量也经聚合服务器，推翻 fix-aggregate-routing 第 2 条；局域网目标（私有、环回、链路本地、CGNAT、组播地址与 `.local` 等本地名）和聚合服务器自身由内核 aggregate 排除；主备保留 | 作者决定（feat-bond-direct）；直连本来就明文经过运营商，叠加并不增加暴露；代价是国内网站看到 VPS 的 IP | 生效 |
+| 24 | 2026-11-20 | 中继线路（作者草图的方案 D）：局域网里的机器跑 `parallux-server -role relay`（sing-box 自带的 shadowsocks 2022 入站加 direct 出站），App 把每台中继主机当成一条线路——一个 `shadowsocks` 出站，`detour` 指向承载它的物理线路出站，列进聚合出站的 `links` 与 `relays`。中继线路只承载公网目标（内核沿用决策 23 的本地目标判定）、不做叠加的线路段、健康检查要一次真实往返；导入链接 `parallux://relay?v=1`（`docs/research/relay-link.md`）。聚合服务器仍然必须在公网（`docs/research/bond-without-vps-2026-11-20.md`） | 作者要求实现方案 D（2026-11-20；按设备限速的办公网里，作者实测 4 台节点合计 53–77 Mbps）。协议只用 sing-box 自带的（§2 非目标）；选 shadowsocks 2022 是因为不用证书、带认证与防重放、TCP 与 UDP 都转。回环对拍：上游不通时经中继的拨号仍然成功，所以健康检查不能只看连接。没有找到同类做法的社区先例；协议选型由实现提出，待作者确认（`feat-relay-links`） | 生效 |

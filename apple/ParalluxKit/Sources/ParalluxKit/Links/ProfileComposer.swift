@@ -46,13 +46,28 @@ public enum ProfileComposer {
         }
     }
 
+    /// One relay link's outbound (feat-relay-links). stub
+    public struct Relay: Equatable, Sendable {
+        /// The LinkInterface name of the relay link ("relay-1a2b3c4d").
+        public var name: String
+        /// The interface name of the physical link that reaches the relay host.
+        public var carrier: String
+        /// The outbound JSON object without `tag` and `detour`.
+        public var outbound: [String: AnyCodableValue]
+        public init(name: String, carrier: String, outbound: [String: AnyCodableValue]) {
+            self.name = name
+            self.carrier = carrier
+            self.outbound = outbound
+        }
+    }
+
     public enum Failure: Error, Equatable {
         case notJSON
     }
 
     /// nil links (fewer than two enabled) returns the profile unchanged.
     public static func compose(_ profile: String, links: [LinkInterface], backup: Set<String>, mode: AggregationMode,
-                               bond: Bond? = nil) throws -> String {
+                               bond: Bond? = nil, relays: [Relay] = []) throws -> String {
         guard var root = (try? JSONSerialization.jsonObject(with: Data(profile.utf8))) as? [String: Any] else {
             throw Failure.notJSON
         }

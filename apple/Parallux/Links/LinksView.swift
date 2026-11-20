@@ -120,6 +120,7 @@ enum LinkColors {
         case .ethernet: [FlowPalette.wired, .yellow, .brown][min(2, all.filter { $0.kind == .ethernet }.firstIndex(of: link) ?? 0)]
         case .iPhone: FlowPalette.cellular
         case .other: [Color.purple, .indigo, .teal][min(2, all.filter { $0.kind == .other }.firstIndex(of: link) ?? 0)]
+        case .relay: FlowPalette.relay
         }
     }
 }

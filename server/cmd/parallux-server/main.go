@@ -17,6 +17,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
@@ -32,6 +33,14 @@ import (
 
 // Version is set by release builds: -ldflags "-X main.Version=…".
 var Version = "0.0.0-dev"
+
+const (
+	roleAggregation = "aggregation"
+	roleRelay       = "relay"
+)
+
+// stdout is where -link and -version print; tests replace it.
+var stdout io.Writer = os.Stdout
 
 // minPSKLength: shorter keys are guessable; upstream recommends a long random
 // string, and install.sh generates 43 characters (32 random bytes, base64url).
@@ -54,12 +63,21 @@ func run(args []string) error {
 	logLevel := flags.String("log-level", "info", "log level")
 	check := flags.Bool("check", false, "validate the configuration and exit")
 	version := flags.Bool("version", false, "print the version and exit")
+	role := flags.String("role", roleAggregation, "aggregation or relay")
+	flags.String("key-file", "", "relay: file holding the relay key")
+	flags.Bool("generate-key", false, "relay: write a new key to -key-file unless it exists, then exit")
+	flags.Bool("link", false, "relay: print the import link for -host and exit")
+	flags.String("host", "", "relay: the address the Mac reaches this machine at, for -link")
+	flags.String("name", "", "relay: display name for -link")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if *version {
-		fmt.Println("parallux-server", Version)
+		fmt.Fprintln(stdout, "parallux-server", Version)
 		return nil
+	}
+	if *role != roleAggregation {
+		return errors.New("role " + *role + ": not implemented")
 	}
 
 	var content []byte

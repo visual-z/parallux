@@ -45,6 +45,10 @@ type Options struct {
 	// BondBypass lists hosts never sent through the bond (the aggregation
 	// server itself), besides local destinations (feat-bond-direct).
 	BondBypass []string `json:"bond_bypass,omitempty"`
+	// Relays lists the links that are relay links (中继线路, PLAN decision
+	// 24): they leave through another machine on the LAN, so they never
+	// carry local destinations. Must be a subset of Links.
+	Relays []string `json:"relays,omitempty"`
 	// ProbeTargets override the health-check destinations ("host:port").
 	ProbeTargets []string `json:"probe_targets,omitempty"`
 }
