@@ -1,0 +1,104 @@
+{
+  "dns" : {
+    "servers" : [
+      {
+        "tag" : "local",
+        "type" : "local"
+      }
+    ]
+  },
+  "inbounds" : [
+    {
+      "auto_route" : true,
+      "tag" : "tun-in",
+      "type" : "tun"
+    }
+  ],
+  "outbounds" : [
+    {
+      "outbounds" : [
+        "DE-01",
+        "direct"
+      ],
+      "tag" : "Proxy",
+      "type" : "selector"
+    },
+    {
+      "detour" : "parallux-links",
+      "server" : "de.example.com",
+      "server_port" : 443,
+      "tag" : "DE-01",
+      "type" : "vless",
+      "uuid" : "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "backup" : [
+        "link-relay-22222222"
+      ],
+      "links" : [
+        "link-en0",
+        "link-en7",
+        "link-relay-11111111",
+        "link-relay-22222222"
+      ],
+      "mode" : "balance",
+      "relays" : [
+        "link-relay-11111111",
+        "link-relay-22222222"
+      ],
+      "tag" : "direct",
+      "type" : "aggregate"
+    },
+    {
+      "bind_interface" : "en0",
+      "domain_resolver" : "local",
+      "tag" : "link-en0",
+      "type" : "direct"
+    },
+    {
+      "bind_interface" : "en7",
+      "domain_resolver" : "local",
+      "tag" : "link-en7",
+      "type" : "direct"
+    },
+    {
+      "detour" : "link-en7",
+      "method" : "2022-blake3-aes-128-gcm",
+      "password" : "MDEyMzQ1Njc4OWFiY2RlZg==",
+      "server" : "10.0.0.21",
+      "server_port" : 39100,
+      "tag" : "link-relay-11111111",
+      "type" : "shadowsocks"
+    },
+    {
+      "detour" : "link-en7",
+      "method" : "2022-blake3-aes-128-gcm",
+      "password" : "MDEyMzQ1Njc4OWFiY2RlZg==",
+      "server" : "10.0.0.22",
+      "server_port" : 39100,
+      "tag" : "link-relay-22222222",
+      "type" : "shadowsocks"
+    },
+    {
+      "backup" : [
+        "link-relay-22222222"
+      ],
+      "links" : [
+        "link-en0",
+        "link-en7",
+        "link-relay-11111111",
+        "link-relay-22222222"
+      ],
+      "mode" : "balance",
+      "relays" : [
+        "link-relay-11111111",
+        "link-relay-22222222"
+      ],
+      "tag" : "parallux-links",
+      "type" : "aggregate"
+    }
+  ],
+  "route" : {
+    "final" : "Proxy"
+  }
+}

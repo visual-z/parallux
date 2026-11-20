@@ -1,0 +1,42 @@
+// Shared build settings. Signing identity and team live in Local.xcconfig,
+// which is not committed (copy Local.xcconfig.example). Without it the project
+// still builds with CODE_SIGNING_ALLOWED=NO, which is what the gate does.
+BUNDLE_ID = io.github.visual-z.parallux
+MACOSX_DEPLOYMENT_TARGET = 26.0
+SWIFT_VERSION = 6.0
+MARKETING_VERSION = 0.0.1
+CURRENT_PROJECT_VERSION = 1
+
+// App Group shared by the app and the system extension. On macOS it carries
+// the team prefix ($(TeamIdentifierPrefix) is "ABCDE12345." when signed and
+// empty when not); the extension's Mach service lives inside it.
+PARALLUX_APP_GROUP = $(TeamIdentifierPrefix)$(BUNDLE_ID)
+
+// Versioned on purpose: after a system extension is replaced, launchd keeps
+// the old version's job owning the endpoint, so a fixed name would connect the
+// app to a dead listener (same reasoning as SFM's AppConfiguration.swift).
+// The build number is part of it because scripts/build-signed.sh stamps a
+// unique one per build: same-version extensions are not replaced
+// (SystemExtensionInstaller), so without it a rebuilt extension never loads.
+PARALLUX_TUNNEL_MACH_SERVICE = $(PARALLUX_APP_GROUP).tunnel.$(MARKETING_VERSION).$(CURRENT_PROJECT_VERSION)
+
+// Root helper (PLAN decision 12). The label is also the launchd plist's file
+// name (SMAppService.daemon(plistName:)) and the tool's file name. Its Mach
+// service is versioned for the same reason as the tunnel's: a replaced
+// daemon's old job can keep the endpoint until launchd reaps it.
+PARALLUX_HELPER_LABEL = $(BUNDLE_ID).helper
+PARALLUX_HELPER_MACH_SERVICE = $(PARALLUX_APP_GROUP).helper.$(MARKETING_VERSION).$(CURRENT_PROJECT_VERSION)
+
+// Network Extension entitlement value. Developer ID builds (and SFM) use the
+// -systemextension form; Apple Development builds need plain
+// packet-tunnel-provider. Override in Local.xcconfig for development signing.
+PARALLUX_NE_PROVIDER = packet-tunnel-provider-systemextension
+
+// Sparkle update feeds and EdDSA public key (docs/RELEASE.md). Empty here, so
+// development builds never check for updates; set them in Local.xcconfig or on
+// the release.sh command line. Feeds must be https.
+PARALLUX_UPDATE_FEED =
+PARALLUX_UPDATE_BETA_FEED =
+PARALLUX_UPDATE_PUBLIC_KEY =
+
+#include? "Local.xcconfig"
