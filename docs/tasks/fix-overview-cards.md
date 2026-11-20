@@ -74,6 +74,26 @@ keel gate --record docs/tasks/fix-overview-cards.md
 
 ## 证据
 
+RED(swift): 401c1ed overviewCopyFollowsTheDesign  # D1
+RED(swift): 401c1ed theUserinfoHeaderGivesUsedTotalAndExpiry  # D2
+RED(swift): 401c1ed theProfileCardShowsUsedOverQuotaOrOverUnlimited  # D3
+
+D4 在冻结点上就是绿的（桩里已经加了字段），用故障补丁证明：构造配置时丢掉用量，测试必须红。
+
+```diff keel-inject(swift) aProfileKeepsItsUsageAndOlderDataStillLoads
+--- a/apple/ParalluxKit/Sources/ParalluxKit/Profiles/Profile.swift
++++ b/apple/ParalluxKit/Sources/ParalluxKit/Profiles/Profile.swift
+@@ -50 +50 @@
+-        self.usage = usage
++        self.usage = nil
+```
+
+失败断言原文（RED 时，桩实现下）：
+
+- `Expectation failed: OverviewCopy.exitDetail(rate: 125_000) == "1.0 Mbps"`
+- `Expectation failed: SubscriptionUsage.parse(header: "upload=1073741824; download=2147483648; total=107374182400; expire=179…`
+- `Expectation failed: quota.text == "已用 \(RateFormat.bytes(25 * gib)) / \(RateFormat.bytes(100 * gib))"`
+
 ## 修订
 
 ## 交接

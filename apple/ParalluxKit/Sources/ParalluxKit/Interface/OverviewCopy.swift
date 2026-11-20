@@ -28,21 +28,11 @@ public enum OverviewCopy {
         return RateFormat.bitsPerSecond(rate)
     }
 
-    /// Under an exit's name. stub: fix-overview-cards
+    /// Under an exit's name: its rate. How the aggregation mode carries it
+    /// is in the diagram's heading and the window's subtitle already; saying
+    /// it again under every exit was noise (the author, 2026-11-20).
     public static func exitDetail(rate: Int64) -> String {
-        exitDetail(direct: false, mode: .balance, rate: rate)
-    }
-
-    /// Under an exit's name: how the aggregation mode carries it, then the rate.
-    public static func exitDetail(direct: Bool, mode: AggregationMode?, rate: Int64) -> String {
-        let speed = RateFormat.bitsPerSecond(rate)
-        guard !direct, let mode else { return speed }
-        let how = switch mode {
-        case .bond: "叠加后转发"
-        case .balance: "按连接分到各线路"
-        case .failover: "仅主线路"
-        }
-        return "\(how) · \(speed)"
+        RateFormat.bitsPerSecond(rate)
     }
 
     /// 「东京 VPS → HK‑03」 when the node is reached through the aggregation server.

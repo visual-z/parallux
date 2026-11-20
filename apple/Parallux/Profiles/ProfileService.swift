@@ -171,10 +171,10 @@ final class ProfileService {
     }
 
     func addRemote(name: String, url: URL, autoUpdate: Bool, interval: TimeInterval) async throws {
-        let content = try await Self.download(url)
+        let (content, usage) = try await Self.download(url)
         try Self.validate(content)
         try store.add(Profile(name: name, kind: .remote, remoteURL: url, autoUpdate: autoUpdate,
-                              autoUpdateInterval: RemoteUpdate.clamp(interval), lastUpdated: Date()), content: content)
+                              autoUpdateInterval: RemoteUpdate.clamp(interval), lastUpdated: Date(), usage: usage), content: content)
     }
 
     /// Accepts SFM's `sing-box://import-remote-profile?url=…#name` links.
@@ -199,11 +199,15 @@ final class ProfileService {
         updating.insert(profile.id)
         defer { updating.remove(profile.id) }
         do {
-            let content = try await Self.download(url)
+            let (content, usage) = try await Self.download(url)
             try Self.validate(content)
             try store.setContent(content, for: profile.id)
             var updated = store.profiles.first { $0.id == profile.id } ?? profile
             updated.lastUpdated = Date()
+            // The figures of this download replace the last ones, also when
+            // the server stopped sending them: a stale quota would mislead.
+            // A failed update never gets here and keeps what it had.
+            updated.usage = usage
             try store.update(updated)
         } catch {
             log.error("update \(profile.name, privacy: .private) failed: \(error.localizedDescription, privacy: .public)")
@@ -211,16 +215,23 @@ final class ProfileService {
         }
     }
 
-    static func download(_ url: URL) async throws -> String {
+    /// The profile, and what the server's `subscription-userinfo` header
+    /// says about the account's traffic (nil when it sends none). The header
+    /// comes with the download, so usage costs no extra request against
+    /// servers that rate-limit.
+    static func download(_ url: URL) async throws -> (content: String, usage: SubscriptionUsage?) {
         var request = BasicAuth.request(for: url, timeout: requestTimeout)
         request.setValue("Parallux (sing-box)", forHTTPHeaderField: "User-Agent")
         let (bytes, response) = try await URLSession.shared.bytes(for: request)
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+        let http = response as? HTTPURLResponse
+        if let http, !(200..<300).contains(http.statusCode) {
             throw Failure(message: "服务器返回 \(http.statusCode)")
         }
+        // value(forHTTPHeaderField:) matches the name case-insensitively.
+        let usage = SubscriptionUsage.parse(header: http?.value(forHTTPHeaderField: "subscription-userinfo"))
         do {
             let data = try await BoundedDownload.collect(bytes)
-            return String(decoding: data, as: UTF8.self)
+            return (String(decoding: data, as: UTF8.self), usage)
         } catch is BoundedDownload.TooLarge {
             throw Failure(message: "下载内容超过 \(BoundedDownload.maxBytes >> 20) MB，不像是配置文件")
         }

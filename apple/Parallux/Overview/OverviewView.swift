@@ -122,8 +122,13 @@ struct OverviewView: View {
     private var profileCard: some View {
         let profile = app.profiles.store.selected
         let status = app.session.status
-        return ProfileCard(name: profile?.name, detail: profile.map { ProfileDescription.detail($0, now: Date()) } ?? "",
-                           connections: status.map { Int($0.connections) }, memory: status?.memory)
+        let now = Date()
+        // No profile, no usage block: there is nothing it would be about.
+        let usage = profile.map {
+            UsageSummary.make(usage: $0.usage, sessionTotal: (status?.downlinkTotal ?? 0) &+ (status?.uplinkTotal ?? 0), now: now)
+        }
+        return ProfileCard(name: profile?.name, detail: profile.map { ProfileDescription.detail($0, now: now) } ?? "",
+                           connections: status.map { Int($0.connections) }, memory: status?.memory, usage: usage)
     }
 }
 

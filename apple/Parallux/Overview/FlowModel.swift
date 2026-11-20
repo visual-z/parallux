@@ -87,13 +87,12 @@ final class FlowModel {
         let server = mode == .bond ? app.servers.servers.first { $0.id == app.linkSettings.value.bondServerID }?.name : nil
         let exitNodes = exits.slots.map { slot in
             let direct = slot.id == FlowSummary.directName
-            let plain = direct || slot.isOther
             // Label and width both follow the smoothed rate: with the latest
             // sample in the label, a node still drawn thick read 「0 bps」
             // (seen on the installed build, 2026-11-20).
             return FlowNode(id: slot.id,
                             name: slot.isOther ? FlowSummary.otherName : direct ? slot.id : OverviewCopy.exitName(node: slot.id, server: server, mode: mode),
-                            detail: OverviewCopy.exitDetail(direct: plain, mode: mode, rate: Int64(slot.rate)),
+                            detail: OverviewCopy.exitDetail(rate: Int64(slot.rate)),
                             rate: slot.rate,
                             color: direct ? FlowPalette.direct : slot.isOther ? FlowPalette.direct.opacity(0.6) : FlowPalette.proxy)
         }

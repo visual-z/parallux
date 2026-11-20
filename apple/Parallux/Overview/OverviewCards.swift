@@ -59,7 +59,12 @@ struct TrafficCard: View {
             }
             .chartXAxis(.hidden).chartYAxis(.hidden).chartLegend(.hidden)
             .chartXScale(domain: 0...max(window - 1, 1))
-            .frame(height: 46)
+            // The cards of a row are as tall as the tallest one. The chart
+            // is the part of this card that can grow, so it takes the
+            // height the others leave; at a fixed 46 pt the card's lower
+            // half stayed empty. 46 is still its smallest and its ideal, so
+            // this card never makes the row taller.
+            .frame(minHeight: 46, idealHeight: 46, maxHeight: .infinity)
             .accessibilityHidden(true)
             Text("本次会话 ↓ \(RateFormat.bytes(downlinkTotal)) · ↑ \(RateFormat.bytes(uplinkTotal))")
                 .font(.subheadline).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
@@ -118,6 +123,8 @@ struct ProfileCard: View {
     let detail: String
     let connections: Int?
     let memory: Int64?
+    /// Traffic used over the subscription's quota (UsageSummary); nil without a profile.
+    var usage: UsageSummary?
 
     var body: some View {
         OverviewCard(title: DashboardCard.profile.title) {
@@ -131,7 +138,49 @@ struct ProfileCard: View {
                 Text("连接 \(connections) · 内存 \(RateFormat.bytes(memory))")
                     .font(.subheadline).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
             }
+            if let usage {
+                // The usage sits at the card's foot; the spacer takes
+                // whatever height the row's tallest card adds.
+                Spacer(minLength: 2)
+                HStack(spacing: 10) {
+                    UsageRing(fraction: usage.fraction)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(usage.text).font(.subheadline.weight(.medium)).monospacedDigit().lineLimit(2)
+                        if let note = usage.note {
+                            Text(note).font(.caption).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .combine)
+            }
         }
+    }
+}
+
+/// Used share of the quota as a ring with the percentage inside; an empty
+/// ring with ∞ when there is no quota to take a share of.
+struct UsageRing: View {
+    let fraction: Double?
+    /// Why 52: two lines of the usage text beside it are about this tall,
+    /// and the percentage still fits inside at callout size.
+    static let diameter: CGFloat = 52
+    private static let lineWidth: CGFloat = 6
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(.quaternary, lineWidth: Self.lineWidth)
+            if let fraction, fraction > 0 {
+                Circle().trim(from: 0, to: fraction)
+                    .stroke(.tint, style: StrokeStyle(lineWidth: Self.lineWidth, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            Text(fraction.map { "\(Int(($0 * 100).rounded()))%" } ?? "∞")
+                .font(.callout.weight(.semibold)).monospacedDigit()
+                .foregroundStyle(fraction == nil ? .secondary : .primary)
+        }
+        .padding(Self.lineWidth / 2)
+        .frame(width: Self.diameter, height: Self.diameter)
+        .accessibilityHidden(true)
     }
 }
 
