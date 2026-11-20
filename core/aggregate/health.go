@@ -18,6 +18,15 @@ const (
 	probeTimeout  = time.Second
 	// Why 2: one lucky probe on a flapping link must not bring it back.
 	recoverAfter = 2
+	// probeRetryAfter: a target whose dial has not finished by then is dialed
+	// once more in the same probe. A lost SYN is retransmitted by macOS only
+	// after 1 s, past probeTimeout, so without a second dial one lost packet
+	// failed the whole probe (fix-probe-lost-syn). Why 400 ms: the slower link
+	// measured p90 84 ms / max 106 ms to 223.5.5.5 (2026-11-20), so a healthy
+	// first dial has finished by then, and the retry still has 600 ms (> 5×
+	// that max) to complete. Assumed margin over measured RTTs; remeasure with
+	// fix-probe-lost-syn's method on a slower link.
+	probeRetryAfter = 400 * time.Millisecond
 )
 
 // defaultProbeTargets are tried in order; any success means healthy.
