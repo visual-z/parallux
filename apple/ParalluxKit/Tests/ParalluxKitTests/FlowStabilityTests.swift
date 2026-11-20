@@ -459,5 +459,37 @@ import Testing
         #expect(TrafficLabel.name(connectionRule: "network=udp port=443") == "network=udp port=443" || TrafficLabel.name(connectionRule: "network=udp port=443") == "端口 443")
         #expect(!TrafficLabel.name(connectionRule: "network=udp").hasPrefix("规则 "))
     }
+
+    @Test func rulesKeepDistinctStableColours() throws {
+        var seats = ColorSeats(palette: 8)
+        seats.update([], neutral: [])
+        #expect(seats.color("a") == nil, "nothing shown, nothing coloured")
+
+        seats.update(["a", "b", "c", "other"], neutral: ["other"])
+        let first = ["a", "b", "c"].compactMap { seats.color($0) }
+        // #require: the subscripts below must fail here, not trap.
+        try #require(first.count == 3 && Set(first).count == 3, "shown rules never share a colour")
+        #expect(seats.color("other") == nil, "其他 stays neutral")
+        #expect(first.allSatisfy { $0 >= 0 && $0 < 8 })
+
+        // A rule keeps its colour while it stays, whatever comes and goes around it.
+        let b = seats.color("b")
+        seats.update(["d", "b", "e", "a"], neutral: [])
+        #expect(seats.color("b") == b && seats.color("a") == first[0])
+        #expect(seats.color("c") == nil, "a rule that left has no colour")
+        let now = ["d", "b", "e", "a"].compactMap { seats.color($0) }
+        #expect(Set(now).count == 4)
+        // The colour a leaving rule freed is given to the next newcomer, so colours stay spread.
+        #expect(seats.color("d") == first[2] || seats.color("e") == first[2])
+
+        // More shown than colours: still a colour each, the palette wraps, and nothing crashes.
+        var crowded = ColorSeats(palette: 3)
+        crowded.update(["a", "b", "c", "d", "e"], neutral: [])
+        #expect(["a", "b", "c", "d", "e"].allSatisfy { (crowded.color($0) ?? -1) >= 0 && (crowded.color($0) ?? 9) < 3 })
+        #expect(Set(["a", "b", "c"].compactMap { crowded.color($0) }).count == 3)
+        var none = ColorSeats(palette: 0)
+        none.update(["a"], neutral: [])
+        #expect(none.color("a") == nil, "no palette, no colour")
+    }
 }
 

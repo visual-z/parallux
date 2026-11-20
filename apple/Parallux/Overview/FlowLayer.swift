@@ -30,6 +30,8 @@ struct FlowLayer: NSViewRepresentable {
         var dimmedLinks: [Bool]
         /// One per exit.
         var exitColors: [Color]
+        /// One per rule (three columns).
+        var ruleColors: [Color] = []
         /// The rates changed less than FlowEase.duration ago.
         var easing: Bool
         var isVisible: Bool
@@ -85,7 +87,7 @@ struct FlowLayer: NSViewRepresentable {
             self.input = input
             // Resolved here, when the inputs change, not on every frame.
             view.effectiveAppearance.performAsCurrentDrawingAppearance {
-                palette = Palette(links: input.linkColors.map(Self.rgba), exits: input.exitColors.map(Self.rgba),
+                palette = Palette(links: input.linkColors.map(Self.rgba), exits: input.exitColors.map(Self.rgba), rules: input.ruleColors.map(Self.rgba),
                                   centre: Self.rgba(NSColor.labelColor), idle: Self.rgba(NSColor.tertiaryLabelColor),
                                   bandOpacity: Float(FlowPalette.bandOpacity(input.isDark ? .dark : .light)))
             }
@@ -205,7 +207,8 @@ struct FlowLayer: NSViewRepresentable {
                 case let .band(link): color = palette.link(link) * SIMD4(1, 1, 1, palette.bandOpacity)
                 case let .link(index): color = palette.link(index) * SIMD4(1, 1, 1, index < input.dimmedLinks.count && input.dimmedLinks[index] ? 0.3 : 1)
                 case let .exit(index): color = index < palette.exits.count ? palette.exits[index] : palette.idle
-                case .centre, .rule: color = palette.centre
+                case .centre: color = palette.centre
+                case let .rule(index): color = index < palette.rules.count ? palette.rules[index] : palette.centre
                 case .idle: color = palette.idle
                 }
                 for point in piece.triangles where count < Self.meshCapacity {
@@ -279,6 +282,7 @@ struct FlowLayer: NSViewRepresentable {
         private struct Palette {
             var links: [SIMD4<Float>] = []
             var exits: [SIMD4<Float>] = []
+            var rules: [SIMD4<Float>] = []
             var centre = SIMD4<Float>(0, 0, 0, 1)
             var idle = SIMD4<Float>(0, 0, 0, 0.25)
             var bandOpacity: Float = 0.4

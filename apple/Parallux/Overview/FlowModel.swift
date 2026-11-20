@@ -39,6 +39,7 @@ final class FlowModel {
     private var exits = FlowSlots(limit: exitSeats)
     private var rules = FlowSlots(limit: ruleSeats)
     private var pairs = FlowSlots(limit: pairSeats)
+    private var ruleColors = ColorSeats(palette: FlowPalette.rules.count)
     /// Used for its smoothing only: links keep the order of the links page.
     private var links = FlowSlots(limit: 1)
 
@@ -96,9 +97,11 @@ final class FlowModel {
                             rate: slot.rate,
                             color: direct ? FlowPalette.direct : slot.isOther ? FlowPalette.direct.opacity(0.6) : FlowPalette.proxy)
         }
+        ruleColors.update(rules.slots.map(\.id), neutral: [FlowSlots.otherID])
         let ruleNodes = rules.slots.map { slot in
             FlowNode(id: slot.id, name: slot.isOther ? FlowSummary.otherName : slot.id,
-                     detail: RateFormat.bitsPerSecond(Int64(slot.rate)), rate: slot.rate, color: .primary)
+                     detail: RateFormat.bitsPerSecond(Int64(slot.rate)), rate: slot.rate,
+                     color: ruleColors.color(slot.id).map { FlowPalette.rules[$0] } ?? FlowPalette.direct)
         }
         let ruleIndex = Dictionary(uniqueKeysWithValues: rules.slots.enumerated().map { ($1.id, $0) })
         let nodeIndex = Dictionary(uniqueKeysWithValues: exits.slots.enumerated().map { ($1.id, $0) })

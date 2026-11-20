@@ -27,6 +27,12 @@ struct FlowLink: Equatable {
 /// Chart colours are the one place hex values are allowed
 /// (docs/design/copy-and-style.md §2); everything else is semantic.
 enum FlowPalette {
+    /// The rules of the middle column, one each (ColorSeats). Why these: none
+    /// is a link colour (cyan, orange, pink) or an exit colour (green, grey),
+    /// so a rule's bar never reads as a link or a node; eight is more than
+    /// the overview shows at once (FlowModel.ruleSeats + 其他).
+    static let rules: [Color] = [.purple, .blue, .indigo, .teal, .yellow, .red, .brown, .mint]
+
     static let wifi = dynamic(light: 0x2FA6C4, dark: 0x40C8E0)
     static let wired = dynamic(light: 0xF08C00, dark: 0xFF9F0A)
     static let cellular = dynamic(light: 0xF2385F, dark: 0xFF375F)
@@ -98,7 +104,7 @@ struct FlowDiagram: View {
                 if FlowPipeline.shared != nil {
                     FlowLayer(motion: motion, input: .init(
                         target: target, metrics: metrics, linkColors: links.map(\.color), dimmedLinks: links.map(\.isDimmed),
-                        exitColors: exits.map(\.color), easing: animates && isEasing, isVisible: windowIsVisible, reduceMotion: reduceMotion,
+                        exitColors: exits.map(\.color), ruleColors: rules.map(\.color), easing: animates && isEasing, isVisible: windowIsVisible, reduceMotion: reduceMotion,
                         dotSide: isCompact ? 1.6 : 2, isDark: scheme == .dark))
                         // An NSView would otherwise take the clicks meant for the panel's strip button.
                         .allowsHitTesting(false)
@@ -215,8 +221,8 @@ struct FlowDiagram: View {
         if layout.middle.isEmpty {
             context.fill(Path(roundedRect: nodeRect(x: m.centreX, m.centreSpan(layout.total), centre: middle), cornerRadius: 2), with: .style(.primary))
         } else {
-            for span in layout.middle {
-                context.fill(Path(roundedRect: nodeRect(x: m.centreX, span, centre: mid(span)), cornerRadius: 2), with: .style(.primary))
+            for (index, span) in layout.middle.enumerated() where index < rules.count {
+                context.fill(Path(roundedRect: nodeRect(x: m.centreX, span, centre: mid(span)), cornerRadius: 2), with: .color(rules[index].color))
             }
         }
         for (index, span) in layout.right.enumerated() where index < exits.count {

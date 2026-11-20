@@ -222,3 +222,30 @@ public enum FlowColumns {
         return Result(rules: rules, nodes: nodes, flows: flows)
     }
 }
+
+/// Which palette colour each shown node gets (fix-overview-layout-and-flow,
+/// D8): a node keeps its colour while it is shown, shown nodes never share
+/// one (until there are more of them than colours), and a colour a node
+/// gives up goes to the next newcomer. By seat, not by hashing the name: a
+/// hash would give two rules on screen the same colour.
+public struct ColorSeats: Equatable, Sendable {
+    private let palette: Int
+    private var seats: [String: Int] = [:]
+
+    public init(palette: Int) { self.palette = max(palette, 0) }
+
+    /// `ids`: the nodes shown now, in order; `neutral`: ones that take no colour (其他).
+    public mutating func update(_ ids: [String], neutral: Set<String>) {
+        guard palette > 0 else { return seats = [:] }
+        let shown = ids.filter { !neutral.contains($0) }
+        seats = seats.filter { shown.contains($0.key) }
+        for id in shown where seats[id] == nil {
+            let used = Set(seats.values)
+            // The lowest free colour; once all are used, the least used one.
+            let free = (0..<palette).first { !used.contains($0) }
+            seats[id] = free ?? (0..<palette).min { a, b in seats.values.filter { $0 == a }.count < seats.values.filter { $0 == b }.count }!
+        }
+    }
+
+    public func color(_ id: String) -> Int? { seats[id] }
+}
