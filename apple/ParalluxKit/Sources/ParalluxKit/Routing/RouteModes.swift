@@ -97,7 +97,7 @@ public enum RouteModes {
         // (GUI.for.SingBox and sing-box-subscribe pair their mode rules
         // with DNS rules the same way). 全局 keeps the profile's DNS rules.
         if var dns = root["dns"] as? [String: Any], let local = localServer(dns) {
-            dns["rules"] = [["clash_mode": direct, "server": local]] + dnsRules
+            dns["rules"] = dnsRules
             root["dns"] = dns
         }
         guard let data = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys]) else { return profile }
