@@ -72,6 +72,8 @@ func run(args []string) error {
 	printLink := flags.Bool("link", false, "relay: print the import link for -host and exit")
 	host := flags.String("host", "", "relay: the address the Mac reaches this machine at, for -link")
 	name := flags.String("name", "", "relay: display name for -link")
+	self := flags.String("self", "", "comma-separated addresses or names clients know this machine by")
+	selfTarget := flags.String("self-target", "", "local address tried first for connections to -self (default: the address this machine sends from)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -127,7 +129,8 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		content, err = Config(ConfigOptions{Listen: *listen, Port: uint16(*port), PSK: psk, AllowedIPs: splitList(*allowed), LogLevel: *logLevel})
+		content, err = Config(ConfigOptions{Listen: *listen, Port: uint16(*port), PSK: psk, AllowedIPs: splitList(*allowed), LogLevel: *logLevel,
+			Self: splitList(*self), SelfTarget: *selfTarget})
 		if err != nil {
 			return err
 		}
@@ -187,6 +190,11 @@ type ConfigOptions struct {
 	PSK        string
 	AllowedIPs []string
 	LogLevel   string
+	// Self lists the addresses and names clients know this machine by.
+	// stub: feat-node-hosted-aggregation
+	Self []string
+	// SelfTarget overrides the local address self delivery tries first. stub
+	SelfTarget string
 }
 
 // Config builds the minimal server configuration: one multipath inbound and
