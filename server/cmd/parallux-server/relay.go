@@ -43,8 +43,8 @@ type RelayOptions struct {
 }
 
 // checkRelayKey accepts exactly what sing-box's shadowsocks 2022 accepts:
-// padded standard base64 of relayKeyBytes bytes (measured on loopback,
-// docs/tasks/feat-relay-links.md). Its errors never quote the key.
+// padded standard base64 of relayKeyBytes bytes (measured on loopback).
+// Its errors never quote the key.
 func checkRelayKey(key string) error {
 	raw, err := base64.StdEncoding.DecodeString(key)
 	if err != nil {

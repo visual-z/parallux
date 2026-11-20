@@ -103,8 +103,7 @@ public struct ExitChain: Equatable, Sendable {
     }
 }
 
-/// Every exit's flattened chain, computed once for the current groups
-/// (docs/tasks/perf-routing-relayout.md).
+/// Every exit's flattened chain, computed once for the current groups.
 ///
 /// The route map used to flatten each row's chain while laying the row out,
 /// and each flattening re-parsed the whole profile for its outbound tags. So
@@ -223,7 +222,7 @@ public enum TrafficLabel {
     /// The class name for a connection's `rule` field, which is the
     /// matched rule printed by sing-box (`key=value`, lists in brackets,
     /// long domain lists cut with "..."): the same name the route page gives
-    /// that rule, without needing the profile (fix-overview-layout-and-flow).
+    /// that rule, without needing the profile.
     public static func name(connectionRule rule: String) -> String {
         guard !rule.isEmpty else { return finalName }
         var items: [String: [String]] = [:]

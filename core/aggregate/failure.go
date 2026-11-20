@@ -8,7 +8,7 @@ import (
 )
 
 // dialFailure says whether a failed dial should try the next link and
-// whether it is evidence against this link (fix-dial-errors-poison-health).
+// whether it is evidence against this link.
 //
 // Only errors about the link itself mark it unhealthy; everything about the
 // destination (a refusal, a firewall timeout, no route to that host) would

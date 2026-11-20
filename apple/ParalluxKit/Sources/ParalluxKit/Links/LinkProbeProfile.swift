@@ -2,7 +2,7 @@ import Foundation
 
 /// A throwaway sing-box profile that exercises Decision 13's real path:
 /// one `direct` outbound with `bind_interface` per interface, URL-tested
-/// together (research-sysext-bind-interface, feat-probe-arms).
+/// together.
 public enum LinkProbeProfile {
     public static let groupTag = "probe"
     public static func outboundTag(_ interface: String) -> String { "probe-\(interface)" }

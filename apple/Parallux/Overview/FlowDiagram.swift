@@ -36,7 +36,7 @@ enum FlowPalette {
     static let wifi = dynamic(light: 0x2FA6C4, dark: 0x40C8E0)
     static let wired = dynamic(light: 0xF08C00, dark: 0xFF9F0A)
     static let cellular = dynamic(light: 0xF2385F, dark: 0xFF375F)
-    /// Relay links (feat-relay-links): the purple the author's sketch of
+    /// Relay links: the purple the author's sketch of
     /// scheme D draws them in; not one of the exits' green or grey.
     static let relay = dynamic(light: 0x6E56CF, dark: 0x9E8CFC)
     static let proxy = dynamic(light: 0x30A14E, dark: 0x30D158)
@@ -57,16 +57,14 @@ enum FlowPalette {
 }
 
 /// Links → rules → nodes (or links → one bar → exits in the panel), band
-/// width = share of the traffic (design v0.2; by share since
-/// docs/tasks/fix-flow-stability.md, three columns since
-/// docs/tasks/fix-overview-layout-and-flow.md). Geometry comes from SankeyLayout (INV-3, INV-7) and the dots
+/// width = share of the traffic (design v0.2). Geometry comes from SankeyLayout (INV-3, INV-7) and the dots
 /// from FlowParticles (INV-8); this view only paints them. It takes plain
 /// values, so it can be rendered on its own with any numbers.
 struct FlowDiagram: View {
     let links: [FlowNode]
     let exits: [FlowNode]
     /// The middle column, and what flows from it to `exits`: with rules the
-    /// picture is links → rules → nodes (fix-overview-layout-and-flow);
+    /// picture is links → rules → nodes;
     /// without, links → one bar → exits (the panel's strip).
     var rules: [FlowNode] = []
     var flows: [FlowLink] = []
@@ -89,7 +87,7 @@ struct FlowDiagram: View {
     /// so 30 fps moved them 3–5 pt a frame (more than their own size) and
     /// looked stepped; above 60 the eye gains little for dots this small and
     /// the cost grows with the rate (Metal layer, 900 dots: 60 fps 3.2%,
-    /// 120 fps 4.8% of a core; docs/tasks/perf-flow-animation.md).
+    /// 120 fps 4.8% of a core).
     static let frameInterval = 1.0 / 60
 
     /// PLAN §5: the animation costs nothing while nobody can see it.

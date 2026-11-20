@@ -30,8 +30,8 @@ public enum LinkRates {
 
     /// Keyed by link outbound tag, summed over every aggregate outbound:
     /// each group keeps its own counters for the same links, so differences
-    /// are taken per (group, link) and only then added
-    /// (fix-link-rates-across-groups). Counter resets (a reloaded core) and
+    /// are taken per (group, link) and only then added.
+    /// Counter resets (a reloaded core) and
     /// groups new in this sample read as 0, not negative.
     public static func rates(previous: [LinkGroupStat], current: [LinkGroupStat], interval: TimeInterval) -> [String: Rate] {
         guard interval > 0 else { return [:] }

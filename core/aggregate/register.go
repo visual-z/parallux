@@ -42,7 +42,7 @@ type Options struct {
 	// when it fails, connections fall back to the links in failover order.
 	Bond string `json:"bond,omitempty"`
 	// BondBypass lists hosts never sent through the bond (the aggregation
-	// server itself), besides local destinations (feat-bond-direct).
+	// server itself), besides local destinations.
 	BondBypass []string `json:"bond_bypass,omitempty"`
 	// Relays lists the links that are relay links (中继线路, PLAN decision
 	// 24): they leave through another machine on the LAN, so they never
@@ -63,8 +63,7 @@ func init() {
 // Outbound is deliberately not an adapter.OutboundGroup: sing-box's router
 // expands groups through Selected() and dials the last outbound itself
 // (route/route.go resolveOutbound), which would skip this outbound's
-// DialContext and with it rotation, failover retries and per-link counters
-// (docs/tasks/fix-aggregate-routing.md).
+// DialContext and with it rotation, failover retries and per-link counters.
 var _ adapter.Referrer = (*Outbound)(nil)
 
 // Outbound spreads connections over its link outbounds (PLAN decision 13).

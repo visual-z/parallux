@@ -1,8 +1,7 @@
 import Foundation
 
 /// The groups of the panel's node page as design v0.2 shows them: which
-/// groups appear, which are open, and what a search leaves
-/// (docs/tasks/fix-panel-nodes-design-parity.md).
+/// groups appear, which are open, and what a search leaves.
 public enum PanelNodeList {
     public struct Section: Identifiable, Equatable, Sendable {
         public var tag: String

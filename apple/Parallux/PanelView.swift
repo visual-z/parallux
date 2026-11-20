@@ -39,7 +39,7 @@ private struct PanelHome: View {
 
     var body: some View {
         // Design v0.2's panel: flat rows under small section titles, parted
-        // by hairlines (docs/tasks/fix-panel-design-parity.md). System
+        // by hairlines. System
         // controls throughout, apart from the round link switch.
         VStack(alignment: .leading, spacing: 0) {
             header.padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)

@@ -2,7 +2,7 @@ import Foundation
 @testable import ParalluxKit
 import Testing
 
-/// fix-tunnel-start-sandbox: a failed start must reach the app as an error it
+/// A failed start must reach the app as an error it
 /// can show, and a new build must replace the extension it finds installed.
 @Suite struct TunnelStartTests {
     /// Stands in for gomobile's `Universeerror`, a class nesessionmanager has

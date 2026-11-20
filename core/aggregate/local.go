@@ -40,7 +40,7 @@ func localDestination(destination M.Socksaddr) bool {
 }
 
 // bondEligible reports whether a destination may go through the aggregation
-// server (feat-bond-direct). Local destinations never may: the server cannot
+// server. Local destinations never may: the server cannot
 // reach the user's NAS or printer. Neither may the hosts in bypass (the
 // server itself), which would only loop back to where they started.
 func bondEligible(destination M.Socksaddr, bypass []string) bool {

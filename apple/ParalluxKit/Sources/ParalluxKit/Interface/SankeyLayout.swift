@@ -47,11 +47,11 @@ public struct SankeyLayout: Equatable, Sendable {
     public var right: [Span] = []
     public var bands: [Band] = []
     public var total = Span(0, 0)
-    /// The rules of a three-column layout (fix-overview-layout-and-flow);
+    /// The rules of a three-column layout;
     /// empty in the two-column one, which draws `total` as one bar instead.
     public var middle: [Span] = []
 
-    /// Three columns, links → rules → nodes (docs/tasks/fix-overview-layout-and-flow.md).
+    /// Three columns, links → rules → nodes.
     ///
     /// Connections say which rule they matched and where they left, not
     /// which link carried them, so each rule's traffic is split over the
@@ -112,14 +112,14 @@ public struct SankeyLayout: Equatable, Sendable {
         return layout
     }
 
-    /// The least share of a side's height a node with traffic gets
-    /// (fix-flow-stability). Why 2%: on the overview's 262 pt that is about
+    /// The least share of a side's height a node with traffic gets.
+    /// Why 2%: on the overview's 262 pt that is about
     /// 4.5 pt (less when many exits share the height), enough to see a band
     /// and its colour; without a floor an exit carrying a thousandth of the
     /// traffic showed a rate and no band at all. Chosen by eye.
     public static let thinnestShare = 0.02
 
-    /// Width by share (docs/tasks/fix-flow-stability.md): each side always
+    /// Width by share: each side always
     /// fills the height the gaps leave, a node as tall as its share of its
     /// own side. Absolute rates do not matter, and the two sides need not
     /// agree (links are measured on the interface, exits from connections).
@@ -284,7 +284,7 @@ public struct SankeyLayout: Equatable, Sendable {
     }
 }
 
-/// A flow diagram with any number of columns (docs/tasks/fix-overview-layout-and-flow.md, INV-12).
+/// A flow diagram with any number of columns (INV-12).
 public struct ColumnLayout: Equatable, Sendable {
     public struct Link: Equatable, Sendable {
         /// Between column `stage` and `stage + 1`.

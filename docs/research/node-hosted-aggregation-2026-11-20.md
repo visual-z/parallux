@@ -54,4 +54,4 @@
 
 ## 去向
 
-PLAN 决策 25，卡 `feat-node-hosted-aggregation`。结论 2 的修法改动了 `feat-bond-direct` 钉住的一条断言，等作者确认。
+PLAN 决策 25。

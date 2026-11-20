@@ -21,7 +21,7 @@ public struct LogEntry: Identifiable, Equatable, Sendable {
     }
 
     /// libbox formats logs for a terminal; drop CSI sequences (ESC [ params
-    /// final-letter), including a cut-off one at the end (fix-log-ansi-codes).
+    /// final-letter), including a cut-off one at the end.
     static func plain(_ raw: String) -> String {
         guard raw.contains("\u{1B}") else { return raw }
         var out = ""

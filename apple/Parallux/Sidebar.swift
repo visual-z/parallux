@@ -7,7 +7,7 @@ import SwiftUI
 ///
 /// The list itself stays the system's sidebar list (glass, section headers,
 /// scrolling). The selection is drawn here because the system's sidebar
-/// highlight is grey and cannot be tinted (docs/tasks/fix-ui-details.md);
+/// highlight is grey and cannot be tinted;
 /// arrow keys are wired back with onMoveCommand.
 struct SidebarList: View {
     @Binding var selection: SidebarItem?

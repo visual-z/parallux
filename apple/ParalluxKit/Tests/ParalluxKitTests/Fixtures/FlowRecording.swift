@@ -5,7 +5,7 @@
 /// showed that second, in the order it showed them. Rates in Kbps.
 /// In the app that produced it the set of exits changed on 85 of the 119
 /// steps and the order of the surviving exits on 34: the flicker
-/// docs/tasks/fix-flow-stability.md is about.
+/// the flow-stability tests are about.
 enum FlowRecording {
     static let lines: [String] = [
         "3100|N1=3100,直连=116,N2=89,N3=87,其他=20",

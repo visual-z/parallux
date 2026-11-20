@@ -6,7 +6,7 @@ public struct LinkSettings: Codable, Equatable, Sendable {
     public var mode: AggregationMode = .bond
     /// The aggregation server used for 叠加 (AggregationServer.id), if any.
     public var bondServerID: UUID?
-    /// 聚合 / 代理 as last run (feat-split-switches); missing in old data = both on.
+    /// 聚合 / 代理 as last run; missing in old data = both on.
     public var switches: ConnectionSwitches = .both
 
     public init() {}

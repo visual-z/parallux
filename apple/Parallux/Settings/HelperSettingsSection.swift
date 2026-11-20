@@ -6,7 +6,7 @@ import SwiftUI
 ///
 /// The working directory is root's container for the extension, which Finder
 /// cannot open (mode 700), so the page shows its path with "拷贝路径"
-/// instead of "在访达中显示" (docs/tasks/feat-helper-service.md, 环境假设).
+/// instead of "在访达中显示".
 struct HelperSettingsSection: View {
     @State private var helper = HelperServiceManager()
     @State private var confirmingDestroy = false

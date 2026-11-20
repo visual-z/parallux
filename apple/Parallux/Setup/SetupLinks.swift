@@ -5,8 +5,8 @@ import UserNotifications
 
 /// Where each setup step is approved in System Settings.
 ///
-/// The network-extension pane link is community-documented, not an Apple API
-/// (feat-setup-approval, 环境假设); it worked on macOS 27.2.1. If it does not
+/// The network-extension pane link is community-documented, not an Apple API;
+/// it worked on macOS 27.2.1. If it does not
 /// open, fall back to Apple's SMAppService.openSystemSettingsLoginItems(),
 /// which lands one level up in Login Items & Extensions.
 enum SetupLinks {

@@ -42,14 +42,14 @@ has "$info" "NetworkExtension.NEProviderClasses.com\.apple\.networkextension\.pa
 has Parallux/Info.plist ParalluxTunnelMachService '$(PARALLUX_TUNNEL_MACH_SERVICE)'
 
 # The Mach service must sit inside the App Group and change with the version
-# and the build number (docs/tasks/fix-signed-run-hazards.md).
+# and the build number.
 mach="$(sed -n 's/^PARALLUX_TUNNEL_MACH_SERVICE *= *//p' Config/Base.xcconfig)"
 case "$mach" in
   '$(PARALLUX_APP_GROUP).'*'$(MARKETING_VERSION)'*'$(CURRENT_PROJECT_VERSION)'*) ;;
   *) fail "Config/Base.xcconfig: PARALLUX_TUNNEL_MACH_SERVICE '$mach' must start with \$(PARALLUX_APP_GROUP). and contain \$(MARKETING_VERSION) and \$(CURRENT_PROJECT_VERSION)" ;;
 esac
 
-# Root helper (docs/tasks/feat-helper-service.md). Its Info.plist is linked
+# Root helper. Its Info.plist is linked
 # into the tool and names the service it listens on; the launchd plist
 # template is expanded at build time with the same variables.
 helper=ParalluxHelper/Info.plist
@@ -70,7 +70,7 @@ case "$helper_mach" in
   *) fail "Config/Base.xcconfig: PARALLUX_HELPER_MACH_SERVICE '$helper_mach' must start with \$(PARALLUX_APP_GROUP).helper. and contain \$(MARKETING_VERSION) and \$(CURRENT_PROJECT_VERSION)" ;;
 esac
 
-# Widget and Control Center toggle (docs/tasks/feat-system-integration.md).
+# Widget and Control Center toggle.
 # Without the extension point the system never loads it; without the App
 # Group it shows no state; without the NE entitlement its toggle cannot
 # start the VPN configuration.

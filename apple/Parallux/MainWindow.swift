@@ -50,8 +50,7 @@ struct MainWindow: View {
             // own controls. A toolbar's items come in the order of the views
             // that declare them, and only an overlay comes after the page
             // itself: rendered four ways on 2026-11-20, `.primaryAction`, a
-            // plain item and a background all put the button first
-            // (docs/tasks/fix-ui-details.md).
+            // plain item and a background all put the button first.
             .overlay {
                 Color.clear.allowsHitTesting(false).toolbar {
                     ToolbarSpacer(.fixed)

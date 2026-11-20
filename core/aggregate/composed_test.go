@@ -18,7 +18,7 @@ func TestComposedFixturesPassLibboxCheckConfig(t *testing.T) {
 	}
 }
 
-// The bond fixture also needs the multipath type (core/bond, feat-bond);
+// The bond fixture also needs the multipath type (core/bond);
 // pxbridge links both, so the check lives where both are registered.
 func checkFixture(t *testing.T, mode string) {
 	t.Helper()

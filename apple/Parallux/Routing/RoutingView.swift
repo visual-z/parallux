@@ -13,7 +13,7 @@ struct RoutingView: View {
     @State private var showInspector = true
     @State private var rerouting: TrafficClass?
     @State private var explainTarget = ""
-    /// The route map's latest sample, shared with the inspector (perf-routing-relayout).
+    /// The route map's latest sample, shared with the inspector.
     @State private var steady = RoutingModel.SteadyMap()
 
     var body: some View {

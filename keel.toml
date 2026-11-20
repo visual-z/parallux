@@ -79,7 +79,7 @@ glossary_source_dirs = ["core", "apple/Parallux", "apple/PacketTunnel", "apple/P
 
 # The core runs inside a sandboxed system extension: it cannot spawn processes,
 # and a helper binary would need its own signing and launchd plumbing.
-# Demonstrated red on 2026-11-18 (see docs/tasks/chore-m0-skeleton.md).
+# Demonstrated red on 2026-11-18.
 [[boundary.rule]]
 name = "core 不启动子进程"
 paths = ["core/**/*.go"]

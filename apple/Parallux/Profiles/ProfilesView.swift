@@ -30,7 +30,7 @@ struct ProfilesView: View {
             } else {
                 // Design v0.2, profiles page: the list card. The content opens
                 // from a row's menu (查看内容 / 编辑内容), never by itself: a
-                // subscription can be megabytes (docs/tasks/fix-ui-details.md).
+                // subscription can be megabytes.
                 DesignPage {
                     DesignList(items: store.profiles, id: { $0.id.uuidString }, move: { dragged, target in
                         guard let move = ListReorder.offsets(moving: dragged, onto: target, in: store.profiles.map { $0.id.uuidString }) else { return }

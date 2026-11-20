@@ -1,6 +1,6 @@
 import Foundation
 
-/// Per-link rates from the interfaces' own byte counters (feat-link-view).
+/// Per-link rates from the interfaces' own byte counters.
 ///
 /// The interface sees every byte the link carries — TCP, UDP/QUIC, and 叠加's
 /// multipath legs — which the aggregate outbound's per-connection counters do
@@ -30,7 +30,7 @@ public enum InterfaceRates {
     }
 }
 
-/// One state per link, merged over every aggregate outbound (feat-link-view):
+/// One state per link, merged over every aggregate outbound:
 /// unhealthy if any group says so, active connections summed. Every reader
 /// (panel, links page, notifications, menu bar) uses this, so they agree.
 public enum LinkView {
@@ -57,7 +57,7 @@ public enum LinkView {
     }
 }
 
-/// Keeps the last diagram on screen through idle seconds (feat-link-view).
+/// Keeps the last diagram on screen through idle seconds.
 public enum FlowHold {
     /// Why 5 s: page loads pause 1–3 s between bursts; past 5 s the link is
     /// really idle. Assumed value; measure by watching how often 「暂无流量」

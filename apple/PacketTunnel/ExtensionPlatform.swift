@@ -234,7 +234,7 @@ final class ExtensionPlatform: NSObject, LibboxPlatformInterfaceProtocol, Libbox
 
     // MARK: not supported inside the extension (helper service, PLAN decision 12)
 
-    /// Asks the root helper (feat-helper-service); bounded by
+    /// Asks the root helper; bounded by
     /// HelperXPC.ownerLookupTimeout because sing-box waits on this while it
     /// sets up the connection. Any failure reads as "process unknown".
     func findConnectionOwner(_ ipProtocol: Int32, sourceAddress: String?, sourcePort: Int32, destinationAddress: String?, destinationPort: Int32) throws -> LibboxConnectionOwner {

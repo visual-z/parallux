@@ -15,8 +15,7 @@ packages:
   ParalluxKit:
     path: ParalluxKit
 # Both targets link Libbox.xcframework plus the system libraries its cronet
-# (naive outbound) and usbip code need; found by linking
-# (docs/tasks/chore-m0-skeleton.md, 环境假设).
+# (naive outbound) and usbip code need; found by linking.
 targets:
   Parallux:
     type: application
@@ -44,13 +43,13 @@ targets:
         ParalluxHelperMachService: $(PARALLUX_HELPER_MACH_SERVICE)
         ParalluxHelperLabel: $(PARALLUX_HELPER_LABEL)
         # parallux:// links (connect, servers, profiles) and SFM's sing-box://
-        # import-remote-profile links (docs/tasks/feat-system-integration.md).
+        # import-remote-profile links.
         CFBundleURLTypes:
           - CFBundleURLName: $(BUNDLE_ID)
             CFBundleURLSchemes: [parallux]
           - CFBundleURLName: $(BUNDLE_ID).sing-box-import
             CFBundleURLSchemes: [sing-box]
-        # Sparkle (feat-release). Empty in Base.xcconfig: the updater stays off.
+        # Sparkle. Empty in Base.xcconfig: the updater stays off.
         SUFeedURL: $(PARALLUX_UPDATE_FEED)
         SUPublicEDKey: $(PARALLUX_UPDATE_PUBLIC_KEY)
         ParalluxUpdateBetaFeed: $(PARALLUX_UPDATE_BETA_FEED)
@@ -79,7 +78,7 @@ targets:
       - sdk: SystemConfiguration.framework
       - target: PacketTunnel
         embed: true
-      # Widget and Control Center toggle (docs/tasks/feat-system-integration.md).
+      # Widget and Control Center toggle.
       - target: ParalluxWidget
         embed: true
       # The root helper (PLAN decision 12): SMAppService.daemon runs the tool

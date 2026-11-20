@@ -4,8 +4,8 @@
 # .build/sparkle/bin, from the release asset Sparkle publishes for SwiftPM.
 #
 # Why not an SPM package dependency: xcodebuild's binary-artifact download
-# hung indefinitely on this machine while curl fetched the same URL in 3 s
-# (docs/tasks/feat-release.md, 修订), and the gate must not depend on it.
+# hung indefinitely on this machine while curl fetched the same URL in 3 s,
+# and the gate must not depend on it.
 # The asset is checked against its pinned sha256 (GitHub's digest for it,
 # gh api repos/sparkle-project/Sparkle/releases/tags/2.10.1, 2026-11-19),
 # which is also the checksum in Sparkle's own Package.swift.

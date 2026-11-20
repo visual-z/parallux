@@ -1,6 +1,6 @@
 import Foundation
 
-/// The flow diagram as triangles for the GPU (perf-flow-animation): bands,
+/// The flow diagram as triangles for the GPU: bands,
 /// the dashed lines of idle links, and the three columns of nodes. Pure
 /// geometry in view points, origin top left; the view supplies the colours
 /// for each `Paint` and draws the pieces in order (bands and dashes under the

@@ -13,7 +13,7 @@ final class CommandXPCDialer: NSObject, LibboxXPCDialerProtocol, @unchecked Send
         ret0_?.pointee = try TunnelXPC.dialCommandSocket(over: connection)
     }
 
-    /// Probes every link from inside the extension (research-sysext-bind-interface).
+    /// Probes every link from inside the extension.
     static func probeLinks() throws -> [LinkProbeResult] {
         let connection = try connection()
         defer { connection.invalidate() }

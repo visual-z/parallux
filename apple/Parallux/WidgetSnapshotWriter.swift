@@ -4,7 +4,7 @@ import ParalluxKit
 import WidgetKit
 
 /// Publishes the app's state to the widget and the Control Center toggle
-/// through the App Group (docs/tasks/feat-system-integration.md). Writes are
+/// through the App Group. Writes are
 /// throttled by WidgetSnapshotThrottle; reloads only follow state changes,
 /// because WidgetKit budgets timeline reloads.
 @MainActor

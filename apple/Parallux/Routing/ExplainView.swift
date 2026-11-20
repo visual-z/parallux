@@ -128,7 +128,7 @@ private struct Steps: View {
 
     private func lineText(_ outbound: String) -> String {
         guard app.activeLinks.count >= 2, let mode = app.effectiveMode else { return app.links.links.first.map { $0.kind.title } ?? "—" }
-        // Direct traffic is bonded too (feat-bond-direct); the explainer has
+        // Direct traffic is bonded too; the explainer has
         // no IP for a name target, so it does not try to call it LAN here.
         let bonded = mode == .bond
         return "\(mode.title) · \(app.activeLinks.filter { !bonded || $0.kind != .relay }.prefix(bonded ? 2 : 9).map(\.title).joined(separator: " + "))"

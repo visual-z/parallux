@@ -9,7 +9,7 @@ import Sparkle
 ///
 /// Sparkle replaces only the .app; the system extension is replaced on the
 /// next activation request, which SystemExtensionInstaller makes when the
-/// version changed (docs/tasks/feat-release.md, 环境假设).
+/// version changed.
 @MainActor @Observable
 final class UpdaterModel: NSObject {
     static let shared = UpdaterModel()

@@ -37,7 +37,7 @@ public struct FlowParticles: Sendable {
 
     /// How busy the dots are for a total rate, 0...1: the one thing in the
     /// diagram that still says how much traffic there is, now that widths are
-    /// shares (docs/tasks/fix-flow-stability.md). Logarithmic, because rates
+    /// shares. Logarithmic, because rates
     /// span five orders of magnitude and a thousand times the traffic should
     /// look clearly busier, not a thousand times as dense.
     /// Why these ends: under 10 kbit/s is background chatter (a few dots, so

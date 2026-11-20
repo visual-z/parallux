@@ -17,8 +17,8 @@ public struct AggregationServer: Codable, Equatable, Identifiable, Sendable {
     public static let bondTag = "parallux-bond"
 
     /// The multipath outbound over the two highest-priority physical links
-    /// (the transport has exactly two legs, feat-bond; relay links are never
-    /// legs, feat-relay-links). nil with fewer than two.
+    /// (the transport has exactly two legs; relay links are never
+    /// legs). nil with fewer than two.
     public func bond(links: [LinkInterface], psk: String) -> ProfileComposer.Bond? {
         let legs = links.filter { $0.kind != .relay }
         guard legs.count >= 2 else { return nil }

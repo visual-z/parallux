@@ -62,7 +62,7 @@ final class AppModel {
     }
 
     /// 「自动加入新线路」: a link plugged in or pulled out while connected
-    /// recomposes the profile (fix-new-links-recompose).
+    /// recomposes the profile.
     private func observeLinkSet(previous: [LinkInterface]) {
         withObservationTracking {
             _ = links.links
@@ -110,7 +110,7 @@ final class AppModel {
     }
 
     /// Every link the links page lists: this Mac's interfaces, then the
-    /// relay links (feat-relay-links).
+    /// relay links.
     var allLinks: [LinkInterface] { links.links + relays.links }
 
     /// Enabled links in priority order (the links page's choice). A relay
@@ -186,7 +186,7 @@ final class AppModel {
         await applyLinkChanges()
     }
 
-    /// 聚合 / 代理 as the switches show them (feat-split-switches).
+    /// 聚合 / 代理 as the switches show them.
     var switches: ConnectionSwitches { ConnectionSwitches.shown(linkSettings.value.switches, running: isOn) }
 
     /// The links traffic actually uses: the enabled ones with 聚合 on; with it
@@ -207,7 +207,7 @@ final class AppModel {
     var effectiveMode: AggregationMode? {
         guard linkSettings.value.switches.aggregation, enabledLinks.count >= 2 else { return nil }
         let mode = linkSettings.value.mode
-        // 叠加 carries direct traffic too (feat-bond-direct); only a missing server makes it 主备.
+        // 叠加 carries direct traffic too; only a missing server makes it 主备.
         if mode == .bond, bondProvider(linkSettings.value) == nil { return .failover }
         return mode
     }
@@ -246,7 +246,7 @@ final class AppModel {
 
     /// After an app update the running extension is the old build, whose Mach
     /// service this app cannot reach; replace it, and bring a tunnel that was
-    /// on back up (fix-stale-extension-on-launch).
+    /// on back up.
     private func upgradeStaleExtension() async {
         let signed = AppGroup.identifier() != nil
         guard signed, tunnel.hasConfiguration else { return }
@@ -304,13 +304,13 @@ final class AppModel {
             await waitUntilStopped()
         }
         // Every connect checks the extension's version, not just the first:
-        // a new build must replace the old extension (fix-tunnel-start-sandbox).
+        // a new build must replace the old extension.
         var stale = false
         if tunnel.phase == .ready, AppGroup.identifier() != nil { stale = await tunnel.needsActivation() }
         if tunnel.phase != .ready || stale { await tunnel.install() }
         if tunnel.phase == .awaitingApproval {
             // Show where to approve, then carry on by itself once the user
-            // switches Parallux on in System Settings (feat-setup-approval).
+            // switches Parallux on in System Settings.
             SetupLinks.open(.systemExtension)
             guard await tunnel.completeApproval() else { return }
         }

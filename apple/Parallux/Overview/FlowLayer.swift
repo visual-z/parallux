@@ -4,7 +4,7 @@ import ParalluxKit
 import QuartzCore
 import SwiftUI
 
-/// The flow diagram's moving picture, drawn by the GPU (perf-flow-animation):
+/// The flow diagram's moving picture, drawn by the GPU:
 /// bands, idle links' dashed lines, nodes and the dots. Everything that
 /// changes from frame to frame is here; SwiftUI keeps only the labels, which
 /// change once a second.
@@ -15,7 +15,7 @@ import SwiftUI
 /// 10–12.6% of a core; dots on the GPU but bands and labels in a Canvas 3.5%
 /// steady and 6–7% whenever the rates changed, the difference being those
 /// redraws while the bands eased; everything here 4.2–4.6% steady and
-/// 4.4–5.0% while the rates change (docs/tasks/perf-flow-animation.md).
+/// 4.4–5.0% while the rates change.
 ///
 /// The display link runs only while something moves: dots (traffic) or an
 /// ease. Otherwise a frame is drawn when the input changes, and nothing at

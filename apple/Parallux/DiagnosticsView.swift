@@ -4,8 +4,7 @@ import ParalluxKit
 import SwiftUI
 
 /// Diagnostics page. User tools first (design v0.2 单线程下载测速; SFM 网络质量,
-/// STUN 测试); the per-link bind probe (research-sysext-bind-interface,
-/// feat-probe-arms) sits in a collapsed 「接口」 group below. Copy follows
+/// STUN 测试); the per-link bind probe sits in a collapsed 「接口」 group below. Copy follows
 /// docs/design/copy-and-style.md.
 ///
 /// - App 内：the same LinkProbe in the app process. Run it with the tunnel

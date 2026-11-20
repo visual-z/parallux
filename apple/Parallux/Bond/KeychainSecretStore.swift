@@ -6,7 +6,7 @@ import Security
 struct KeychainSecretStore: SecretStore {
     static let aggregationService = (Bundle.main.bundleIdentifier ?? "io.github.visual-z.parallux") + ".aggregation-server"
     static let remoteService = (Bundle.main.bundleIdentifier ?? "io.github.visual-z.parallux") + ".remote-control"
-    /// Relay keys (feat-relay-links).
+    /// Relay keys.
     static let relayService = (Bundle.main.bundleIdentifier ?? "io.github.visual-z.parallux") + ".relay-link"
     let service: String
 

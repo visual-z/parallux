@@ -1,7 +1,6 @@
 import Foundation
 
-/// Eases the flow diagram's rates from one sample to the next
-/// (perf-flow-animation).
+/// Eases the flow diagram's rates from one sample to the next.
 ///
 /// A fixed-length curve, not "move a share of the gap every frame": that one
 /// never arrives, so the band layer could never stop redrawing, and how fast

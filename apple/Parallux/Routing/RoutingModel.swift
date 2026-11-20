@@ -44,8 +44,7 @@ final class RoutingModel {
     private(set) var profile = RouteProfile(rules: [], final: nil)
     private(set) var profileError: String?
     @ObservationIgnored private(set) var profileContent: String? {
-        // Parsed here, once per load, not every time a view asks
-        // (docs/tasks/perf-routing-relayout.md).
+        // Parsed here, once per load, not every time a view asks.
         didSet { parsedTags = Self.outboundTags(in: profileContent); effective = nil }
     }
     @ObservationIgnored private var parsedTags: [String] = []
@@ -92,7 +91,7 @@ final class RoutingModel {
 
     /// The route map as it is drawn: every traffic class in the profile's
     /// order, the ones with traffic first, steadied so rows do not jump with
-    /// the rates (docs/tasks/fix-flow-stability.md).
+    /// the rates.
     struct SteadyMap: Equatable {
         /// Classes that carried traffic within FlowSlots.retention, then the rest.
         var active: [TrafficClass] = []

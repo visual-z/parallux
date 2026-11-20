@@ -10,8 +10,7 @@ import SystemExtensions
 /// The request's callbacks drive ActivationMachine. A request keeps listening
 /// after `requestNeedsUserApproval`: when the user switches the extension on
 /// in System Settings, macOS finishes the same request, and `state` becomes
-/// `.activated` without the user having to click anything again
-/// (feat-setup-approval).
+/// `.activated` without the user having to click anything again.
 @MainActor @Observable
 final class SystemExtensionInstaller: NSObject, OSSystemExtensionRequestDelegate {
     private(set) var state: ActivationMachine.State = .idle

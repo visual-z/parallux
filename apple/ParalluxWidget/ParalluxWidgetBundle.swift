@@ -4,8 +4,7 @@ import ParalluxKit
 import SwiftUI
 import WidgetKit
 
-/// The widget extension: a status widget and a Control Center toggle
-/// (docs/tasks/feat-system-integration.md).
+/// The widget extension: a status widget and a Control Center toggle.
 @main
 struct ParalluxWidgetBundle: WidgetBundle {
     var body: some Widget {

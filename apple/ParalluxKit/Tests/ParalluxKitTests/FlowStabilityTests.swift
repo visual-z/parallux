@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import ParalluxKit
 
-/// docs/tasks/fix-flow-stability.md: nodes that keep their place, rates that
+/// Nodes that keep their place, rates that
 /// do not twitch, widths by share.
 @Suite struct FlowStabilityTests {
     private func ids(_ slots: FlowSlots) -> [String] { slots.slots.map(\.id) }
@@ -292,7 +292,6 @@ import Testing
     }
 }
 
-/// docs/tasks/fix-ui-details.md
 @Suite struct UIDetailTests {
     @Test func actionFailuresSayWhatFailedNotThatTheCoreIsGone() {
         #expect(CoreAction.urlTest.failure == "延迟测试失败")
@@ -315,7 +314,6 @@ import Testing
     }
 }
 
-/// docs/tasks/fix-overview-layout-and-flow.md
 @Suite struct ThreeColumnFlowTests {
     private func row(_ id: Int, rule: String, node: String, type: String = "trojan", rate: Int64) -> ConnectionRow {
         var row = ConnectionRow(id: "\(id)", process: "", destination: "", rule: rule, outbound: node)

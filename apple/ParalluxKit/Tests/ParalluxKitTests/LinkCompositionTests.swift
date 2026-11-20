@@ -207,7 +207,7 @@ extension LinkCompositionTests {
 }
 
 extension LinkCompositionTests {
-    /// feat-bond-direct (author 2026-11-20): direct traffic goes through the
+    /// Decision 23: direct traffic goes through the
     /// aggregation server too; the core keeps LAN and the server itself off it.
     @Test func bondModeCarriesDirectTrafficToo() throws {
         let composed = try ProfileComposer.compose(userProfile, links: twoLinks, backup: [], mode: .bond, bond: Self.bondFixture)
@@ -219,7 +219,7 @@ extension LinkCompositionTests {
             #expect(aggregate["bond"] as? String == "parallux-bond", "\(tag)")
         }
         // Direct traffic keeps the server itself off the bond. The nodes'
-        // detour does not (feat-node-hosted-aggregation, author 2026-11-20):
+        // detour does not (author 2026-11-20):
         // a node at the server's address is a node on the same machine.
         let direct = try #require(after.first { $0["tag"] as? String == "direct" })
         #expect((direct["bond_bypass"] as? [String]) == [server])
@@ -235,7 +235,7 @@ extension LinkCompositionTests {
     }
 }
 
-/// fix-link-rates-across-groups: `direct` and `parallux-links` are two
+/// `direct` and `parallux-links` are two
 /// aggregates with their own counters for the same links.
 @Suite struct LinkRatesAcrossGroupsTests {
     static func link(_ tag: String, _ up: Int64, _ down: Int64) -> LinkGroupStat.Link {

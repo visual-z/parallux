@@ -24,11 +24,11 @@ const (
 	// probeRetryAfter: a target whose dial has not finished by then is dialed
 	// once more in the same probe. A lost SYN is retransmitted by macOS only
 	// after 1 s, past probeTimeout, so without a second dial one lost packet
-	// failed the whole probe (fix-probe-lost-syn). Why 400 ms: the slower link
+	// failed the whole probe. Why 400 ms: the slower link
 	// measured p90 84 ms / max 106 ms to 223.5.5.5 (2026-11-20), so a healthy
 	// first dial has finished by then, and the retry still has 600 ms (> 5×
 	// that max) to complete. Assumed margin over measured RTTs; remeasure with
-	// fix-probe-lost-syn's method on a slower link.
+	// the same method on a slower link.
 	probeRetryAfter = 400 * time.Millisecond
 )
 
@@ -46,7 +46,7 @@ type linkHealth struct {
 	// streak, so recovery needs recoverAfter fresh successes.
 	dialFailed atomic.Bool
 	successes  int
-	// relay is set once, before the prober starts (feat-relay-links).
+	// relay is set once, before the prober starts.
 	relay bool
 }
 
@@ -80,14 +80,14 @@ func probeLoop(ctx context.Context, dialer N.Dialer, targets []M.Socksaddr, heal
 //
 // Every target is dialed at once, and a target whose dial is still pending at
 // probeRetryAfter is dialed once more: a lost SYN hangs rather than errors, and
-// its retransmit comes too late (fix-probe-lost-syn). All dials share one
+// its retransmit comes too late. All dials share one
 // probeTimeout, so a dead link still costs at most one tick, and a link whose
 // dials all error out is judged at once. At most 2 × len(targets) dials run,
 // and all of them have returned before probeOnce does.
 //
 // roundTrip (relay links): the connection must also bring an answer back,
 // because a relay host accepts the dial whether or not it can reach the
-// target (feat-relay-links, 环境假设). Only port-53 targets can be asked; with
+// target. Only port-53 targets can be asked; with
 // none configured, connecting is all the evidence there is. A dial counts as
 // pending until its answer is in, so a round trip that stalls is retried like
 // a stalled connect.

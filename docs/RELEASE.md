@@ -1,6 +1,6 @@
 # 发布
 
-PLAN 决策 19：签名、公证、打包与 appcast 由 `scripts/release.sh` 完成；**脚本从不上传、不发布**，上传是作者手动的一步。卡：`docs/tasks/feat-release.md`。
+PLAN 决策 19：签名、公证、打包与 appcast 由 `scripts/release.sh` 完成；**脚本从不上传、不发布**，上传是作者手动的一步。
 
 ## 一次性准备
 

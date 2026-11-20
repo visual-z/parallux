@@ -1,6 +1,6 @@
 import Foundation
 
-/// What the extension hands back from `startTunnel` (fix-tunnel-start-sandbox).
+/// What the extension hands back from `startTunnel`.
 ///
 /// nesessionmanager decodes that error across XPC and only knows system
 /// classes; gomobile's errors are `Universeerror`, which it drops, leaving the
@@ -31,7 +31,7 @@ public enum ProviderError {
 }
 
 /// The extension's version as macOS reports it, against the one bundled in
-/// this app (fix-tunnel-start-sandbox).
+/// this app.
 public struct ExtensionVersion: Equatable, Sendable {
     public var short: String
     public var build: String

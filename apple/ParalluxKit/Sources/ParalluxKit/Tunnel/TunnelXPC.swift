@@ -15,7 +15,7 @@ import Foundation
     /// running aggregate outbound.
     func linkStats(reply: @escaping (String) -> Void)
     /// Replies with pxbridge.ExplainRoute(target): which rule of the running
-    /// configuration a target matches and where it goes (feat-routing-page).
+    /// configuration a target matches and where it goes.
     func explainRoute(_ target: String, reply: @escaping (String) -> Void)
     /// Removes and replies with the core's queued notifications
     /// (NotificationQueue.encode); the app posts them, because a system

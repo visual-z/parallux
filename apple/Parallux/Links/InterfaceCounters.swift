@@ -1,7 +1,7 @@
 import Darwin
 import ParalluxKit
 
-/// Byte counters of every interface, 64-bit (feat-link-view).
+/// Byte counters of every interface, 64-bit.
 /// `NET_RT_IFLIST2` returns `if_msghdr2` with `if_data64`; getifaddrs' 32-bit
 /// counters wrap every 4 GiB.
 enum InterfaceCounters {

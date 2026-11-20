@@ -7,7 +7,7 @@ import ParalluxKit
 /// Feeds SocketOwnerMatcher, which holds the matching rules; this file only
 /// turns kernel structures into SocketEntry values. libproc instead of
 /// libbox's FindConnectionOwner keeps Libbox.xcframework (128 MB) out of the
-/// helper (docs/tasks/feat-helper-service.md, 设计).
+/// helper.
 enum ProcessSockets {
     /// Why 4096: a busy Mac runs ~800 processes; the cap bounds one scan if
     /// the process table explodes. Assumed value.

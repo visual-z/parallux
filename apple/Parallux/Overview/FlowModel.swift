@@ -1,7 +1,7 @@
 import ParalluxKit
 import SwiftUI
 
-/// The flow diagram's nodes, steadied (docs/tasks/fix-flow-stability.md).
+/// The flow diagram's nodes, steadied.
 /// The only place the diagram touches AppModel; FlowDiagram itself takes
 /// plain values.
 ///
@@ -71,7 +71,7 @@ final class FlowModel {
         }
 
         // Rules and nodes from the connections: each one says which rule it
-        // matched and where it left (fix-overview-layout-and-flow). Every
+        // matched and where it left. Every
         // name is passed on; FlowSlots decides who is seated.
         let columns = FlowColumns.make(app.session.connections, ruleName: TrafficLabel.name(connectionRule:), maxRules: Self.pairSeats, maxNodes: Self.pairSeats)
         let named = { (list: [(name: String, rate: Double)]) in list.filter { $0.name != FlowSummary.otherName }.map { (id: $0.name, rate: $0.rate) } }

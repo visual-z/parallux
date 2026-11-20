@@ -66,15 +66,15 @@ final class LinkMonitor {
 @MainActor @Observable
 final class LinkStatsPoller {
     private(set) var groups: [LinkGroupStat] = []
-    /// Bytes per second per link tag, from the interfaces' counters (feat-link-view).
+    /// Bytes per second per link tag, from the interfaces' counters.
     private(set) var rates: [String: LinkRates.Rate] = [:]
-    /// One state per link tag, merged over every aggregate (feat-link-view).
+    /// One state per link tag, merged over every aggregate.
     private(set) var states: [String: LinkView.State] = [:]
     @ObservationIgnored private var task: Task<Void, Never>?
     /// Relay link tag → its carrier's link tag, asked every sample
     /// (AppModel sets it). A relay link's bytes ride on its carrier's
     /// interface, so its rate comes from the core's counters and is taken
-    /// off the carrier (RelayRates, feat-relay-links).
+    /// off the carrier (RelayRates).
     @ObservationIgnored var relayCarriers: () -> [String: String] = { [:] }
 
     /// Why 1 s: matches the status stream; per-link rates are shown at most once a second.

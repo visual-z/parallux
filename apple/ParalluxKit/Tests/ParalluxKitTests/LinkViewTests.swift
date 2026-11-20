@@ -83,7 +83,7 @@ import Testing
         #expect(FlowHold.next(current: [Int](), last: [Int](), lastAt: nil, now: t0).shown.isEmpty)
     }
 
-    /// feat-bond-direct: with 代理 off, direct traffic is bonded too, so the
+    /// With 代理 off, direct traffic is bonded too, so the
     /// only reason left to run 叠加 as 主备 is a missing server.
     @Test func aggregationOnlyBondRunsAsBond() {
         #expect(AggregationNotice.text(chosen: .bond, effective: .bond) == nil)

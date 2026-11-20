@@ -1,5 +1,5 @@
 /// When to reconnect a command-client stream the core closed (a reload ends
-/// every subscription; fix-stream-reconnect).
+/// every subscription).
 public enum StreamRetry {
     /// Why 6: 0.25 + 0.5 + 1 + 2 + 4 + 8 ≈ 16 s covers a reload that downloads
     /// rule-sets again; after that the error is real and shown. Assumed value;

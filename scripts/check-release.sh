@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checks that a built Parallux.app is fit to ship (docs/tasks/feat-release.md D2):
+# Checks that a built Parallux.app is fit to ship:
 # every bundle Developer ID signed with hardened runtime and a secure
 # timestamp, no get-task-allow, the -systemextension NE entitlement, and a
 # Sparkle feed and public key. Reports every problem before exiting 1.

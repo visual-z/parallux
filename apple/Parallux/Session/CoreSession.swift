@@ -190,7 +190,7 @@ final class CoreSession {
     /// Tests several groups over one client, one after another. One client
     /// per group, all at once, was what a "test everything" button did: with
     /// 19 groups, 19 concurrent probes of the command server, some of which
-    /// timed out (docs/tasks/fix-ui-details.md).
+    /// timed out.
     func urlTest(groups tags: [String]) {
         let pending = tags.filter { !testing.contains($0) }
         guard !pending.isEmpty else { return }
@@ -375,7 +375,7 @@ final class CoreSession {
     struct StreamValue<T>: @unchecked Sendable { let value: T }
 
     /// One command-client subscription. A core reload closes it from the
-    /// other side; `onLost` lets the session reconnect (fix-stream-reconnect).
+    /// other side; `onLost` lets the session reconnect.
     private final class Stream {
         private let client: LibboxCommandClient?
         private let handler: Handler

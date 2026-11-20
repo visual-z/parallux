@@ -9,7 +9,7 @@ final class LinkNotifier {
     private var authorized = false
 
     func update(groups: [LinkGroupStat], links: [LinkInterface], enabled: Bool) {
-        // Merged over every aggregate, so group order cannot flip it (feat-link-view).
+        // Merged over every aggregate, so group order cannot flip it.
         let current = LinkView.merge(groups).mapValues(\.healthy)
         defer { last = current }
         guard enabled, !last.isEmpty else { return }

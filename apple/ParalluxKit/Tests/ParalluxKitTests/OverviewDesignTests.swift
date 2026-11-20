@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import ParalluxKit
 
-/// docs/tasks/fix-overview-design-parity.md: the overview's flow diagram as
+/// The overview's flow diagram as
 /// design v0.2 draws it (width = rate against a capacity, bands meeting on the
 /// centre bar, particles), and the copy around it.
 @Suite struct OverviewDesignTests {
@@ -233,7 +233,6 @@ import Testing
         #expect(LinkStanding.disabled.badge == nil)
     }
 
-    // docs/tasks/fix-design-parity-followups.md
 
     @Test func overviewSubtitleGivesWayToAProblem() {
         #expect(OverviewCopy.subtitle(links: 2, mode: .bond, server: "东京 VPS", problem: "已连接，但读不到内核：EOF") == "已连接，但读不到内核：EOF")
@@ -280,7 +279,7 @@ import Testing
         // A rewritten direct outbound (two links or more) is still 直连; other items keep their key.
         #expect(OverviewCopy.topRule([row(0, rule: "rule_set=geosite-cn", outbound: "direct", type: "aggregate")]) == "命中最多：geosite-cn → 直连（100%）")
         // (The example was `protocol=dns` until the author chose to leave DNS
-        // lookups out, fix-pages-design-parity D1; the point here is the key=value form.)
+        // lookups out; the point here is the key=value form.)
         #expect(OverviewCopy.topRule([row(0, rule: "process_name=curl", outbound: "HK-03", type: "trojan"), row(1, rule: "", outbound: "Proxy", type: "selector")])
             == "命中最多：process_name=curl → HK-03（50%）")
         #expect(OverviewCopy.topRule([row(0, rule: "rule_set=[geosite-a geosite-b]", outbound: "Proxy", type: "selector")])
@@ -298,7 +297,6 @@ import Testing
         #expect(OverviewCopy.topRule([row]) == "命中最多：geosite-cn（100%）")
     }
 
-    // docs/tasks/perf-flow-animation.md
 
     @Test func flowEaseIsFrameRateIndependentAndLandsExactly() throws {
         var rng = SplitMix64(seed: 0xEA5E)
@@ -391,7 +389,6 @@ import Testing
         #expect(!half.isSettled)
     }
 
-    // docs/tasks/fix-panel-nodes-design-parity.md
 
     @Test func panelNodeSectionsFilterAndFold() throws {
         func group(_ tag: String, _ type: String, _ selected: String, _ items: [String]) -> OutboundGroupModel {
@@ -439,7 +436,6 @@ import Testing
         #expect(PanelNodeList.sections(groups, search: "   ", toggled: []) == all)
     }
 
-    // docs/tasks/fix-pages-design-parity.md
 
     @Test func topRuleLeavesDNSLookupsOut() {
         func row(_ id: Int, rule: String, destination: String, outbound: String, type: String) -> ConnectionRow {
@@ -507,7 +503,6 @@ import Testing
         }
     }
 
-    // docs/tasks/perf-flow-animation.md, D5
 
     @Test func flowMeshCoversEachBandExactly() throws {
         func area(_ t: [SIMD2<Float>]) -> Double {

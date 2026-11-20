@@ -194,7 +194,7 @@ public final class RelayLinkStore {
     }
 }
 
-/// Per-link rates when some links are relay links (feat-relay-links).
+/// Per-link rates when some links are relay links.
 ///
 /// A relay link's bytes travel over its carrier's interface, so the
 /// interface counters (InterfaceRates) show them on the carrier and nowhere

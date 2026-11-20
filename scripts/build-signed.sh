@@ -22,7 +22,7 @@ mkdir -p .build/logs
 log=.build/logs/build-signed.log
 # A unique build number per signed build: macOS keeps an installed system
 # extension whose version did not change, so without it a rebuilt extension
-# never replaces the running one (docs/tasks/fix-signed-run-hazards.md).
+# never replaces the running one.
 build_number="$(date -u +%Y%m%d%H%M%S)"
 if ! xcodebuild -project apple/Parallux.xcodeproj -scheme Parallux -configuration Debug \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath .build/xcode-signed \

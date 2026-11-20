@@ -1,4 +1,4 @@
-/// 聚合 and 代理 as two switches (feat-split-switches, decision 21).
+/// 聚合 and 代理 as two switches (decision 21).
 ///
 /// `stored` is what the user last ran with; what the switches show is that
 /// only while the tunnel runs. Off, both show off, and turning one on starts
@@ -42,10 +42,10 @@ public struct ConnectionSwitches: Codable, Equatable, Sendable, Hashable {
 }
 
 /// The note under the aggregation picker when the chosen mode is not the one
-/// in effect (feat-split-switches).
+/// in effect.
 public enum AggregationNotice {
     /// `physicalLinks`: how many enabled links are physical. 叠加 needs two
-    /// of them whatever the relay links add (feat-relay-links); callers
+    /// of them whatever the relay links add; callers
     /// that have no relay links may leave it out.
     public static func text(chosen: AggregationMode, effective: AggregationMode?, physicalLinks: Int = 2) -> String? {
         guard let effective, chosen == .bond, effective == .failover else { return nil }

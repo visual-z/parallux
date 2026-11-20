@@ -25,7 +25,7 @@ struct LinkRowView: View {
     let activity: String
     @Binding var isOn: Bool
     @Binding var isBackupOnly: Bool
-    /// Relay links only (feat-relay-links): look for the carrier again, and remove the link.
+    /// Relay links only: look for the carrier again, and remove the link.
     var recheck: (() -> Void)?
     var delete: (() -> Void)?
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The profile for 聚合 on, 代理 off (feat-split-switches): everything goes
+/// The profile for 聚合 on, 代理 off: everything goes
 /// out `direct`, which ProfileComposer then turns into the aggregate over the
 /// enabled links.
 ///

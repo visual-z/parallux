@@ -1,6 +1,6 @@
 import Foundation
 
-/// Everything feat-system-integration starts at launch, behind one call so
+/// Everything the system integration starts at launch, behind one call so
 /// AppDelegate stays a thin entry point: the shared model for intents and
 /// links, the widget snapshot writer, the core notification forwarder, and
 /// the /Applications check.

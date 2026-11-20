@@ -2,8 +2,8 @@ import ParalluxKit
 import SwiftUI
 import UserNotifications
 
-/// What Parallux needs before it can run, each with its next action
-/// (feat-setup-approval). Shown on the overview before the first connection
+/// What Parallux needs before it can run, each with its next action.
+/// Shown on the overview before the first connection
 /// and in Settings › Core.
 struct SetupSection: View {
     @Environment(AppModel.self) private var app

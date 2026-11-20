@@ -240,7 +240,7 @@ extension View {
 
 /// The design's `.icon-btn` as a pull-down: 「⋯」 on a 28 pt disc, the whole
 /// disc clickable. A borderless Menu draws only its glyph and is about as
-/// easy to hit (the author's screenshots, docs/tasks/fix-ui-details.md).
+/// easy to hit (the author's screenshots).
 struct DesignMoreMenu<Content: View>: View {
     @ViewBuilder var content: Content
     var body: some View {

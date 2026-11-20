@@ -10,7 +10,7 @@ import (
 )
 
 // One prober per link outbound, shared by every aggregate outbound that
-// uses it (feat-relay-links).
+// uses it.
 //
 // A composed profile has several aggregates over the same links (one in
 // place of each of the user's direct outbounds, plus parallux-links). Each

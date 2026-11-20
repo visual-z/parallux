@@ -21,4 +21,8 @@ keel status                # 任务卡看板
 
 签名构建：复制 `apple/Config/Local.xcconfig.example` 为 `Local.xcconfig` 并填 Team ID。
 
-工作方式见 [AGENTS.md](AGENTS.md)，设计与决策见 [PLAN.md](PLAN.md)。许可证 GPLv3。
+工作方式见 [AGENTS.md](AGENTS.md)，设计与决策见 [PLAN.md](PLAN.md)，手测步骤见 [docs/MANUAL-TEST.md](docs/MANUAL-TEST.md)。
+
+## 许可证
+
+[GPLv3](LICENSE)。内核基于 [sing-box](https://github.com/SagerNet/sing-box)（GPLv3，附加条款：衍生作品不得使用它的名称或暗示与它有关联）；其余第三方代码的出处见 [docs/LICENSES.md](docs/LICENSES.md)。

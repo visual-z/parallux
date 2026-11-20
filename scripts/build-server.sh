@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Cross-compiles the aggregation server for the Linux VPSes it runs on and
-# lints and runs its installer (gate step "server-build"; docs/tasks/feat-bond.md).
+# lints and runs its installer (gate step "server-build").
 #   scripts/build-server.sh           build into .build/server
 set -euo pipefail
 source "$(dirname "$0")/env.sh"

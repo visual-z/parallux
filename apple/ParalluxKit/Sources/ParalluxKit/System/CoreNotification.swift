@@ -2,7 +2,7 @@ import Foundation
 
 /// A notification the core asked for (libbox `PlatformInterface.send`). The
 /// system extension runs outside the user session, so it queues them and the
-/// app posts them (card feat-system-integration, 环境假设).
+/// app posts them.
 public struct CoreNotification: Codable, Equatable, Sendable {
     public var identifier: String
     public var title: String

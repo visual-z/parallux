@@ -20,7 +20,7 @@ import Testing
         #expect(try packetTunnelBlock().contains { $0.hasPrefix("NSSystemExtensionUsageDescription:") })
     }
 
-    /// fix-tunnel-start-sandbox: without these the sandboxed core gets EPERM on
+    /// Without these the sandboxed core gets EPERM on
     /// its first DNS query; SFM's signed extension carries both.
     @Test func theSystemExtensionCanOpenNetworkSockets() throws {
         let block = try packetTunnelBlock()

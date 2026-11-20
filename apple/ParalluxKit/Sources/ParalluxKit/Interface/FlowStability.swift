@@ -1,7 +1,7 @@
 import Foundation
 
 /// Keeps a diagram's nodes in place while traffic comes and goes
-/// (docs/tasks/fix-flow-stability.md, INV-10).
+/// (INV-10).
 ///
 /// The overview and the route map used to rebuild their nodes from the
 /// instantaneous rates every second: whoever had traffic right now, sorted by
@@ -24,7 +24,7 @@ public struct FlowSlots: Equatable, Sendable {
     }
 
     /// Seconds a silent node keeps its place. Why 15: page loads pause a few
-    /// seconds between bursts (feat-link-view saw 1–3 s); a node that is back
+    /// seconds between bursts (1–3 s measured); a node that is back
     /// within that should not have left. Assumed, then measured against the
     /// recording in FlowRecording (119 steps, 85 membership changes as the
     /// app drew it), with 4 seats: 0 s leaves 83 changes, 5 s 31, and 10, 15
@@ -129,7 +129,7 @@ public struct FlowSlots: Equatable, Sendable {
     }
 }
 
-/// The route map's rows in a steady order (docs/tasks/fix-flow-stability.md):
+/// The route map's rows in a steady order:
 /// the profile's own order, the rules that carry traffic above the ones that
 /// do not, and a rule changes section only after `FlowSlots.retention`.
 public struct RouteRows: Equatable, Sendable {
@@ -155,7 +155,7 @@ public struct RouteRows: Equatable, Sendable {
 }
 
 /// The overview's three columns from the live connections: rules and nodes,
-/// and the flow between them (docs/tasks/fix-overview-layout-and-flow.md).
+/// and the flow between them.
 public enum FlowColumns {
     public struct Flow: Equatable, Sendable {
         public var rule: String
@@ -223,8 +223,7 @@ public enum FlowColumns {
     }
 }
 
-/// Which palette colour each shown node gets (fix-overview-layout-and-flow,
-/// D8): a node keeps its colour while it is shown, shown nodes never share
+/// Which palette colour each shown node gets: a node keeps its colour while it is shown, shown nodes never share
 /// one (until there are more of them than colours), and a colour a node
 /// gives up goes to the next newcomer. By seat, not by hashing the name: a
 /// hash would give two rules on screen the same colour.

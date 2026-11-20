@@ -72,7 +72,7 @@ func (c *countedConn) Upstream() any { return c.Conn }
 // countedPacketConn adds a relay link's UDP traffic to its counters, and
 // counts as one active connection until closed.
 //
-// Only relay links get one (feat-relay-links): a physical link's bytes are
+// Only relay links get one: a physical link's bytes are
 // read from its interface, which sees everything, and wrapping its packet
 // conns would hide sing's fast paths for no information. A relay link's
 // bytes are mixed into its carrier's interface, so these counters are the

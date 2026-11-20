@@ -164,7 +164,6 @@ private func group(_ tag: String, _ type: String, selected: String, _ items: [St
     }
 }
 
-/// docs/tasks/perf-routing-relayout.md
 @Suite struct ExitChainsTests {
     private func group(_ tag: String, _ type: String, selected: String, _ items: [String]) -> OutboundGroupModel {
         OutboundGroupModel(tag: tag, type: type, selectable: type == "selector", selected: selected,

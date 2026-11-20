@@ -1,6 +1,6 @@
 import Foundation
 
-/// System-extension activation as a pure state machine (feat-setup-approval).
+/// System-extension activation as a pure state machine.
 ///
 /// macOS calls `requestNeedsUserApproval` first and, once the user switches
 /// the extension on in System Settings, `didFinishWithResult` on the same

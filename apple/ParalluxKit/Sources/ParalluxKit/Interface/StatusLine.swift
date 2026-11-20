@@ -34,8 +34,8 @@ public enum StatusLine {
     }
 }
 
-/// A one-shot action sent to the core, and what to say when it fails
-/// (docs/tasks/fix-ui-details.md). The sentence names the action; the
+/// A one-shot action sent to the core, and what to say when it fails.
+/// The sentence names the action; the
 /// transport's own error text (gRPC status, deadlines) is not shown: it is
 /// long, says nothing a user can act on, and once read as 「读不到内核」.
 public enum CoreAction: CaseIterable, Sendable {

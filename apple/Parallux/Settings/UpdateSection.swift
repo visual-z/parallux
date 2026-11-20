@@ -2,7 +2,7 @@ import ParalluxKit
 import SwiftUI
 
 /// 设置 › 通用：自动检查更新、检查更新、更新渠道、上次检查（设计稿 v0.2；
-/// 设计稿的叫法是词表禁词，见 docs/tasks/feat-release.md 来源）。
+/// 设计稿的叫法是词表禁词，这里用「更新渠道」）。
 struct UpdateSection: View {
     @State private var updater = UpdaterModel.shared
 

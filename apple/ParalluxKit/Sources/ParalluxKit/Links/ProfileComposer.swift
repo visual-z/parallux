@@ -27,8 +27,8 @@ public struct LinkPreferences: Codable, Equatable, Sendable {
 /// without a detour pointed at the aggregate.
 public enum ProfileComposer {
     public static let aggregateTag = "parallux-links"
-    /// The user's direct outbounds go through the bond too (feat-bond-direct,
-    /// author 2026-11-20); the core keeps LAN and the server itself off it.
+    /// The user's direct outbounds go through the bond too (decision 23);
+    /// the core keeps LAN and the server itself off it.
     public static let bondCarriesDirect = true
     public static func linkTag(_ interface: String) -> String { "link-\(interface)" }
 
@@ -111,8 +111,8 @@ public enum ProfileComposer {
             return outbound
         }
 
-        // The transport has exactly two legs and relay links are never legs
-        // (feat-bond, feat-relay-links): one physical link cannot bond.
+        // The transport has exactly two legs and relay links are never legs:
+        // one physical link cannot bond.
         let legs = physical.prefix(2).map { linkTag($0.name) }
         let useBond = mode == .bond && bond != nil && legs.count == 2
         /// `carriesBond`: whether this aggregate goes through the aggregation
