@@ -59,6 +59,8 @@ baseline: 24eef98c918d
   - 检：test `TestTheComposedModesProfilePassesLibboxCheckConfig`
 - **D7** 被模式规则决定的连接在概览和连接页里叫「直连模式」「全局模式」。
   - 检：test `connectionsDecidedByAModeAreNamedAfterIt`
+- **D11** 直连模式下域名交给订阅自己的本地 DNS 服务器解析（`type: local`，或 1.12 之前写法的 `address: local`），规则排在订阅的 DNS 规则最前面，其余 DNS 规则顺序不变；订阅没有本地服务器、服务器没有 tag 或没有 dns 一节时什么都不加。
+  - 检：test `directModeResolvesNamesWithTheProfilesLocalServer`
 - **D8** 计数只因本卡的新测试增加；gate 全绿。
   - 检：cmd `keel gate`
 - **D9** 不弱化既有测试。
@@ -73,6 +75,7 @@ baseline: 24eef98c918d
   - 在界面上自己做一个三选一，切换时换一份配置重载。重载会断开所有连接，而内核的模式切换只影响新连接；还要自己记住选中的模式。
   - 只在界面上把另外两项画出来但置灰。作者要的是能切。
 - **全局模式不带走私网地址。** 写成 `and(全局, 非私网)`：私网目标落到订阅自己的规则，和规则模式下一样。不这样的话切到全局，NAS、打印机、路由器管理页就都发给代理了。不在两条规则前面单加一条「私网直连」：那会改变规则模式下的行为，而规则模式必须和订阅写的一模一样。
+- **和竞品不同的一处**：GUI.for.SingBox 与 sing-box-subscribe 的全局模式把私网地址也发给代理（它们的私网规则排在全局规则后面）。这里选择不带走私网，理由见上一条；这是实现的选择，待作者确认。Surge 的全局模式是否绕开局域网，手册里没有查到。
 - **全局去哪里**：取订阅「其余流量」去的地方（`route.final`），因为那是订阅作者心目中的「代理」；它指向直连或拦截（白名单式的订阅）时退到第一个分组。
 - **代理开关关着时不加。** 那时用的是全直连的配置，没有可选的去向；路由模式只剩「规则」一项是对的。诊断页自带的探测配置也不加（按原样运行）。
 - 自己定义了模式的订阅不动，哪怕它只定义了一种：订阅作者写了模式规则，就是他要的行为。
@@ -99,7 +102,7 @@ D3 与 D7 在冻结点上就是绿的（桩什么都不改；模式规则的名�
 ```diff keel-inject(swift) aProfileWithItsOwnModesIsLeftAlone
 --- a/apple/ParalluxKit/Sources/ParalluxKit/Routing/RouteModes.swift
 +++ b/apple/ParalluxKit/Sources/ParalluxKit/Routing/RouteModes.swift
-@@ -101 +101 @@
+@@ -118 +118 @@
 -            return definesModes((rule["rules"] as? [[String: Any]]) ?? [])
 +            return false
 ```
@@ -110,6 +113,16 @@ D3 与 D7 在冻结点上就是绿的（桩什么都不改；模式规则的名�
 @@ -264 +264 @@
 -        if let mode = items["clash_mode"]?.first { return "\(RouteMode.title(mode))模式" }
 +        if let mode = items["no_such_key"]?.first { return "\(RouteMode.title(mode))模式" }
+```
+
+D11 是冻结之后加的：不加那条 DNS 规则，测试必须红。
+
+```diff keel-inject(swift) directModeResolvesNamesWithTheProfilesLocalServer
+--- a/apple/ParalluxKit/Sources/ParalluxKit/Routing/RouteModes.swift
++++ b/apple/ParalluxKit/Sources/ParalluxKit/Routing/RouteModes.swift
+@@ -100 +100 @@
+-            dns["rules"] = [["clash_mode": direct, "server": local]] + dnsRules
++            dns["rules"] = dnsRules
 ```
 
 D5 测的是 sing-box 的路由器在这两条规则下的行为，不是本仓库的代码，没有可注入的故障；它在动工前就跑过（见环境假设），用途是保证规则的形状在真实内核里成立。
@@ -123,6 +136,7 @@ D5 测的是 sing-box 的路由器在这两条规则下的行为，不是本仓�
 
 ## 修订
 
+- D11（冻结之后加的判据，只加严）：竞品调研回来后补的。GUI.for.SingBox 的默认规则（`frontend/src/constant/profile.ts`）和 sing-box-subscribe 的模板都给模式规则配了对应的 DNS 规则；人们切到直连往往正是因为节点不通，这时经节点的 DNS 服务器什么都解析不出来。随之改了 `aProfileWithoutModesGetsDirectAndGlobal` 里「其余部分不变」的断言：dns 一节现在多一条规则，改为分别断言服务器不变、规则恰好是这一条，比原来更严。夹具重新生成，diff 是 dns 下多了六行。
 - 测试修正（不改判据）：`addingModesKeepsEveryRuleAndNeverDangles` 里「这份订阅有没有自己的模式」原先按抽到的规则算，而八轮里有一轮生成的订阅根本没有规则，抽到什么都不算数，测试自己记错了账。改为按订阅实际的规则算。D4 的文字未动。
 
 ## 交接

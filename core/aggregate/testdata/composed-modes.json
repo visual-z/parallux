@@ -1,5 +1,11 @@
 {
   "dns" : {
+    "rules" : [
+      {
+        "clash_mode" : "Direct",
+        "server" : "local"
+      }
+    ],
     "servers" : [
       {
         "tag" : "local",

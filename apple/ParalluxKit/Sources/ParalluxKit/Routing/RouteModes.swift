@@ -90,8 +90,25 @@ public enum RouteModes {
         rules.insert(contentsOf: added, at: position)
         route["rules"] = rules
         root["route"] = route
+
+        // 直连 is what people switch to when the node is down, and then a
+        // DNS server reached through the node resolves nothing. Names go to
+        // the profile's local server in that mode, when it has one
+        // (GUI.for.SingBox and sing-box-subscribe pair their mode rules
+        // with DNS rules the same way). 全局 keeps the profile's DNS rules.
+        if var dns = root["dns"] as? [String: Any], let local = localServer(dns) {
+            dns["rules"] = [["clash_mode": direct, "server": local]] + dnsRules
+            root["dns"] = dns
+        }
         guard let data = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys]) else { return profile }
         return String(decoding: data, as: UTF8.self)
+    }
+
+    /// The tag of the profile's DNS server that asks the system resolver:
+    /// `type: local`, or `address: local` in the format before sing-box 1.12.
+    static func localServer(_ dns: [String: Any]) -> String? {
+        let servers = (dns["servers"] as? [[String: Any]]) ?? []
+        return servers.first { $0["type"] as? String == "local" || $0["address"] as? String == "local" }?["tag"] as? String
     }
 
     /// Whether any rule, or a rule inside a logical rule, names a mode.

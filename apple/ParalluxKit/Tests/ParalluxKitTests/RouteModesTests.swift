@@ -64,10 +64,14 @@ private func globalRule(_ target: String) -> String {
         #expect(text(now[2]) == directRule)
         #expect(text(now[3]) == globalRule("Proxy"), "全局 goes where the profile sends everything else, and leaves the LAN to the profile's rules")
         #expect(now[4...].map(text) == was[2...].map(text), "the profile's own rules follow, in order")
-        // Nothing else changes.
+        // Nothing else changes, except that names resolve locally in 直连.
         var a = try root(before), b = try root(after)
         a["route"] = nil; b["route"] = nil
+        let dnsBefore = try #require(a.removeValue(forKey: "dns") as? [String: Any])
+        let dnsAfter = try #require(b.removeValue(forKey: "dns") as? [String: Any])
         #expect(text(a) == text(b))
+        #expect(text(dnsAfter["servers"] as Any) == text(dnsBefore["servers"] as Any))
+        #expect(text(dnsAfter["rules"] as Any) == #"[{"clash_mode":"Direct","server":"local"}]"#)
         #expect((try root(after)["route"] as? [String: Any])?["final"] as? String == "Proxy")
     }
 
@@ -191,6 +195,28 @@ private func globalRule(_ target: String) -> String {
             for rule in now { if let outbound = rule["outbound"] as? String { #expect(tags.contains(outbound), "a rule names \(outbound), which does not exist") } }
         }
         #expect(injected > 100, "the generator rarely produced a profile without modes (\(injected))")
+    }
+
+    /// 直连 is where people go when the node is down; a DNS server reached
+    /// through the node would then resolve nothing.
+    @Test func directModeResolvesNamesWithTheProfilesLocalServer() throws {
+        func dnsRules(_ dns: String) throws -> [String] {
+            let after = RouteModes.add(to: profile(outbounds: usualOutbounds, rules: usualRules, dns: dns))
+            return ((try root(after)["dns"] as? [String: Any])?["rules"] as? [[String: Any]] ?? []).map(text)
+        }
+        let rule = { (server: String) in #"{"clash_mode":"Direct","server":"\#(server)"}"# }
+        // In front of the profile's own DNS rules, which stay in order.
+        #expect(try dnsRules(#"{"servers": [{"type": "https", "tag": "remote", "server": "dns.example.com", "detour": "Proxy"}, {"type": "local", "tag": "system"}], "rules": [{"rule_set": "geosite-cn", "server": "system"}, {"port": 53, "server": "remote"}]}"#)
+            == [rule("system"), #"{"rule_set":"geosite-cn","server":"system"}"#, #"{"port":53,"server":"remote"}"#])
+        // The format before sing-box 1.12.
+        #expect(try dnsRules(#"{"servers": [{"tag": "remote", "address": "https://dns.example.com/dns-query"}, {"tag": "old-local", "address": "local"}]}"#) == [rule("old-local")])
+        // No local server, a local server without a tag, or no servers: nothing is added.
+        #expect(try dnsRules(#"{"servers": [{"type": "https", "tag": "remote", "server": "dns.example.com"}]}"#).isEmpty)
+        #expect(try dnsRules(#"{"servers": [{"type": "local"}]}"#).isEmpty)
+        #expect(try dnsRules("{}").isEmpty)
+        // A profile without a dns section gets none.
+        let bare = RouteModes.add(to: #"{"outbounds": [{"type": "direct", "tag": "direct"}]}"#)
+        #expect(try root(bare)["dns"] == nil)
     }
 
     /// The names the overview and the connections page show for a
