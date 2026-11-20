@@ -159,13 +159,18 @@ struct RouteModeCard: View {
                 .padding(.bottom, 4)
             }
             if let topRule {
-                // The share has its place on the label's row; the rule and
-                // where it leads get the full width below, and two lines.
+                // The share has its place on the label's row; the rule, by
+                // the name the diagram gives it, and where it leads each get
+                // a line of the full width. The condition itself is in the
+                // tooltip.
                 VStack(alignment: .leading, spacing: 1) {
                     CardRow(label: "命中最多", value: topRule.percent)
-                    Text(topRule.route).font(.subheadline.weight(.medium)).lineLimit(2).truncationMode(.middle)
-                        .help(topRule.route)
+                    Text(topRule.name).font(.subheadline.weight(.medium)).lineLimit(1)
+                    if !topRule.exit.isEmpty {
+                        Text("→ \(topRule.exit)").font(.subheadline).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    }
                 }
+                .help(topRule.route)
                 .padding(.bottom, 4)
             }
             row("聚合", isOn: $aggregation).disabled(aggregationDisabled)

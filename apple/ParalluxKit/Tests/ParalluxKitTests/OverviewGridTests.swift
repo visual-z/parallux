@@ -83,6 +83,11 @@ private let gib: Int64 = 1 << 30
         #expect(OverviewCopy.topRuleParts([row(rule: "", outbound: "Proxy")]) == nil)
         #expect(OverviewCopy.topRuleParts([]) == nil)
         #expect(OverviewCopy.topRule([]) == nil)
+        // The card shows the rule by the name the diagram gives it.
+        #expect(parts.name == "中国大陆")
+        #expect(OverviewCopy.TopRule(rule: "rule_set=[geosite-openai geosite-anthropic]", exit: "DE-01", share: 19).name == "OpenAI / Anthropic")
+        #expect(OverviewCopy.TopRule(rule: "domain_suffix=[example.org]", exit: "DE-01", share: 5).name == "example.org")
+        #expect(OverviewCopy.TopRule(rule: "geosite-unheard-of", exit: "", share: 5).name == "unheard-of", "an unknown set keeps its own name")
         // A hit without an exit name reads as the rule alone.
         #expect(OverviewCopy.TopRule(rule: "port=22", exit: "", share: 100).route == "port=22")
     }

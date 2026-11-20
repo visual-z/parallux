@@ -61,6 +61,14 @@ public enum OverviewCopy {
             self.exit = exit
             self.share = share
         }
+        /// The rule as the flow diagram and the route page call it
+        /// (「OpenAI / Anthropic」, 「中国大陆」): the card shows this, since
+        /// the condition itself (`rule_set=[geosite-openai geosite-…]`) is
+        /// long and gets cut in the middle.
+        public var name: String {
+            rule.contains("=") ? TrafficLabel.name(connectionRule: rule) : TrafficLabel.setName(rule)
+        }
+
         /// 「geosite‑cn → 直连」, or the rule alone without an exit.
         public var route: String { exit.isEmpty ? rule : "\(rule) → \(exit)" }
         public var percent: String { "\(share)%" }
