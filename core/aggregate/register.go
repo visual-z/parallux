@@ -73,7 +73,9 @@ type Outbound struct {
 	tags    []string
 	backup  []bool
 	bondTag string
-	targets []M.Socksaddr
+	// bondBypass: hosts kept off the bond besides local ones (bondEligible).
+	bondBypass []string
+	targets    []M.Socksaddr
 
 	links    []adapter.Outbound
 	bond     adapter.Outbound
@@ -135,14 +137,15 @@ func newOutbound(manager adapter.OutboundManager, logger log.ContextLogger, tag 
 		dependencies = append(dependencies, options.Bond)
 	}
 	return &Outbound{
-		Adapter: outbound.NewAdapter(Type, tag, []string{N.NetworkTCP, N.NetworkUDP}, dependencies),
-		manager: manager,
-		logger:  logger,
-		mode:    options.Mode,
-		tags:    options.Links,
-		backup:  backup,
-		bondTag: options.Bond,
-		targets: targets,
+		Adapter:    outbound.NewAdapter(Type, tag, []string{N.NetworkTCP, N.NetworkUDP}, dependencies),
+		manager:    manager,
+		logger:     logger,
+		mode:       options.Mode,
+		tags:       options.Links,
+		backup:     backup,
+		bondTag:    options.Bond,
+		bondBypass: slices.Clone(options.BondBypass),
+		targets:    targets,
 	}, nil
 }
 
@@ -206,7 +209,7 @@ func (o *Outbound) References() []string {
 }
 
 func (o *Outbound) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	if o.bond != nil && network == N.NetworkTCP {
+	if o.bond != nil && network == N.NetworkTCP && bondEligible(destination, o.bondBypass) {
 		conn, err := o.bond.DialContext(ctx, network, destination)
 		if err == nil {
 			return conn, nil

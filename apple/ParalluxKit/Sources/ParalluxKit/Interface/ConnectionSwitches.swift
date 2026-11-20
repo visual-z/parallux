@@ -44,15 +44,6 @@ public struct ConnectionSwitches: Codable, Equatable, Sendable, Hashable {
 /// The note under the aggregation picker when the chosen mode is not the one
 /// in effect (feat-split-switches).
 public enum AggregationNotice {
-    /// `proxy`: the 代理 switch. Off, everything is direct traffic, which
-    /// never goes through the server (fix-aggregate-routing), so 叠加 runs as
-    /// 主备 even with a server set.
-    public static func text(chosen: AggregationMode, effective: AggregationMode?, proxy: Bool) -> String? {
-        guard !proxy else { return text(chosen: chosen, effective: effective) }
-        guard effective != nil, chosen == .bond else { return nil }
-        return "只开聚合时，直连流量不经过聚合服务器，暂按主备运行"
-    }
-
     public static func text(chosen: AggregationMode, effective: AggregationMode?) -> String? {
         guard let effective, chosen == .bond, effective == .failover else { return nil }
         return "尚未设置聚合服务器，暂按主备运行"

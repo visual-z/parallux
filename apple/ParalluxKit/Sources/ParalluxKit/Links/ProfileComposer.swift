@@ -27,8 +27,9 @@ public struct LinkPreferences: Codable, Equatable, Sendable {
 /// without a detour pointed at the aggregate.
 public enum ProfileComposer {
     public static let aggregateTag = "parallux-links"
-    /// Whether the user's direct outbounds go through the bond (feat-bond-direct). stub
-    public static let bondCarriesDirect = false
+    /// The user's direct outbounds go through the bond too (feat-bond-direct,
+    /// author 2026-11-20); the core keeps LAN and the server itself off it.
+    public static let bondCarriesDirect = true
     public static func linkTag(_ interface: String) -> String { "link-\(interface)" }
 
     /// Outbound types that carry their own server connection and can take a detour.
@@ -75,10 +76,10 @@ public enum ProfileComposer {
         }
 
         let useBond = mode == .bond && bond != nil
-        /// `carriesBond`: only the nodes' detour (parallux-links) goes through
-        /// the aggregation server. Traffic the profile sends "direct" (LAN,
-        /// domestic) stays off it: the transport is unencrypted, and the design
-        /// draws 直连 as its own exit (docs/tasks/fix-aggregate-routing.md).
+        /// `carriesBond`: whether this aggregate goes through the aggregation
+        /// server in 叠加. Both the nodes' detour and the direct replacements
+        /// do (bondCarriesDirect); `bond_bypass` names the server so the core
+        /// does not send connections to it through itself.
         func aggregate(tag: String, carriesBond: Bool) -> [String: Any] {
             let bonded = useBond && carriesBond
             var outbound: [String: Any] = [
@@ -88,7 +89,10 @@ public enum ProfileComposer {
             ]
             let backupTags = links.filter { backup.contains($0.name) }.map { linkTag($0.name) }
             if !backupTags.isEmpty { outbound["backup"] = backupTags }
-            if bonded, let bond { outbound["bond"] = bond.tag }
+            if bonded, let bond {
+                outbound["bond"] = bond.tag
+                if case let .string(host)? = bond.outbound["server"], !host.isEmpty { outbound["bond_bypass"] = [host] }
+            }
             return outbound
         }
 
@@ -97,7 +101,7 @@ public enum ProfileComposer {
         outbounds = outbounds.map { outbound in
             guard outbound["type"] as? String == "direct", let tag = outbound["tag"] as? String,
                   outbound["bind_interface"] == nil else { return outbound }
-            return aggregate(tag: tag, carriesBond: false)
+            return aggregate(tag: tag, carriesBond: bondCarriesDirect)
         }
         // Nodes without a detour dial their server through the links.
         outbounds = outbounds.map { outbound in

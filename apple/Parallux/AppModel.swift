@@ -115,16 +115,14 @@ final class AppModel {
     }
 
     /// The note under the aggregation picker, when the chosen mode is not the one running.
-    var aggregationNotice: String? {
-        AggregationNotice.text(chosen: linkSettings.value.mode, effective: effectiveMode, proxy: linkSettings.value.switches.proxy)
-    }
+    var aggregationNotice: String? { AggregationNotice.text(chosen: linkSettings.value.mode, effective: effectiveMode) }
 
     /// The aggregation mode actually in effect: needs 聚合 on and two links, and 叠加 needs a server.
     var effectiveMode: AggregationMode? {
         guard linkSettings.value.switches.aggregation, enabledLinks.count >= 2 else { return nil }
         let mode = linkSettings.value.mode
-        // 叠加 carries only node traffic; with 代理 off there is none (feat-link-view).
-        if mode == .bond, bondProvider(linkSettings.value) == nil || !linkSettings.value.switches.proxy { return .failover }
+        // 叠加 carries direct traffic too (feat-bond-direct); only a missing server makes it 主备.
+        if mode == .bond, bondProvider(linkSettings.value) == nil { return .failover }
         return mode
     }
 
