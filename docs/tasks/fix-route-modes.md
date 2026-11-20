@@ -88,7 +88,42 @@ keel gate --record docs/tasks/fix-route-modes.md
 
 ## 证据
 
+RED(swift): e2006f1 aProfileWithoutModesGetsDirectAndGlobal  # D1
+RED(swift): e2006f1 modeRulesComeAfterTheRulesThatOnlyPrepareAConnection  # D1
+RED(swift): e2006f1 globalTargetsTheProfilesMainProxy  # D2
+RED(swift): e2006f1 addingModesKeepsEveryRuleAndNeverDangles  # D4
+RED(swift): e2006f1 composedModesFixtureMatchesTheGenerator  # D6
+
+D3 与 D7 在冻结点上就是绿的（桩什么都不改；模式规则的名字此前已经能认），用故障补丁证明这两个测试抓得住东西：不再看逻辑规则里面的模式，D3 必须红；去掉按模式起名，D7 必须红。
+
+```diff keel-inject(swift) aProfileWithItsOwnModesIsLeftAlone
+--- a/apple/ParalluxKit/Sources/ParalluxKit/Routing/RouteModes.swift
++++ b/apple/ParalluxKit/Sources/ParalluxKit/Routing/RouteModes.swift
+@@ -101 +101 @@
+-            return definesModes((rule["rules"] as? [[String: Any]]) ?? [])
++            return false
+```
+
+```diff keel-inject(swift) connectionsDecidedByAModeAreNamedAfterIt
+--- a/apple/ParalluxKit/Sources/ParalluxKit/Routing/RouteModel.swift
++++ b/apple/ParalluxKit/Sources/ParalluxKit/Routing/RouteModel.swift
+@@ -264 +264 @@
+-        if let mode = items["clash_mode"]?.first { return "\(RouteMode.title(mode))模式" }
++        if let mode = items["no_such_key"]?.first { return "\(RouteMode.title(mode))模式" }
+```
+
+D5 测的是 sing-box 的路由器在这两条规则下的行为，不是本仓库的代码，没有可注入的故障；它在动工前就跑过（见环境假设），用途是保证规则的形状在真实内核里成立。
+
+失败断言原文（RED 时，桩实现下）：
+
+- `Expectation failed: now.count == was.count + 2`
+- `Expectation failed: try position(nil) == 0`
+- `Expectation failed: try targets(usualOutbounds, final: "Proxy").global == "Proxy"`
+- `core/aggregate/testdata/composed-modes.json is missing`
+
 ## 修订
+
+- 测试修正（不改判据）：`addingModesKeepsEveryRuleAndNeverDangles` 里「这份订阅有没有自己的模式」原先按抽到的规则算，而八轮里有一轮生成的订阅根本没有规则，抽到什么都不算数，测试自己记错了账。改为按订阅实际的规则算。D4 的文字未动。
 
 ## 交接
 

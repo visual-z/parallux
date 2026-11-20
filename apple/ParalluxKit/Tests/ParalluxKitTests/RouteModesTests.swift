@@ -182,7 +182,9 @@ private func globalRule(_ target: String) -> String {
                 return json != directRule && !(rule["type"] as? String == "logical" && json.contains(#""clash_mode":"Global""#) && json.contains(#""invert":true"#))
             }
             #expect(own.map(text) == was, "the profile's rules, in order")
-            let hadModes = picked.contains { $0.contains("clash_mode") }
+            // From the rules the profile really has: one round in eight has
+            // no rules at all, whatever was picked.
+            let hadModes = was.contains { $0.contains("clash_mode") }
             #expect(now.count == was.count + (hadModes ? 0 : 2))
             if !hadModes { injected += 1 }
             let tags = Set(try outbounds(after).compactMap { $0["tag"] as? String })

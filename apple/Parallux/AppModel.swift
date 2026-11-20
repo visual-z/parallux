@@ -213,7 +213,8 @@ final class AppModel {
     }
 
     /// 代理 off swaps the profile for its direct form; route overrides next
-    /// (they name the profile's own outbounds), then 聚合 adds the links.
+    /// (they name the profile's own outbounds), then the route modes, then
+    /// 聚合 adds the links.
     /// `probe`: diagnostics' own profile, run as given whatever the switches say.
     func compose(_ content: String, probe: Bool = false) throws -> String {
         let settings = linkSettings.value
@@ -222,7 +223,12 @@ final class AppModel {
         let rerouted = proxy
             ? RouteOverrides.apply(routeOverrides.overrides(for: profiles.store.selectedID), to: base).config
             : base
-        return try ProfileComposer.compose(rerouted, links: settings.switches.aggregation ? enabledLinks : [],
+        // 规则 / 全局 / 直连 for a profile that defines no modes (RouteModes).
+        // After the overrides, which go by rule index; before the links, so
+        // direct mode uses the aggregate. Not with 代理 off (everything is
+        // direct already) and not for the probe profile (run as given).
+        let withModes = settings.switches.proxy && !probe ? RouteModes.add(to: rerouted) : rerouted
+        return try ProfileComposer.compose(withModes, links: settings.switches.aggregation ? enabledLinks : [],
                                            backup: settings.preferences.backup,
                                            mode: settings.mode, bond: bondProvider(settings),
                                            relays: settings.switches.aggregation ? composedRelays : [])
