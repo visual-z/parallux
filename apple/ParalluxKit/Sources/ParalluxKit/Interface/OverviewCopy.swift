@@ -66,7 +66,7 @@ public enum OverviewCopy {
         /// the condition itself (`rule_set=[geosite-openai geosite-…]`) is
         /// long and gets cut in the middle.
         public var name: String {
-            rule.contains("=") ? TrafficLabel.name(connectionRule: rule) : TrafficLabel.setName(rule)
+            rule
         }
 
         /// 「geosite‑cn → 直连」, or the rule alone without an exit.
