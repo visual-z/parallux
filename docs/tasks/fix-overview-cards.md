@@ -1,6 +1,6 @@
 ---
 type: fix
-status: doing        # todo | doing | blocked | awaiting-author | done
+status: awaiting-author        # todo | doing | blocked | awaiting-author | done
 weight: full
 created: 2026-11-20
 baseline: 355e86af57ea
@@ -93,9 +93,14 @@ D4 在冻结点上就是绿的（桩里已经加了字段），用故障补丁�
 - `Expectation failed: OverviewCopy.exitDetail(rate: 125_000) == "1.0 Mbps"`
 - `Expectation failed: SubscriptionUsage.parse(header: "upload=1073741824; download=2147483648; total=107374182400; expire=179…`
 - `Expectation failed: quota.text == "已用 \(RateFormat.bytes(25 * gib)) / \(RateFormat.bytes(100 * gib))"`
+GATE: ca2e06283fe4+dirty ok tree:283f1724838d build=0 vet=0 test=0[625p/0f] fmt=0 swift-test=0[179p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-20)
 
 ## 修订
 
+- 装到本机后看到用量文字在 " / " 处折成两行（「本次会话已用 5.3 MB / 无限」，卡片宽约 217 pt）：圆环从 52 pt 改为 46 pt，文字允许先缩到 85% 再折行。只动了版面，D3 钉的文字没变。
+
 ## 交接
 
-开卡：桩与红测试已提交。下一步实现解析、用量摘要、下载时取响应头、卡片版面。
+- 做了什么：出口下面只写速率；流量卡的曲线占满卡片剩余高度；配置卡底部加了用量环（有配额画占比和百分比，没有配额画空环和 ∞）与「已用 X / Y」；下载或更新订阅时读 `subscription-userinfo` 存进配置。2026-11-20 装到本机截图看过一次（分流、两条线路、窗口默认大小）：三张卡片等高、没有空白，出口只有速率。
+- 卡在哪：D7 等作者看。两件事我没验证：窗口拉窄到卡片竖排时的样子；真实订阅返回的用量——作者现有的订阅是旧版本更新的，还没有用量，更新一次之后才会显示订阅报的数字，在那之前显示的是「本次会话已用 … / 无限」。订阅如果不发这个响应头，就一直是后者。
+- 下一步：作者在配置页点一次更新，回概览看用量是否与订阅面板一致。
