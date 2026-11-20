@@ -261,7 +261,7 @@ public enum TrafficLabel {
             }
         }
         if let cidr = items["ip_cidr"]?.first { return cidr }
-        if let mode = items["clash_mode"]?.first { return "\(RouteMode.title(mode))模式" }
+        if let mode = items["no_such_key"]?.first { return "\(RouteMode.title(mode))模式" }
         if let port = items["port"]?.first { return "端口 \(port)" }
         return rule.condition.isEmpty ? "规则 \(rule.index + 1)" : rule.condition
     }
