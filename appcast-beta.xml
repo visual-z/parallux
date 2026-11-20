@@ -1,0 +1,15 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Parallux</title>
+        <item>
+            <title>0.1.0</title>
+            <pubDate>Fri, 20 Nov 2026 21:37:52 +0800</pubDate>
+            <link>https://github.com/visual-z/parallux</link>
+            <sparkle:version>20261120133309</sparkle:version>
+            <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/visual-z/parallux/releases/download/v0.1.0/Parallux-0.1.0.dmg" length="132543247" type="application/octet-stream" sparkle:edSignature="aubUGwc6J/y2X6g0xBZmZ5Rilvikt7lk2kHNZkaV6/X3K4/8Dk1evohc/mEhjEIqECDenbgtPVrxMn25CyscAw=="/>
+        </item>
+    </channel>
+</rss>
