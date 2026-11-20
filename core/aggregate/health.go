@@ -2,6 +2,7 @@ package aggregate
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -72,17 +73,65 @@ func probeLoop(ctx context.Context, dialer N.Dialer, targets []M.Socksaddr, heal
 }
 
 // probeOnce succeeds when any target accepts a TCP connection over the link.
-// The targets share one probeTimeout so a dead link costs at most one tick.
+//
+// Every target is dialed at once, and a target whose dial is still pending at
+// probeRetryAfter is dialed once more: a lost SYN hangs rather than errors, and
+// its retransmit comes too late (fix-probe-lost-syn). All dials share one
+// probeTimeout, so a dead link still costs at most one tick, and a link whose
+// dials all error out is judged at once. At most 2 × len(targets) dials run,
+// and all of them have returned before probeOnce does.
 func probeOnce(ctx context.Context, dialer N.Dialer, targets []M.Socksaddr) bool {
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
-	defer cancel()
-	for _, target := range targets {
-		conn, err := dialer.DialContext(ctx, N.NetworkTCP, target)
-		if err == nil {
-			conn.Close()
-			return true
-		}
-		if ctx.Err() != nil {
+	var dials sync.WaitGroup
+	defer func() {
+		cancel()
+		dials.Wait()
+	}()
+	type result struct {
+		target int
+		ok     bool
+	}
+	// Room for every dial, so none blocks on send after probeOnce returned.
+	results := make(chan result, 2*len(targets))
+	dial := func(target int) {
+		dials.Add(1)
+		go func() {
+			defer dials.Done()
+			conn, err := dialer.DialContext(ctx, N.NetworkTCP, targets[target])
+			if err == nil {
+				conn.Close()
+			}
+			results <- result{target, err == nil}
+		}()
+	}
+	// firstPending[i]: target i's first dial has not returned (a candidate
+	// for the retry). running: dials not yet returned.
+	firstPending := make([]bool, len(targets))
+	running := 0
+	for i := range targets {
+		dial(i)
+		firstPending[i] = true
+		running++
+	}
+	retry := time.NewTimer(probeRetryAfter)
+	defer retry.Stop()
+	for running > 0 {
+		select {
+		case r := <-results:
+			if r.ok {
+				return true
+			}
+			firstPending[r.target] = false
+			running--
+		case <-retry.C:
+			for i := range targets {
+				if firstPending[i] {
+					firstPending[i] = false
+					dial(i)
+					running++
+				}
+			}
+		case <-ctx.Done():
 			return false
 		}
 	}
