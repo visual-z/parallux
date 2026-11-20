@@ -62,6 +62,9 @@ log stream --predicate 'subsystem BEGINSWITH "io.github.visual-z.parallux"'
 | 4.2 | 聚合服务器页粘贴链接 | 显示延迟，自动设为叠加服务器 | `feat-bond-interface` D6 |
 | 4.3 | 面板选「叠加」；诊断 › 单线程下载测速 | 叠加 ≥ 最快单线路的 1.6 倍（PLAN 目标） | `feat-bond-interface` D6、`feat-bond` D8 |
 | 4.4 | 诊断 › 网络质量、STUN | 有结果 | `feat-parity-polish` 修订 |
+| 4.5 | 同机节点：在**自己的代理节点那台机器**上跑 4.1 的安装命令（公网 IP 不在网卡上的云主机要加 `--host <公网地址>`）；App 里选这个节点，聚合方式选叠加；诊断 › 单线程下载测速 | 安装不动节点原有的服务；测速里「叠加」比最快单线路快，连接页里这个节点的连接经 parallux-bond | `feat-node-hosted-aggregation` D12 |
+| 4.6 | 节点机器上起一个只听 127.0.0.1 的服务（`python3 -m http.server --bind 127.0.0.1 8099`），在 Mac 上把一条规则指到直连、访问 `http://<节点公网地址>:8099` 和 `http://127.0.0.1:8099` | 两个都打不开（前者是因为服务没听公网地址，后者不出本机）；节点机器的 `journalctl -u parallux-server` 里没有连到 127.0.0.1:8099 的记录 | `feat-node-hosted-aggregation` D12 |
+| 4.7 | 之前按 4.1 装过的服务器：重跑一次安装命令 | 打印的链接和原来的一样（密钥沿用），`/etc/parallux-server/config.json` 没有了，服务在跑 | `feat-node-hosted-aggregation` D12 |
 
 ## 5. M5 全量
 

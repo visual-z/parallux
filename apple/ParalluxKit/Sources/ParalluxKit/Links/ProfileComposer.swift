@@ -117,9 +117,19 @@ public enum ProfileComposer {
         let useBond = mode == .bond && bond != nil && legs.count == 2
         /// `carriesBond`: whether this aggregate goes through the aggregation
         /// server in 叠加. Both the nodes' detour and the direct replacements
-        /// do (bondCarriesDirect); `bond_bypass` names the server so the core
-        /// does not send connections to it through itself.
-        func aggregate(tag: String, carriesBond: Bool) -> [String: Any] {
+        /// do (bondCarriesDirect).
+        ///
+        /// `bypassesServer`: whether `bond_bypass` names the server, so the
+        /// core sends connections to the server's own address over the links
+        /// instead of through itself. True for direct traffic (an ssh session
+        /// to the VPS gains nothing from a round trip). False for the nodes'
+        /// detour: the only destinations it ever sees are node servers, and
+        /// one at the aggregation server's address is a node on the same
+        /// machine (同机节点, decision 25) — exactly the connection to bond.
+        /// The address cannot be compared here instead: a node with its own
+        /// `domain_resolver` reaches the aggregate as an IP, whatever the
+        /// profile wrote.
+        func aggregate(tag: String, carriesBond: Bool, bypassesServer: Bool) -> [String: Any] {
             let bonded = useBond && carriesBond
             var outbound: [String: Any] = [
                 "type": "aggregate", "tag": tag,
@@ -132,7 +142,7 @@ public enum ProfileComposer {
             if !backupTags.isEmpty { outbound["backup"] = backupTags }
             if bonded, let bond {
                 outbound["bond"] = bond.tag
-                if case let .string(host)? = bond.outbound["server"], !host.isEmpty { outbound["bond_bypass"] = [host] }
+                if bypassesServer, case let .string(host)? = bond.outbound["server"], !host.isEmpty { outbound["bond_bypass"] = [host] }
             }
             return outbound
         }
@@ -142,7 +152,7 @@ public enum ProfileComposer {
         outbounds = outbounds.map { outbound in
             guard outbound["type"] as? String == "direct", let tag = outbound["tag"] as? String,
                   outbound["bind_interface"] == nil else { return outbound }
-            return aggregate(tag: tag, carriesBond: bondCarriesDirect)
+            return aggregate(tag: tag, carriesBond: bondCarriesDirect, bypassesServer: true)
         }
         // Nodes without a detour dial their server through the links.
         outbounds = outbounds.map { outbound in
@@ -152,7 +162,7 @@ public enum ProfileComposer {
             return copy
         }
         var added = linkOutbounds.filter { !taken.contains($0["tag"] as! String) }
-        if !taken.contains(aggregateTag) { added.append(aggregate(tag: aggregateTag, carriesBond: true)) }
+        if !taken.contains(aggregateTag) { added.append(aggregate(tag: aggregateTag, carriesBond: true, bypassesServer: false)) }
         if useBond, let bond, !taken.contains(bond.tag) {
             var multipath = bond.outbound.mapValues(\.foundation)
             multipath["tag"] = bond.tag

@@ -6,9 +6,13 @@
 #   sudo sh install.sh --binary ./parallux-server [--port 39000] [--host 203.0.113.24] [--name "Tokyo VPS"]
 #
 # What it does: copies the binary to /usr/local/bin, generates a random
-# pre-shared key, writes /etc/parallux-server/config.json (0600, root), installs
+# pre-shared key, writes it to /etc/parallux-server/psk (0600, root), installs
 # and starts parallux-server.service. It changes no firewall rules; it prints
 # the port to open. Re-running it keeps the existing key unless --new-psk.
+#
+# The server can share a machine with your proxy node (PLAN decision 25): it
+# reaches the node locally. It will not connect clients to this machine's
+# loopback or private network.
 #
 # The key is printed exactly once, inside the final import link. Nothing else
 # echoes it.
@@ -33,17 +37,21 @@ HOST=""
 NAME=""
 BINARY=""
 NEW_PSK=0
-CONFIG_DIR=/etc/parallux-server
+# PARALLUX_INSTALL_ROOT is for scripts/test-install.sh, which runs this script
+# into a scratch directory; leave it unset on a real machine.
+ROOT="${PARALLUX_INSTALL_ROOT:-}"
+CONFIG_DIR="$ROOT/etc/parallux-server"
 CONFIG="$CONFIG_DIR/config.json"
-BIN=/usr/local/bin/parallux-server
-UNIT=/etc/systemd/system/parallux-server.service
+BIN="$ROOT/usr/local/bin/parallux-server"
+UNIT="$ROOT/etc/systemd/system/parallux-server.service"
+PSK_FILE="$CONFIG_DIR/psk"
 RELAY_KEY="$CONFIG_DIR/relay.key"
-RELAY_UNIT=/etc/systemd/system/parallux-relay.service
+RELAY_UNIT="$ROOT/etc/systemd/system/parallux-relay.service"
 
 die() { echo "install.sh: $*" >&2; exit 1; }
 
 usage() {
-	sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
+	sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'
 	exit "${1:-0}"
 }
 
@@ -84,6 +92,16 @@ fi
 [ -f "$BINARY" ] || die "binary $BINARY not found"
 install -m 0755 "$BINARY" "$BIN"
 
+# A proxy node or a panel may already own the port: this machine may well be
+# one. Our own running service holding it is fine (a reinstall).
+check_port_free() {
+	systemctl is-active --quiet "$1" && return 0
+	command -v ss >/dev/null 2>&1 || return 0
+	if ss -H -ltn "sport = :$PORT" 2>/dev/null | grep -q .; then
+		die "TCP port $PORT is already in use on this machine; choose another with --port"
+	fi
+}
+
 # --- relay host -------------------------------------------------------------
 # The binary generates the key and builds the link (tested there); this
 # script only installs the service. A relay's address is normally private,
@@ -92,6 +110,7 @@ if [ "$RELAY" -eq 1 ]; then
 	umask 077
 	mkdir -p "$CONFIG_DIR"
 	chmod 0700 "$CONFIG_DIR"
+	check_port_free parallux-relay.service
 	if [ "$NEW_PSK" -eq 1 ]; then rm -f "$RELAY_KEY"; fi
 	"$BIN" -role relay -key-file "$RELAY_KEY" -generate-key || die "could not generate the relay key"
 	"$BIN" -role relay -check -port "$PORT" -key-file "$RELAY_KEY" || die "the relay configuration does not validate"
@@ -136,71 +155,6 @@ UNIT_EOF
 	exit 0
 fi
 
-# --- key --------------------------------------------------------------------
-# 32 random bytes as base64url without padding: 43 characters, URL-safe.
-generate_psk() {
-	if command -v openssl >/dev/null 2>&1; then
-		openssl rand -base64 32
-	else
-		head -c 32 /dev/urandom | base64
-	fi | tr '+/' '-_' | tr -d '=\n'
-}
-
-existing_psk() {
-	[ -f "$CONFIG" ] || return 1
-	sed -n 's/.*"psk": *"\([^"]*\)".*/\1/p' "$CONFIG" | head -n 1
-}
-
-PSK=""
-if [ "$NEW_PSK" -eq 0 ]; then PSK="$(existing_psk || true)"; fi
-[ -n "$PSK" ] || PSK="$(generate_psk)"
-[ "${#PSK}" -ge 16 ] || die "could not generate a key"
-
-# --- configuration ----------------------------------------------------------
-umask 077
-mkdir -p "$CONFIG_DIR"
-chmod 0700 "$CONFIG_DIR"
-cat >"$CONFIG.tmp" <<EOF
-{
-  "log": { "level": "info", "timestamp": true },
-  "inbounds": [
-    { "type": "multipath", "tag": "mp-in", "listen": "::", "listen_port": $PORT, "psk": "$PSK" }
-  ],
-  "outbounds": [ { "type": "direct", "tag": "direct" } ]
-}
-EOF
-chmod 0600 "$CONFIG.tmp"
-"$BIN" -check -config "$CONFIG.tmp" || { rm -f "$CONFIG.tmp"; die "the generated configuration does not validate"; }
-mv "$CONFIG.tmp" "$CONFIG"
-
-cat >"$UNIT" <<EOF
-[Unit]
-Description=Parallux aggregation server
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-ExecStart=$BIN -config $CONFIG
-Restart=on-failure
-RestartSec=3
-LimitNOFILE=1048576
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-PrivateTmp=true
-ReadOnlyPaths=$CONFIG_DIR
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-
-[Install]
-WantedBy=multi-user.target
-EOF
-chmod 0644 "$UNIT"
-systemctl daemon-reload
-systemctl enable parallux-server.service >/dev/null
-systemctl restart parallux-server.service
-sleep 1
-systemctl is-active --quiet parallux-server.service || die "the service did not start; see: journalctl -u parallux-server"
-
 # --- address ----------------------------------------------------------------
 # No third-party "what is my IP" service: use the address the kernel would
 # send from, and ask for --host when that address is not public (NAT).
@@ -221,6 +175,79 @@ if [ -z "$HOST" ] && command -v ip >/dev/null 2>&1; then
 	fi
 fi
 [ -n "$HOST" ] || die "could not find a public address; rerun with --host <address or domain>"
+# The host goes into the unit's command line: an address or a host name only.
+case "$HOST" in *[!A-Za-z0-9.:_-]*) die "--host must be an address or a host name" ;; esac
+
+# --- key --------------------------------------------------------------------
+# 32 random bytes as base64url without padding: 43 characters, URL-safe.
+generate_psk() {
+	if command -v openssl >/dev/null 2>&1; then
+		openssl rand -base64 32
+	else
+		head -c 32 /dev/urandom | base64
+	fi | tr '+/' '-_' | tr -d '=\n'
+}
+
+# The key lives in its own file. Installs before decision 25 kept it inside
+# config.json; that key is carried over so the link the app has keeps working.
+existing_psk() {
+	if [ -f "$PSK_FILE" ]; then
+		tr -d '\n' <"$PSK_FILE"
+		return 0
+	fi
+	[ -f "$CONFIG" ] || return 1
+	sed -n 's/.*"psk": *"\([^"]*\)".*/\1/p' "$CONFIG" | head -n 1
+}
+
+PSK=""
+if [ "$NEW_PSK" -eq 0 ]; then PSK="$(existing_psk || true)"; fi
+[ -n "$PSK" ] || PSK="$(generate_psk)"
+[ "${#PSK}" -ge 16 ] || die "could not generate a key"
+
+# --- service ----------------------------------------------------------------
+# The unit runs from flags, so the configuration is built in one place (the
+# binary's Config) and its route rules cannot drift from a copy kept here.
+# -self tells the server which address clients know this machine by:
+# connections to it are delivered locally, which is what lets the server
+# share a machine with your proxy node.
+check_port_free parallux-server.service
+umask 077
+mkdir -p "$CONFIG_DIR"
+chmod 0700 "$CONFIG_DIR"
+printf '%s\n' "$PSK" >"$PSK_FILE.tmp"
+chmod 0600 "$PSK_FILE.tmp"
+"$BIN" -check -port "$PORT" -psk-file "$PSK_FILE.tmp" -self "$HOST" || { rm -f "$PSK_FILE.tmp"; die "the server configuration does not validate"; }
+mv "$PSK_FILE.tmp" "$PSK_FILE"
+# The configuration file earlier installs generated; it held the key.
+rm -f "$CONFIG"
+
+cat >"$UNIT" <<EOF
+[Unit]
+Description=Parallux aggregation server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=$BIN -port $PORT -psk-file $PSK_FILE -self $HOST
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=1048576
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=$CONFIG_DIR
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+chmod 0644 "$UNIT"
+systemctl daemon-reload
+systemctl enable parallux-server.service >/dev/null
+systemctl restart parallux-server.service
+sleep 1
+systemctl is-active --quiet parallux-server.service || die "the service did not start; see: journalctl -u parallux-server"
 
 # --- link -------------------------------------------------------------------
 # RFC 3986 query encoding: keep unreserved characters, percent-encode every

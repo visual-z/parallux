@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"os/signal"
 	"strings"
@@ -129,8 +130,16 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
+		// Refuse a malformed entry before spending a lookup on it.
+		if _, _, err := parseSelf(splitList(*self)); err != nil {
+			return err
+		}
+		// Names in -self also cover the addresses they resolve to now.
+		lookup, cancelLookup := context.WithTimeout(context.Background(), selfLookupTimeout)
+		identities := expandSelf(lookup, splitList(*self), lookupSelf)
+		cancelLookup()
 		content, err = Config(ConfigOptions{Listen: *listen, Port: uint16(*port), PSK: psk, AllowedIPs: splitList(*allowed), LogLevel: *logLevel,
-			Self: splitList(*self), SelfTarget: *selfTarget})
+			Self: identities, SelfTarget: *selfTarget})
 		if err != nil {
 			return err
 		}
@@ -190,15 +199,33 @@ type ConfigOptions struct {
 	PSK        string
 	AllowedIPs []string
 	LogLevel   string
-	// Self lists the addresses and names clients know this machine by.
-	// stub: feat-node-hosted-aggregation
+	// Self lists the addresses and names clients know this machine by
+	// (-self; install.sh passes the link's host). Connections to them are
+	// delivered on this machine (self.go).
 	Self []string
-	// SelfTarget overrides the local address self delivery tries first. stub
+	// SelfTarget overrides the local address self delivery tries first.
 	SelfTarget string
 }
 
-// Config builds the minimal server configuration: one multipath inbound and
-// one direct outbound.
+// cgnat is RFC 6598 shared address space. sing-box's ip_is_private leaves
+// it out; it holds cloud metadata services and overlay networks.
+const cgnat = "100.64.0.0/10"
+
+// Config builds the server configuration: one multipath inbound, a direct
+// outbound, and the route rules that decide what a client may reach.
+//
+// The order of the rules is the contract (decision 25):
+//
+//  1. Names are resolved, so the checks below see addresses.
+//  2. Private, loopback and link-local destinations are refused, and so is
+//     carrier-grade NAT space. The client never bonds a local destination,
+//     so what arrives here asking for one is someone using this machine to
+//     reach its loopback-only services, the cloud's metadata service or its
+//     private network.
+//  3. Destinations that are this machine itself go to self delivery. It
+//     comes last because it lands on a private address: a rule after an
+//     address rewrite sees the rewritten address, and refusing after
+//     delivering would refuse the node.
 func Config(o ConfigOptions) ([]byte, error) {
 	if o.Port == 0 {
 		return nil, errors.New("port must not be 0")
@@ -220,9 +247,42 @@ func Config(o ConfigOptions) ([]byte, error) {
 	if level == "" {
 		level = "info"
 	}
+	addresses, names, err := parseSelf(o.Self)
+	if err != nil {
+		return nil, err
+	}
+	if o.SelfTarget != "" {
+		if _, err := netip.ParseAddr(o.SelfTarget); err != nil {
+			return nil, fmt.Errorf("self target %q is not an address", o.SelfTarget)
+		}
+	}
+	outbounds := []any{map[string]any{"type": "direct", "tag": "direct"}}
+	rules := []any{
+		map[string]any{"action": "resolve"},
+		map[string]any{"ip_is_private": true, "action": "reject"},
+		map[string]any{"ip_cidr": []string{cgnat}, "action": "reject"},
+	}
+	if len(addresses)+len(names) > 0 {
+		self := map[string]any{"type": selfType, "tag": selfTag, "listen_port": o.Port}
+		if o.SelfTarget != "" {
+			self["target"] = o.SelfTarget
+		}
+		outbounds = append(outbounds, self)
+		if len(addresses) > 0 {
+			prefixes := make([]string, len(addresses))
+			for i, address := range addresses {
+				prefixes[i] = netip.PrefixFrom(address, address.BitLen()).String()
+			}
+			rules = append(rules, map[string]any{"ip_cidr": prefixes, "outbound": selfTag})
+		}
+		if len(names) > 0 {
+			rules = append(rules, map[string]any{"domain": names, "outbound": selfTag})
+		}
+	}
 	return stdjson.MarshalIndent(map[string]any{
 		"log":       map[string]any{"level": level, "timestamp": true},
 		"inbounds":  []any{inbound},
-		"outbounds": []any{map[string]any{"type": "direct", "tag": "direct"}},
+		"outbounds": outbounds,
+		"route":     map[string]any{"rules": rules},
 	}, "", "  ")
 }

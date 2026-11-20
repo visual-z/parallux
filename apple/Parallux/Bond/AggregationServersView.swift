@@ -11,6 +11,9 @@ struct AggregationServersView: View {
 
     /// Run on the VPS; prints the import link when it is done (decision 18).
     static let installCommand = "sudo sh install.sh --binary ./parallux-server"
+    /// Where the server may live (同机节点, decision 25) and the limit users
+    /// would otherwise find out by measuring: only TCP is bonded.
+    static let placementNote = "可以直接装在自己的代理节点上，不必另备一台 VPS。叠加只合并 TCP，hysteria2、tuic 这类走 UDP 的节点不会变快。"
 
     var body: some View {
         let servers = app.servers
@@ -31,6 +34,8 @@ struct AggregationServersView: View {
                 Button("添加", systemImage: "plus") { promptForLink() }.designPill(primary: true)
             }
             DesignCode(text: Self.installCommand, comment: "# 在 VPS 上运行，结束后会显示一个导入链接")
+            // Decision 25: no second VPS needed; and what it cannot speed up.
+            DesignNote(text: Self.placementNote).padding(.top, 10)
         }
         .navigationSubtitle(servers.servers.isEmpty ? "" : "\(servers.servers.count)")
         .toolbar {

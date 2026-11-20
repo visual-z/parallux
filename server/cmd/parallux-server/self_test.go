@@ -20,6 +20,7 @@ import (
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/experimental/libbox"
 	"github.com/sagernet/sing-box/include"
+	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json"
 	M "github.com/sagernet/sing/common/metadata"
@@ -464,6 +465,62 @@ func TestSelfDeliveryBoundsTheLocalAttemptAndRespectsTheCaller(t *testing.T) {
 	}
 	if len(recorder.addresses) != 1 {
 		t.Fatalf("dialed %v after the caller gave up, want only the local attempt", recorder.addresses)
+	}
+}
+
+// The real kernel answer, where it does not depend on the network: an
+// address of this machine is its own source (so it is dialed once, as
+// given), and whatever is reported for a public address is an address this
+// machine actually has.
+func TestTheSourceAddressIsOneOfThisMachinesOwn(t *testing.T) {
+	loopback := netip.MustParseAddr("127.0.0.1")
+	if source, ok := sourceAddress(loopback); !ok || source != loopback {
+		t.Fatalf("sourceAddress(127.0.0.1) = %v, %v; want 127.0.0.1", source, ok)
+	}
+	source, ok := sourceAddress(netip.MustParseAddr(publicNode))
+	if !ok {
+		return // no route at all (offline): self delivery dials the address as given
+	}
+	interfaces, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, address := range interfaces {
+		if network, isNetwork := address.(*net.IPNet); isNetwork {
+			if own, valid := netip.AddrFromSlice(network.IP); valid && own.Unmap() == source {
+				return
+			}
+		}
+	}
+	t.Fatalf("sourceAddress(%s) = %v, which is not an address of this machine", publicNode, source)
+}
+
+// The outbound sing-box builds, with its real dialer, against a real
+// listener: a connection to the machine's public address lands on the
+// local address the kernel names.
+func TestTheSelfOutboundDeliversOverRealSockets(t *testing.T) {
+	echo := newCountingEcho(t, "127.0.0.1:0")
+	built, err := newSelfOutbound(context.Background(), nil, log.NewNOPFactory().NewLogger("test"), "self", selfOptions{ListenPort: 39000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	self := built.(*selfOutbound)
+	self.delivery.source = sourceIs("127.0.0.1")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := self.DialContext(ctx, N.NetworkTCP, M.ParseSocksaddr(publicNode+":"+echo.port()))
+	if err != nil {
+		t.Fatalf("self delivery over real sockets: %v", err)
+	}
+	defer conn.Close()
+	if err := roundTripThrough(t, conn, "local"); err != nil {
+		t.Fatalf("self delivery over real sockets: %v", err)
+	}
+	if _, err := self.ListenPacket(ctx, M.ParseSocksaddr(publicNode+":53")); err == nil {
+		t.Fatal("self delivery handed out a packet connection; it carries TCP only")
+	}
+	if _, err := newSelfOutbound(context.Background(), nil, log.NewNOPFactory().NewLogger("test"), "self", selfOptions{Target: "nowhere"}); err == nil {
+		t.Fatal("a target that is not an address was accepted")
 	}
 }
 
