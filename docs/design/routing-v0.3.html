@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>路由页设计稿</title>
+<style>
+:root{
+  --page:#f2f3f6; --fg:#1d1d1f; --fg2:#6e6e73; --fg3:#a1a1a6; --sep:rgba(0,0,0,.09);
+  --content:#fff; --content2:#f5f5f7; --fill:rgba(120,120,128,.12); --fill2:rgba(120,120,128,.2);
+  --glass:rgba(255,255,255,.62); --accent:#007aff; --sel:rgba(0,122,255,.12);
+  --good:#28a745; --mid:#d98a00; --bad:#e5484d;
+  --c1:#2fa6c4; --c2:#f08c00; --c3:#8b5cf6; --c4:#30a14e; --c5:#e5484d; --c6:#8e8e93;
+  --sys:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif; --mono:ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#0f1012; --fg:#f5f5f7; --fg2:#a1a1a6; --fg3:#6e6e73; --sep:rgba(255,255,255,.1);
+  --content:#1c1c1e; --content2:#232325; --fill:rgba(120,120,128,.24); --fill2:rgba(120,120,128,.34);
+  --glass:rgba(40,40,44,.6); --accent:#0a84ff; --sel:rgba(10,132,255,.22); --good:#30d158; --mid:#ffb340; --bad:#ff6961;
+  color-scheme:dark;}}
+:root[data-theme="dark"]{--page:#0f1012; --fg:#f5f5f7; --fg2:#a1a1a6; --fg3:#6e6e73; --sep:rgba(255,255,255,.1);
+  --content:#1c1c1e; --content2:#232325; --fill:rgba(120,120,128,.24); --fill2:rgba(120,120,128,.34);
+  --glass:rgba(40,40,44,.6); --accent:#0a84ff; --sel:rgba(10,132,255,.22); --good:#30d158; --mid:#ffb340; --bad:#ff6961; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--fg);font:13px/1.45 var(--sys);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding:40px 16px 80px;display:flex;flex-direction:column;gap:56px}
+h1{font-size:30px;margin:0;letter-spacing:-.02em}
+h2{font-size:21px;margin:0}
+h3{font-size:15px;margin:0}
+p{margin:0}
+.lede{color:var(--fg2);max-width:72ch;font-size:14px}
+.eyebrow{font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--fg2)}
+.head{display:flex;flex-direction:column;gap:8px}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono)}
+button{font:inherit;color:inherit;cursor:pointer}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.note{background:var(--content);border:1px solid var(--sep);border-radius:12px;padding:12px 14px}
+.note b{display:block;margin-bottom:2px}
+.note span{color:var(--fg2)}
+
+/* stage + window */
+.stage{border-radius:22px;padding:28px;background:linear-gradient(135deg,#7fb4ff55,#b9a7ff44 50%,#ffb38a55);overflow-x:auto}
+.win{min-width:1080px;height:720px;display:grid;grid-template-columns:220px 1fr;background:var(--content);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.18);overflow:hidden;border:1px solid var(--sep)}
+.side{background:var(--glass);backdrop-filter:blur(30px);border-right:1px solid var(--sep);padding:14px 10px;display:flex;flex-direction:column;gap:2px}
+.lights{display:flex;gap:7px;padding:2px 6px 14px}
+.lights i{width:12px;height:12px;border-radius:50%;background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+.side .sec{font-size:11px;color:var(--fg3);padding:10px 8px 4px;font-weight:600}
+.side .it{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:7px;color:var(--fg)}
+.side .it.on{background:var(--sel);color:var(--accent);font-weight:600}
+.side .it em{margin-left:auto;font-style:normal;color:var(--fg3);font-size:11px}
+.side .new{font-size:10px;color:#fff;background:var(--accent);border-radius:4px;padding:0 4px;margin-left:auto}
+.main{display:flex;flex-direction:column;min-width:0}
+.bar{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--sep)}
+.bar .title{display:flex;flex-direction:column}
+.bar .title b{font-size:14px}
+.bar .title span{font-size:11px;color:var(--fg2)}
+.seg{display:flex;background:var(--fill);border-radius:8px;padding:2px;margin-left:auto}
+.seg button{border:0;background:none;padding:4px 12px;border-radius:6px;font-size:12px}
+.seg button.on{background:var(--content);box-shadow:0 1px 2px rgba(0,0,0,.12);font-weight:600}
+.search{display:flex;align-items:center;gap:6px;background:var(--fill);border-radius:8px;padding:5px 10px;min-width:230px;color:var(--fg2);font-size:12px}
+.body{flex:1;display:grid;grid-template-columns:1fr 330px;min-height:0}
+.canvas{overflow:auto;padding:16px 18px;min-width:0}
+.insp{border-left:1px solid var(--sep);background:var(--content2);overflow:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+
+/* route map */
+.map{display:grid;grid-template-columns:minmax(210px,1fr) 96px minmax(200px,.95fr);gap:0;position:relative}
+.col{display:flex;flex-direction:column;gap:8px;position:relative;z-index:1}
+.colhead{font-size:11px;color:var(--fg3);font-weight:600;letter-spacing:.06em;margin-bottom:2px}
+.rule{display:flex;align-items:center;gap:8px;background:var(--content);border:1px solid var(--sep);border-radius:10px;padding:8px 10px;cursor:pointer}
+.rule .sw{width:4px;align-self:stretch;border-radius:3px}
+.rule .t{display:flex;flex-direction:column;min-width:0;flex:1}
+.rule .t b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rule .t span{font-size:11px;color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rule .rate{font-size:11px;color:var(--fg2)}
+.rule.on{outline:2px solid var(--accent);outline-offset:-1px}
+.rule.dim,.exit.dim{opacity:.35}
+.exit{background:var(--content);border:1px solid var(--sep);border-radius:12px;padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:6px}
+.exit.on{outline:2px solid var(--accent);outline-offset:-1px}
+.exit .top{display:flex;align-items:center;gap:6px}
+.exit .top b{font-size:13px}
+.exit .kind{font-size:10.5px;color:var(--fg2);background:var(--fill);padding:0 6px;border-radius:4px}
+.chain{display:flex;align-items:center;flex-wrap:wrap;gap:4px;font-size:11.5px;color:var(--fg2)}
+.chain .hop{background:var(--fill);border-radius:5px;padding:1px 6px;color:var(--fg)}
+.chain .hop.end{background:var(--sel);color:var(--accent);font-weight:600}
+.chain .arr{color:var(--fg3)}
+.lat{font-size:11px;font-weight:600}
+.good{color:var(--good)}.mid{color:var(--mid)}.bad{color:var(--bad)}
+.flows{position:absolute;inset:0;pointer-events:none;z-index:0}
+.legend{display:flex;gap:14px;font-size:11px;color:var(--fg2);margin:4px 0 12px}
+
+/* picker */
+.picker{display:flex;flex-direction:column;gap:10px}
+.picker .hdr{display:flex;align-items:center;gap:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--sep);background:var(--content);border-radius:999px;padding:3px 10px;font-size:11.5px}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.hist{display:flex;align-items:flex-end;gap:2px;height:38px;padding:4px 0}
+.hist i{flex:1;border-radius:2px 2px 0 0;background:var(--fill2)}
+.row{display:grid;grid-template-columns:18px 1fr auto 62px;align-items:center;gap:8px;padding:6px 8px;border-radius:8px}
+.row:hover{background:var(--fill)}
+.row.on{background:var(--sel)}
+.row .n{display:flex;flex-direction:column;min-width:0}
+.row .n b{font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .n span{font-size:10.5px;color:var(--fg3)}
+.row .bar2{height:4px;border-radius:2px;background:var(--fill);overflow:hidden}
+.row .bar2 i{display:block;height:100%}
+.groupline{font-size:10.5px;color:var(--fg3);font-weight:600;letter-spacing:.06em;padding:8px 8px 2px}
+.sub{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--fg2)}
+
+/* tester */
+.tester{background:var(--content);border:1px solid var(--sep);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.tester input{width:100%;border:1px solid var(--sep);background:var(--content2);border-radius:9px;padding:8px 10px;font:13px var(--mono);color:var(--fg)}
+.steps{display:flex;flex-direction:column;gap:0}
+.step{display:grid;grid-template-columns:22px 1fr;gap:8px;position:relative;padding-bottom:12px}
+.step:not(:last-child)::before{content:"";position:absolute;left:10px;top:20px;bottom:0;width:2px;background:var(--fill2)}
+.dot{width:22px;height:22px;border-radius:50%;background:var(--sel);color:var(--accent);display:grid;place-items:center;font-size:11px;font-weight:700}
+.step .k{font-size:11px;color:var(--fg2)}
+.step .v{font-size:12.5px}
+.step .why{font-size:11px;color:var(--fg3)}
+.btn{border:1px solid var(--sep);background:var(--content);border-radius:7px;padding:4px 10px;font-size:12px}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.kbd{font:11px var(--mono);background:var(--fill);border-radius:4px;padding:0 5px}
+
+/* comparison table */
+table{border-collapse:collapse;width:100%;background:var(--content);border-radius:12px;overflow:hidden;border:1px solid var(--sep)}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--sep);vertical-align:top;font-size:12.5px}
+th{font-size:11px;color:var(--fg2);font-weight:600}
+td.new{color:var(--accent)}
+@media (max-width:700px){.wrap{gap:40px}.stage{padding:12px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="head">
+  <div class="eyebrow">设计稿 v0.3 · 路由 · 替换 v0.2 的「节点」与「规则」两页</div>
+  <h1>一眼看出：哪类流量，走了哪条路</h1>
+  <p class="lede">现在的节点页把十几个分组平铺成卡片墙：分组套分组（proxy 里有 DE Auto，DE Auto 里又有节点），选中的是哪个节点要一层层点开；色点看不出含义；规则页只是一张表，看不出某条规则的流量最后从哪出去。v0.3 把两页合成「路由」，从「流量」出发，而不是从「节点」出发。</p>
+</header>
+
+<div class="grid3">
+  <div class="note"><b>路线图</b><span>左边是流量类别（由规则推出），中间是它落到的出口分组，右边是最终节点。连线宽度 = 实时速率，和概览的桑基图同一种语言。</span></div>
+  <div class="note"><b>展平的出口链</b><span>每个分组只显示一行：proxy → DE Auto → DE‑1 AnyTLS · 368 ms。嵌套分组不用再一层层点开。</span></div>
+  <div class="note"><b>按地区与延迟挑节点</b><span>选节点时按地区筛、按延迟排，顶上一条延迟分布图；147 个节点的分组也能三秒内选好。</span></div>
+  <div class="note"><b>试一下</b><span>输入域名或选一个 App，逐步显示命中的规则、经过的分组、最终节点和线路，每一步写清「为什么」。</span></div>
+  <div class="note"><b>改走</b><span>在任一流量类别上「改走 → 另一个分组」，不用改 JSON。改动存成覆盖层，订阅更新也不会冲掉（需要你确认，见文末）。</span></div>
+  <div class="note"><b>和连接页互通</b><span>连接检查器里点「这条为什么走这里」，跳到试一下并带上这个目标。</span></div>
+</div>
+
+<!-- ============ 1. 路线图 ============ -->
+<section class="head" style="gap:14px">
+  <div class="eyebrow">主窗口 · 路由 › 路线图</div>
+  <h2>从流量出发看路由</h2>
+  <p class="lede">点左边任一类流量，只高亮它的路径；点中间任一出口，右侧检查器显示它的节点选择器。没流量的类别淡显，规则多时按流量排序，只显示前 12 类，其余折叠成「其他 37 条规则」。</p>
+  <div class="stage">
+  <div class="win">
+    <aside class="side">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <div class="it">概览</div><div class="it">连接 <em>142</em></div><div class="it">日志</div>
+      <div class="sec">聚合</div><div class="it">线路 <em>3</em></div><div class="it">聚合服务器</div><div class="it">诊断</div>
+      <div class="sec">代理</div><div class="it">配置 <em>3</em></div><div class="it on">路由 <span class="new">新</span></div>
+    </aside>
+    <div class="main">
+      <div class="bar">
+        <div class="title"><b>路由</b><span>规则模式 · 14 个出口分组 · 186 个节点</span></div>
+        <div class="seg" id="tabs"><button class="on" data-v="map">路线图</button><button data-v="test">试一下</button><button data-v="rules">规则表</button></div>
+        <div class="search">⌕ 搜索规则、分组或节点</div>
+        <button class="btn">⚡ 全部测速</button>
+      </div>
+      <div class="body">
+        <div class="canvas">
+          <div class="legend"><span>宽度 = 实时速率</span><span>灰线 = 当前没有流量</span><span>延迟：<b class="good">&lt;400</b> · <b class="mid">&lt;800</b> · <b class="bad">≥800 ms</b></span></div>
+          <div class="map" id="map">
+            <svg class="flows" id="flows"></svg>
+            <div class="col" id="rules"><div class="colhead">流量类别（来自规则）</div></div>
+            <div></div>
+            <div class="col" id="exits"><div class="colhead">出口</div></div>
+          </div>
+        </div>
+        <aside class="insp" id="insp"></aside>
+      </div>
+    </div>
+  </div>
+  </div>
+</section>
+
+<!-- ============ 2. 试一下 ============ -->
+<section class="head" style="gap:14px">
+  <div class="eyebrow">主窗口 · 路由 › 试一下</div>
+  <h2>这条流量为什么走这里</h2>
+  <p class="lede">输入域名、IP 或在下拉里选一个 App（来自最近的连接）。不发起连接，只让内核按当前配置走一遍匹配，逐步列出结果。连接页检查器的「为什么走这里」也打开这一页。</p>
+  <div class="stage">
+    <div style="display:grid;grid-template-columns:minmax(300px,520px) 1fr;gap:20px;min-width:900px">
+      <div class="tester">
+        <input id="q" value="www.youtube.com" aria-label="域名或 IP">
+        <div class="chips" id="qs"></div>
+        <div class="steps" id="steps"></div>
+        <div style="display:flex;gap:8px"><button class="btn">在连接页里看同类连接</button><button class="btn primary">改走…</button></div>
+      </div>
+      <div class="note" style="align-self:start">
+        <b>每一步都说「为什么」</b>
+        <span>规则：第 7 条 <span class="mono">rule_set=geosite-youtube</span>，前 6 条为什么没命中可展开查看。分组：手动选择 / 延迟最低（附测速时间）/ 主备的第一个可用。线路：聚合方式与这条连接实际用的线路。</span>
+        <br><br><b>实现说明</b>
+        <span>libbox 1.14.4 没有「按配置解释匹配」的接口。在 pxbridge 里加一个导出，拿到扩展里运行中的 router，对构造的元数据调用匹配并记录每一步（Surge Mac 6.9 的 <span class="mono">rule explain</span> 是同样的思路）。</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3. 节点选择器 ============ -->
+<section class="head" style="gap:14px">
+  <div class="eyebrow">检查器 · 出口分组</div>
+  <h2>一个分组一张选择器，不再是卡片墙</h2>
+  <p class="lede">从地区筛选开始（从节点名里的旗帜与地名推断），按延迟排序，顶上是延迟分布。分组里还有分组时（proxy → DE Auto），子分组作为一行出现并显示它此刻选中的节点，点开在原地展开，不跳页。自动分组（urltest）不让点选节点，而是显示「自动选中了谁、为什么」，提供「固定使用某个节点」的入口。</p>
+  <div class="stage"><div style="display:flex;gap:20px;min-width:880px;align-items:flex-start">
+    <div class="insp" style="width:360px;border:1px solid var(--sep);border-radius:14px;background:var(--content)" id="pickerDemo"></div>
+    <div class="insp" style="width:360px;border:1px solid var(--sep);border-radius:14px;background:var(--content)" id="autoDemo"></div>
+  </div></div>
+</section>
+
+<!-- ============ 4. 对比 ============ -->
+<section class="head" style="gap:14px">
+  <div class="eyebrow">改了什么</div>
+  <h2>v0.2 → v0.3</h2>
+  <table>
+    <tr><th>问题（来自现状截图）</th><th>v0.3 怎么解决</th></tr>
+    <tr><td>14 个分组平铺成卡片墙，滚好几屏</td><td class="new">路线图只列有流量的出口；分组在检查器里一个一个看</td></tr>
+    <tr><td>proxy 里选中「DE Auto」，实际节点还得去 DE Auto 里找</td><td class="new">展平的出口链：proxy → DE Auto → DE‑1 AnyTLS</td></tr>
+    <tr><td>折叠后的色点看不出含义</td><td class="new">延迟分布条 + 数字；颜色只表示快 / 中 / 慢，且旁边有图例</td></tr>
+    <tr><td>规则页看不出某类流量最后从哪出去</td><td class="new">路线图的连线；试一下的逐步解释</td></tr>
+    <tr><td>改路由只能改 JSON</td><td class="new">「改走」：在流量类别上换出口分组，存为覆盖层</td></tr>
+    <tr><td>147 个节点的 IPLC 分组难挑</td><td class="new">地区筛选 + 延迟排序 + 搜索；倍率（0.5 倍率）作为标签显示</td></tr>
+  </table>
+</section>
+
+<section class="head" style="gap:14px">
+  <div class="eyebrow">需要你确认</div>
+  <h2>三个决定</h2>
+  <div class="grid3">
+    <div class="note"><b>1 · 侧栏从九项变八项</b><span>「节点」与「规则」合成「路由」。这改了决策 7 的「主窗口九项侧栏」。</span></div>
+    <div class="note"><b>2 · 「改走」的覆盖层</b><span>覆盖存在 App 里，连接时由组合器把对应规则的 outbound 换掉（与线路组合同一处）。用户的配置文件不变、订阅更新不冲掉；但 App 里看到的路由会和配置文件不一致，需要明显标注「已覆盖」。这是新的存储格式（AGENTS.md 要求先讨论）。</span></div>
+    <div class="note"><b>3 · 流量类别怎么命名</b><span>规则本身没有名字。默认用规则条件生成（geosite-youtube → YouTube，geoip-cn → 中国大陆 IP）；可以手动重命名，名字同样存在覆盖层里。</span></div>
+  </div>
+</section>
+
+<footer class="lede" style="font-size:12px">参考：Surge Mac 6.9 的 <span class="mono">rule explain</span>（逐步解释匹配的规则与分组决策）、Surge Dashboard 与 Stash 的请求列表。Parallux 独有的是把规则、分组、节点、线路画在同一张流向图里。</footer>
+</div>
+
+<script>
+const rules=[
+ {id:'yt',name:'YouTube',cond:'rule_set=geosite-youtube',exit:'stream',rate:182,c:'--c5'},
+ {id:'nf',name:'Netflix',cond:'rule_set=geosite-netflix',exit:'stream',rate:0,c:'--c5'},
+ {id:'gh',name:'GitHub',cond:'domain_suffix=github.com 等 4 项',exit:'proxy',rate:64,c:'--c3'},
+ {id:'ai',name:'OpenAI / Claude',cond:'rule_set=geosite-openai, -anthropic',exit:'us',rate:12,c:'--c1'},
+ {id:'steam',name:'Steam 下载',cond:'rule_set=geosite-steam@cn',exit:'direct',rate:240,c:'--c6'},
+ {id:'cn',name:'中国大陆',cond:'rule_set=geosite-cn, geoip-cn',exit:'direct',rate:96,c:'--c6'},
+ {id:'lan',name:'局域网',cond:'ip_is_private',exit:'direct',rate:3,c:'--c6'},
+ {id:'final',name:'其余流量',cond:'route.final',exit:'proxy',rate:41,c:'--c3'},
+];
+const exits={
+ proxy:{name:'proxy',kind:'手动',chain:['proxy','DE Auto','DE‑1 AnyTLS'],lat:368},
+ stream:{name:'流媒体',kind:'手动',chain:['流媒体','IPLC · 香港 02'],lat:565},
+ us:{name:'US Auto',kind:'自动',chain:['US Auto','US‑1 Reality'],lat:439},
+ direct:{name:'直连',kind:'直连',chain:['直连','分流 · Wi‑Fi + 有线'],lat:null},
+};
+// Same thresholds as the app's DelayGrade would need: fast < 400, slow ≥ 800 (v0.2 used one 150 ms cut).
+const latClass=v=>v==null?'':v<400?'good':v<800?'mid':'bad';
+let sel=null, selExit='proxy';
+function draw(){
+  const R=document.getElementById('rules'), E=document.getElementById('exits');
+  R.querySelectorAll('.rule').forEach(n=>n.remove()); E.querySelectorAll('.exit').forEach(n=>n.remove());
+  rules.forEach(r=>{
+    const d=document.createElement('div'); d.className='rule'+(sel===r.id?' on':'')+(sel&&sel!==r.id?' dim':''); d.dataset.id=r.id;
+    d.innerHTML=`<i class="sw" style="background:var(${r.c})"></i><div class="t"><b>${r.name}</b><span class="mono">${r.cond}</span></div><span class="rate num">${r.rate?r.rate+' Mbps':'—'}</span>`;
+    d.onclick=()=>{sel=sel===r.id?null:r.id; if(sel) selExit=r.exit; draw()}; R.appendChild(d);
+  });
+  const used=new Set(rules.filter(r=>!sel||r.id===sel).map(r=>r.exit));
+  Object.entries(exits).forEach(([k,x])=>{
+    const d=document.createElement('div'); d.className='exit'+(selExit===k?' on':'')+(!used.has(k)?' dim':''); d.dataset.id=k;
+    d.innerHTML=`<div class="top"><b>${x.name}</b><span class="kind">${x.kind}</span>${x.lat?`<span class="lat ${latClass(x.lat)}" style="margin-left:auto">${x.lat} ms</span>`:''}</div>
+      <div class="chain">${x.chain.map((h,i)=>`${i?'<span class="arr">›</span>':''}<span class="hop${i===x.chain.length-1?' end':''}">${h}</span>`).join('')}</div>`;
+    d.onclick=()=>{selExit=k; draw()}; E.appendChild(d);
+  });
+  requestAnimationFrame(lines); inspector();
+}
+function lines(){
+  const map=document.getElementById('map'), svg=document.getElementById('flows'), b=map.getBoundingClientRect();
+  svg.setAttribute('width',b.width); svg.setAttribute('height',b.height); let out='';
+  rules.forEach(r=>{
+    const a=map.querySelector(`.rule[data-id="${r.id}"]`).getBoundingClientRect(), e=map.querySelector(`.exit[data-id="${r.exit}"]`).getBoundingClientRect();
+    const x1=a.right-b.left, y1=a.top-b.top+a.height/2, x2=e.left-b.left, y2=e.top-b.top+e.height/2, mx=(x1+x2)/2;
+    const w=r.rate?Math.max(2,Math.sqrt(r.rate)*1.3):1.2, dim=sel&&sel!==r.id;
+    const col=getComputedStyle(document.documentElement).getPropertyValue(r.c);
+    out+=`<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" stroke="${r.rate?col:'var(--fill2)'}" stroke-opacity="${dim?.12:.55}" stroke-width="${w}" fill="none" stroke-linecap="round"/>`;
+  });
+  svg.innerHTML=out;
+}
+const nodes=[['🇩🇪','DE‑1 AnyTLS','AnyTLS',368,'德国'],['🇩🇪','DE‑1 HY2','Hysteria2',369,'德国'],['🇩🇪','DE‑1 Reality','VLESS',473,'德国'],
+ ['🇺🇸','US‑1 Reality','VLESS',439,'美国'],['🇺🇸','US‑2 AnyTLS','AnyTLS',537,'美国'],['🇺🇸','US‑1 AnyTLS','AnyTLS',688,'美国'],
+ ['🇨🇳','CN‑1','URLTest',167,'中国'],['🇭🇰','IPLC · 香港 04','AnyTLS · 0.5 倍率',373,'香港'],['🇭🇰','IPLC · 香港 02','AnyTLS',565,'香港'],['🇸🇬','IPLC · 狮城','AnyTLS · 0.5 倍率',659,'新加坡'],['','Ghelper','Selector',3908,'其他']];
+function picker(el,{title,kind,current,auto,chain}){
+  chain=chain||['proxy','DE Auto','DE‑1 AnyTLS'];
+  const regions=['全部','香港','德国','美国','中国','新加坡'];
+  const hist=[3,6,9,12,8,10,7,4,3,2,1,1,0,1].map(v=>`<i style="height:${v*3+2}px"></i>`).join('');
+  const rows=[...nodes].sort((a,b)=>a[3]-b[3]).map(n=>`<div class="row${n[1]===current?' on':''}"><span>${n[0]}</span><div class="n"><b>${n[1]}</b><span>${n[2]}</span></div><div class="bar2" style="width:60px"><i style="width:${Math.min(100,n[3]/12)}%;background:var(--${latClass(n[3])})"></i></div><span class="lat num ${latClass(n[3])}" style="text-align:right">${n[3]} ms</span></div>`).join('');
+  el.innerHTML=`<div class="picker"><div class="hdr"><h3>${title}</h3><span class="kind" style="font-size:10.5px;color:var(--fg2);background:var(--fill);padding:0 6px;border-radius:4px">${kind}</span><button class="btn" style="margin-left:auto">⚡ 测速</button></div>
+   ${auto?`<div class="note" style="padding:10px"><b>自动选中 US‑1 Reality · 439 ms</b><span>延迟最低（3 分钟前测速）。容差 50 ms 内不切换，避免来回跳。</span><div style="display:flex;gap:6px;margin-top:8px"><button class="btn">固定使用某个节点…</button><button class="btn">立即重新选择</button></div></div>`:`<div class="chain">${chain.map((h,i)=>`${i?'<span class="arr">›</span>':''}<span class="hop${i===chain.length-1?' end':''}">${h}</span>`).join('')}</div>`}
+   <div class="chips">${regions.map((r,i)=>`<span class="chip${i===0?' on':''}">${r}</span>`).join('')}</div>
+   <div><div class="sub">延迟分布 · ${nodes.length} 个节点 · 中位 473 ms</div><div class="hist">${hist}</div></div>
+   ${auto||chain.length<3?'':`<div class="groupline">子分组</div><div class="row on"><span>🇩🇪</span><div class="n"><b>DE Auto</b><span>自动 · 现在是 DE‑1 AnyTLS</span></div><span></span><span class="lat num ${latClass(368)}" style="text-align:right">368 ms</span></div><div class="row"><span>🇺🇸</span><div class="n"><b>US Auto</b><span>自动 · 现在是 US‑1 Reality</span></div><span></span><span class="lat num ${latClass(439)}" style="text-align:right">439 ms</span></div><div class="groupline">节点（按延迟）</div>`}${!auto&&chain.length<3?'<div class="groupline">节点（按延迟）</div>':''}
+   ${auto?'<div class="groupline">成员（按延迟）</div>':''}${rows}</div>`;
+}
+function inspector(){
+  const x=exits[selExit], users=rules.filter(r=>r.exit===selExit);
+  const el=document.getElementById('insp');
+  el.innerHTML=`<div><div class="sub">出口</div><h3 style="margin:2px 0 6px">${x.name}</h3><div class="chain">${x.chain.map((h,i)=>`${i?'<span class="arr">›</span>':''}<span class="hop${i===x.chain.length-1?' end':''}">${h}</span>`).join('')}</div></div>
+  <div><div class="sub" style="margin-bottom:6px">走这里的流量</div>${users.map(r=>`<div class="row"><i class="sw" style="width:4px;height:18px;border-radius:2px;background:var(${r.c})"></i><div class="n"><b>${r.name}</b><span>${r.cond}</span></div><span></span><button class="btn" style="padding:1px 8px;font-size:11px">改走…</button></div>`).join('')}</div>
+  ${selExit==='direct'?`<div class="note"><b>直连走线路</b><span>分流：Wi‑Fi 与有线轮流承担，iPhone 仅备用。线路设置在「线路」页。</span></div>`:'<div id="insPicker"></div>'}`;
+  const p=document.getElementById('insPicker'); if(p) picker(p,{title:x.name,kind:x.kind,current:x.chain[x.chain.length-1],auto:x.kind==='自动',chain:x.chain});
+}
+picker(document.getElementById('pickerDemo'),{title:'proxy',kind:'手动',current:'DE‑1 AnyTLS'});
+picker(document.getElementById('autoDemo'),{title:'US Auto',kind:'自动',current:'US‑1 Reality',auto:true});
+const samples={'www.youtube.com':[['规则','第 7 条 · rule_set=geosite-youtube','前 6 条：局域网、Steam、中国大陆…都不匹配'],['分组','流媒体 · 手动选择','你在 11 月 18 日选了 IPLC · 香港 02'],['节点','IPLC · 香港 02 · AnyTLS · 565 ms','节点经 parallux-links 出站'],['线路','叠加 · Wi‑Fi + 有线','经东京 VPS 重组后到节点']],
+ 'store.steampowered.com':[['规则','第 3 条 · rule_set=geosite-steam@cn',''],['分组','直连',''],['线路','分流 · 有线','这条连接被分到有线（轮转）']],
+ '192.168.1.20':[['规则','第 1 条 · ip_is_private','局域网地址'],['分组','直连',''],['线路','主备 · Wi‑Fi','局域网只走当前默认网口']]};
+function test(q){
+  const s=samples[q]||[['规则','没有规则命中 · route.final','逐条检查了 41 条规则'],['分组','proxy · 手动选择',''],['节点','DE Auto › DE‑1 AnyTLS · 368 ms','DE Auto 自动选了延迟最低的'],['线路','叠加 · Wi‑Fi + 有线','']];
+  document.getElementById('steps').innerHTML=s.map((x,i)=>`<div class="step"><span class="dot">${i+1}</span><div><div class="k">${x[0]}</div><div class="v">${x[1]}</div>${x[2]?`<div class="why">${x[2]}</div>`:''}</div></div>`).join('');
+}
+document.getElementById('qs').innerHTML=Object.keys(samples).concat(['example.org']).map(k=>`<button class="chip">${k}</button>`).join('');
+document.getElementById('qs').onclick=e=>{if(e.target.matches('.chip')){document.getElementById('q').value=e.target.textContent;test(e.target.textContent)}};
+document.getElementById('q').oninput=e=>test(e.target.value.trim());
+test('www.youtube.com'); draw(); addEventListener('resize',lines);
+</script>
+</body>
+</html>

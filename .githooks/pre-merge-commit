@@ -1,0 +1,8 @@
+#!/bin/sh
+# A merge without conflicts commits without running pre-commit; run the same
+# checks so a clean merge is judged like any other commit.
+command -v keel >/dev/null 2>&1 || {
+  echo "keel is not installed: run \`mise install\` (mise.toml pins it) or see docs/KEEL.md" >&2
+  exit 1
+}
+exec keel hook pre-commit

@@ -1,0 +1,258 @@
+import Foundation
+import Libbox
+import NetworkExtension
+import Observation
+import os
+import ParalluxKit
+
+/// Owns the NETunnelProviderManager: installs the system extension, saves the
+/// VPN configuration, starts and stops the tunnel (adapted from SFM
+/// ExtensionProfile.swift, GPLv3).
+@MainActor @Observable
+final class TunnelController {
+    enum Phase: Equatable {
+        case unknown
+        case needsExtension
+        case awaitingApproval
+        case ready
+        case failed(String)
+    }
+
+    private(set) var phase: Phase = .unknown
+    private(set) var vpnStatus: NEVPNStatus = .invalid
+    private(set) var connectedDate: Date?
+    /// Why the last start failed, as the extension reported it (summary);
+    /// cleared by the next connect.
+    private(set) var startError: String?
+    @ObservationIgnored private var startWatch: Task<Void, Never>?
+    /// Why 90 s: sing-box downloads remote rule-sets before it reports ready;
+    /// a slow link takes tens of seconds. Past this a start is treated as lost
+    /// (a dropped callback, a hung provider) and stopped. Assumed value; measure
+    /// with the "core … started" log line against startVPNTunnel.
+    static let startLimit: Duration = .seconds(90)
+    let session = CoreSession()
+
+    @ObservationIgnored private var manager: NETunnelProviderManager?
+    @ObservationIgnored private var observer: (any NSObjectProtocol)?
+    @ObservationIgnored private let installer = SystemExtensionInstaller()
+    @ObservationIgnored private let log = Logger(subsystem: "io.github.visual-z.parallux", category: "tunnel")
+
+    var isConnected: Bool { vpnStatus == .connected }
+    var isBusy: Bool { [.connecting, .disconnecting, .reasserting].contains(vpnStatus) }
+
+    init() {
+        LibboxSetXPCDialer(CommandXPCDialer.shared)
+    }
+
+    /// Loads an existing configuration without prompting; never installs.
+    func load() async {
+        do {
+            manager = try await NETunnelProviderManager.loadAllFromPreferences().first
+            phase = manager == nil ? .needsExtension : .ready
+            observe()
+        } catch {
+            phase = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Installs (or updates) the system extension and the VPN configuration.
+    /// When macOS asks the user to approve the extension, this returns in
+    /// `.awaitingApproval`; `install(thenConnect:)` keeps going once the user
+    /// switches it on in System Settings.
+    func install() async {
+        switch await installer.activate() {
+        case .awaitingApproval:
+            phase = .awaitingApproval
+        case .activated:
+            await saveConfiguration()
+        case .needsReboot:
+            phase = .failed("需要重新启动 Mac 以完成安装")
+        case .failed:
+            phase = .failed(installer.lastError ?? "安装失败")
+        case .idle, .requesting:
+            break
+        }
+    }
+
+    /// The extension finished activating after the user approved it.
+    func completeApproval() async -> Bool {
+        switch await installer.waitForCompletion() {
+        case .activated:
+            await saveConfiguration()
+            return phase == .ready
+        case .needsReboot:
+            phase = .failed("需要重新启动 Mac 以完成安装")
+        case .failed:
+            phase = .failed(installer.lastError ?? "安装失败")
+        default:
+            break
+        }
+        return false
+    }
+
+    var extensionState: ActivationMachine.State { installer.state }
+    var hasConfiguration: Bool { manager != nil }
+
+    private func saveConfiguration() async {
+        do {
+            let manager = self.manager ?? NETunnelProviderManager()
+            let proto = NETunnelProviderProtocol()
+            proto.providerBundleIdentifier = SystemExtensionInstaller.extensionBundleID
+            proto.serverAddress = "Parallux"
+            manager.protocolConfiguration = proto
+            manager.localizedDescription = "Parallux"
+            manager.isEnabled = true
+            try await manager.saveToPreferences()
+            try await manager.loadFromPreferences()
+            self.manager = manager
+            phase = .ready
+            observe()
+        } catch {
+            phase = .failed(error.localizedDescription)
+        }
+    }
+
+    /// True when macOS has no extension enabled or one from another build;
+    /// the app only talks to the Mach service of its own build (decision 11).
+    func needsActivation() async -> Bool {
+        let installed = await installer.installed()
+        guard let bundled = SystemExtensionInstaller.bundledVersion else { return installed == nil }
+        return ExtensionVersion.needsActivation(installed: installed, bundled: bundled)
+    }
+
+    func connect(_ options: TunnelStartOptions, onDemand: (enabled: Bool, rules: [OnDemandRuleModel])? = nil) async {
+        guard let manager else { return }
+        startError = nil
+        do {
+            if let onDemand {
+                manager.onDemandRules = onDemand.rules.filter { $0.problem == nil }.map(Self.rule)
+                manager.isOnDemandEnabled = onDemand.enabled && !onDemand.rules.isEmpty
+            }
+            if !manager.isEnabled {
+                manager.isEnabled = true
+                try await manager.saveToPreferences()
+            }
+            if let proto = manager.protocolConfiguration {
+                proto.includeAllNetworks = options.includeAllNetworks
+                proto.excludeLocalNetworks = options.excludeLocalNetworks
+                proto.excludeAPNs = options.excludeAPNs
+                proto.excludeDeviceCommunication = options.excludeDeviceCommunication
+                proto.enforceRoutes = options.enforceRoutes
+                try await manager.saveToPreferences()
+            }
+            try manager.connection.startVPNTunnel(options: options.encoded())
+            watchStart()
+        } catch {
+            phase = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Turns on-demand off first, or the system would reconnect at once.
+    /// Reloads the running core with new options without dropping the tunnel
+    /// (the extension's handleAppMessage calls libbox startOrReloadService).
+    func reload(_ options: TunnelStartOptions) async throws {
+        guard let session = manager?.connection as? NETunnelProviderSession, vpnStatus == .connected else { return }
+        let data = try options.json()
+        let reply: Data? = try await withCheckedThrowingContinuation { continuation in
+            do {
+                try session.sendProviderMessage(data) { continuation.resume(returning: $0) }
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+        if let reply, !reply.isEmpty {
+            throw NSError(domain: "Parallux.Tunnel", code: 2, userInfo: [NSLocalizedDescriptionKey: String(decoding: reply, as: UTF8.self)])
+        }
+    }
+
+    func disconnect() async {
+        if let manager, manager.isOnDemandEnabled {
+            manager.isOnDemandEnabled = false
+            try? await manager.saveToPreferences()
+        }
+        manager?.connection.stopVPNTunnel()
+    }
+
+    /// Removes the VPN configuration and the system extension.
+    func uninstall() async {
+        await disconnect()
+        try? await manager?.removeFromPreferences()
+        manager = nil
+        observer.map(NotificationCenter.default.removeObserver)
+        observer = nil
+        do {
+            try await installer.deactivate()
+            phase = .needsExtension
+        } catch {
+            phase = .failed(error.localizedDescription)
+        }
+    }
+
+    func installedExtensionVersion() async -> String? { await installer.installedVersion() }
+
+    static func rule(_ model: OnDemandRuleModel) -> NEOnDemandRule {
+        let rule: NEOnDemandRule = model.action == .connect ? NEOnDemandRuleConnect() : NEOnDemandRuleDisconnect()
+        switch model.match {
+        case .anyNetwork:
+            rule.interfaceTypeMatch = .any
+        case let .wifi(ssid):
+            rule.interfaceTypeMatch = .wiFi
+            rule.ssidMatch = [ssid]
+        case let .probe(url):
+            rule.interfaceTypeMatch = .any
+            rule.probeURL = URL(string: url)
+        }
+        return rule
+    }
+
+    private func observe() {
+        guard observer == nil, let connection = manager?.connection else { return }
+        apply(connection)
+        observer = NotificationCenter.default.addObserver(forName: .NEVPNStatusDidChange, object: connection, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let connection = self.manager?.connection else { return }
+                self.apply(connection)
+            }
+        }
+    }
+
+    /// Stops a start that neither connects nor fails within startLimit.
+    private func watchStart() {
+        startWatch?.cancel()
+        startWatch = Task { [weak self] in
+            try? await Task.sleep(for: Self.startLimit)
+            guard !Task.isCancelled, let self, self.vpnStatus == .connecting else { return }
+            self.log.error("start did not finish within the limit; stopping")
+            self.startError = "连接超时"
+            self.manager?.connection.stopVPNTunnel()
+        }
+    }
+
+    /// The extension's start error reaches the app only through this call.
+    private func readStartError(_ connection: NEVPNConnection) {
+        connection.fetchLastDisconnectError { [weak self] error in
+            guard let error else { return }
+            let text = ProviderError.summary(error.localizedDescription)
+            Task { @MainActor in
+                guard let self, self.startError == nil else { return }
+                self.startError = text
+            }
+        }
+    }
+
+    private func apply(_ connection: NEVPNConnection) {
+        let wasConnected = vpnStatus == .connected
+        let wasConnecting = vpnStatus == .connecting
+        if connection.status != .connecting { startWatch?.cancel() }
+        if wasConnecting, connection.status == .disconnected { readStartError(connection) }
+        vpnStatus = connection.status
+        connectedDate = connection.connectedDate
+        // While a remote device is being viewed, the session follows it, not this Mac's tunnel.
+        guard CommandTarget.remote == nil else { return }
+        if connection.status == .connected, !wasConnected {
+            session.start()
+        } else if connection.status != .connected, wasConnected {
+            session.stop()
+        }
+    }
+}
