@@ -1,6 +1,6 @@
 ---
 type: fix
-status: doing        # todo | doing | blocked | awaiting-author | done
+status: awaiting-author        # todo | doing | blocked | awaiting-author | done
 weight: full
 created: 2026-11-20
 baseline: 75117aa7f096
@@ -54,6 +54,8 @@ baseline: 75117aa7f096
   - 检：test `theMostHitRuleComesInPartsThatMakeTheSameSentence`
 - **D4** 用量拆成标签与数字：数字「X / Y」不分开，标签里没有斜杠，拼起来是原来的文字。
   - 检：test `usageComesAsALabelAndFigures`
+- **D8** 路由模式卡显示的规则名与流向图、路由页一致（规则集按名字、域名列表按第一项），不认识的规则集保留自己的名字。
+  - 检：test `theMostHitRuleComesInPartsThatMakeTheSameSentence`
 - **D5** 计数只因本卡的新测试增加；gate 全绿。
   - 检：cmd `keel gate`
 - **D6** 不弱化既有测试。
@@ -84,8 +86,33 @@ keel gate --record docs/tasks/fix-overview-responsive.md
 
 ## 证据
 
+RED(swift): 246c966 cardsShareARowOnlyWhileEachKeepsItsMinimumWidth  # D1
+RED(swift): 246c966 gridRowsCoverEveryCardOnceAndNeverSqueezeOne  # D2
+RED(swift): 246c966 theMostHitRuleComesInPartsThatMakeTheSameSentence  # D3
+RED(swift): 246c966 usageComesAsALabelAndFigures  # D4
+
+D8 是冻结之后加的：规则名不再转成界面的叫法，测试必须红。
+
+```diff keel-inject(swift) theMostHitRuleComesInPartsThatMakeTheSameSentence
+--- a/apple/ParalluxKit/Sources/ParalluxKit/Interface/OverviewCopy.swift
++++ b/apple/ParalluxKit/Sources/ParalluxKit/Interface/OverviewCopy.swift
+@@ -69 +69 @@
+-            rule.contains("=") ? TrafficLabel.name(connectionRule: rule) : TrafficLabel.setName(rule)
++            rule
+```
+
+失败断言原文（RED 时，桩实现下）：`Expectation failed: OverviewGrid.rows(count: 3, width: 3 * w + 2 * s - 1) == [0..<1, 1..<3]`；`Expectation failed: summary.text == "\(summary.label) \(summary.value)"`；`Expectation failed: OverviewCopy.topRuleParts(connections)`。
+
+装机截图（2026-11-20，屏幕未锁定，开发签名构建 20261120100516）：窗口 760×640（最小宽度）时流量卡独占一行并横排，路由模式与配置并排，整页不用滚动；窗口 918×572 时三张并排。两种宽度下都没有被省略号截断的数字，没有在斜杠处折断的行；路由模式有规则、全局、直连三项。
+GATE: a7c0c6d806d9+dirty ok tree:54dbefbdfbde build=0 vet=0 test=0[627p/0f] fmt=0 swift-test=0[191p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-20)
+
 ## 修订
+
+- D8（冻结之后加的判据，只加严）：第一次装机看到「命中最多」显示的是内核的原始条件（`rule_set=[geosite-openai geosite-anthrop…`），两行还是被省略。改为显示流向图用的名字，去向另起一行，原始条件放进悬停提示。
+- 装机后追加的一处版面：流量卡独占一行时改成横排（速率、曲线、累计并排）。竖排时它把下面两张卡片挤出屏幕，最小窗口要滚动才看得到路由模式。
 
 ## 交接
 
-开卡：桩与红测试已提交。下一步实现分行、三张卡片的行式版面，装机后在三种宽度下截图。
+- 做了什么：卡片按拿到的宽度分行（`OverviewCardGrid` + `OverviewGrid.rows`）；三张卡片里每项数据一行，标签在左、数值在右且不截断；用量从圆环改成线性进度条；「命中最多」显示规则的名字。两种窗口宽度下装机截图看过。
+- 卡在哪：D7 等作者看。没看过的：只显示一张或两张卡片时；窗口很宽（三张卡片都超过 412 pt）时流量卡会变成横排，没有截图确认过好不好看；浅色外观下只看过旧版面。
+- 下一步：作者拖动窗口宽度看一遍。
