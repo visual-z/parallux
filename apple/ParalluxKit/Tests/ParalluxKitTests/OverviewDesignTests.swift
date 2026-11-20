@@ -193,11 +193,11 @@ import Testing
         #expect(OverviewCopy.linkDetail(enabled: true, standby: true, rate: 125_000) == "1.0 Mbps", "a link carrying traffic is not standing by")
         #expect(OverviewCopy.linkDetail(enabled: true, standby: false, rate: 0) == "0 bps")
 
-        #expect(OverviewCopy.exitDetail(direct: true, mode: .bond, rate: 125_000) == "1.0 Mbps")
-        #expect(OverviewCopy.exitDetail(direct: false, mode: .bond, rate: 56_750_000) == "叠加后转发 · 454 Mbps")
-        #expect(OverviewCopy.exitDetail(direct: false, mode: .balance, rate: 125_000) == "按连接分到各线路 · 1.0 Mbps")
-        #expect(OverviewCopy.exitDetail(direct: false, mode: .failover, rate: 0) == "仅主线路 · 0 bps")
-        #expect(OverviewCopy.exitDetail(direct: false, mode: nil, rate: 125_000) == "1.0 Mbps")
+        // The exit says its rate and nothing else: how the mode carries it is
+        // already in the diagram's heading (author 2026-11-20, fix-overview-cards).
+        #expect(OverviewCopy.exitDetail(rate: 125_000) == "1.0 Mbps")
+        #expect(OverviewCopy.exitDetail(rate: 56_750_000) == "454 Mbps")
+        #expect(OverviewCopy.exitDetail(rate: 0) == "0 bps")
 
         #expect(OverviewCopy.exitName(node: "HK-03", server: "东京 VPS", mode: .bond) == "东京 VPS → HK-03")
         #expect(OverviewCopy.exitName(node: "HK-03", server: "东京 VPS", mode: .balance) == "HK-03")

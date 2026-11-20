@@ -28,6 +28,11 @@ public enum OverviewCopy {
         return RateFormat.bitsPerSecond(rate)
     }
 
+    /// Under an exit's name. stub: fix-overview-cards
+    public static func exitDetail(rate: Int64) -> String {
+        exitDetail(direct: false, mode: .balance, rate: rate)
+    }
+
     /// Under an exit's name: how the aggregation mode carries it, then the rate.
     public static func exitDetail(direct: Bool, mode: AggregationMode?, rate: Int64) -> String {
         let speed = RateFormat.bitsPerSecond(rate)

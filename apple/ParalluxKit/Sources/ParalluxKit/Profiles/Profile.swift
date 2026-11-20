@@ -31,9 +31,14 @@ public struct Profile: Codable, Identifiable, Equatable, Sendable {
     /// Seconds between automatic updates; see RemoteUpdate.clamp.
     public var autoUpdateInterval: TimeInterval
     public var lastUpdated: Date?
+    /// Remote: what the subscription server said about traffic at the last
+    /// download (`subscription-userinfo`); nil when it said nothing. Missing
+    /// in data written before this field existed.
+    public var usage: SubscriptionUsage?
 
     public init(id: UUID = UUID(), name: String, kind: ProfileKind, icloudPath: String? = nil, remoteURL: URL? = nil,
-                autoUpdate: Bool = false, autoUpdateInterval: TimeInterval = RemoteUpdate.defaultInterval, lastUpdated: Date? = nil) {
+                autoUpdate: Bool = false, autoUpdateInterval: TimeInterval = RemoteUpdate.defaultInterval, lastUpdated: Date? = nil,
+                usage: SubscriptionUsage? = nil) {
         self.id = id
         self.name = name
         self.kind = kind
@@ -42,6 +47,7 @@ public struct Profile: Codable, Identifiable, Equatable, Sendable {
         self.autoUpdate = autoUpdate
         self.autoUpdateInterval = autoUpdateInterval
         self.lastUpdated = lastUpdated
+        self.usage = usage
     }
 }
 
