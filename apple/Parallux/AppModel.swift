@@ -15,6 +15,7 @@ final class AppModel {
     let linkStats = LinkStatsPoller()
     @ObservationIgnored private let notifier = LinkNotifier()
     let servers = AggregationServersModel()
+    let relays = RelayLinksModel()
     let remote = RemoteControlModel()
     let routeOverrides = RouteOverrideStore()
     /// A target the connections inspector asked 路由 › 试一下 to explain; consumed by RoutingView.
@@ -56,6 +57,8 @@ final class AppModel {
         observeTunnel()
         observeLinkHealth()
         observeLinkSet(previous: links.links)
+        linkStats.relayCarriers = { [weak self] in self?.relayCarrierTags ?? [:] }
+        Task { await refreshRelayCarriers() }
     }
 
     /// 「自动加入新线路」: a link plugged in or pulled out while connected
@@ -70,6 +73,12 @@ final class AppModel {
                 if self.linkSettings.value.preferences.needsRecomposition(from: previous, to: current) {
                     await self.applyLinkChanges()
                 }
+                // Afterwards, so the search (seconds, when an interface does
+                // not answer) never delays taking a pulled link out: a relay
+                // whose carrier was unplugged looks for another way to its host.
+                if await self.relays.detectCarriers(physical: current) {
+                    await self.applyLinkChanges()
+                }
                 self.observeLinkSet(previous: current)
             }
         }
@@ -81,7 +90,7 @@ final class AppModel {
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                self.notifier.update(groups: self.linkStats.groups, links: self.links.links, enabled: self.settings.value.notifyLinkChanges)
+                self.notifier.update(groups: self.linkStats.groups, links: self.allLinks, enabled: self.settings.value.notifyLinkChanges)
                 self.observeLinkHealth()
             }
         }
@@ -100,8 +109,82 @@ final class AppModel {
         }
     }
 
-    /// Enabled links in priority order (the links page's choice).
-    var enabledLinks: [LinkInterface] { linkSettings.value.preferences.enabled(links.links) }
+    /// Every link the links page lists: this Mac's interfaces, then the
+    /// relay links (feat-relay-links).
+    var allLinks: [LinkInterface] { links.links + relays.links }
+
+    /// Enabled links in priority order (the links page's choice). A relay
+    /// link counts only while it can be used: it has its key, and its
+    /// carrier is one of the enabled physical links.
+    var enabledLinks: [LinkInterface] {
+        let enabled = linkSettings.value.preferences.enabled(allLinks)
+        let physical = enabled.filter { $0.kind != .relay }.map(\.name)
+        return enabled.filter { link in
+            guard link.kind == .relay, let relay = relays.relay(named: link.name) else { return link.kind != .relay }
+            return relay.blocker(hasKey: relays.keyed.contains(relay.id), enabledPhysical: physical) == nil
+        }
+    }
+
+    /// Why an enabled relay link is not carrying anything; nil for physical
+    /// links, switched-off relays and relays in use.
+    func relayBlocker(_ link: LinkInterface) -> RelayLink.Blocker? {
+        guard link.kind == .relay, let relay = relays.relay(named: link.name) else { return nil }
+        let physical = linkSettings.value.preferences.enabled(links.links).map(\.name)
+        return relay.blocker(hasKey: relays.keyed.contains(relay.id), enabledPhysical: physical)
+    }
+
+    /// The second line of a link row: the interface for a physical link,
+    /// the carrier (or what is missing) for a relay link.
+    func linkDetail(_ link: LinkInterface) -> String {
+        guard link.kind == .relay, let relay = relays.relay(named: link.name) else { return "\(link.displayName) · \(link.name)" }
+        if relays.detecting.contains(relay.id) { return "\(link.kind.title) · 检测中..." }
+        guard let carrier = relay.carrier else { return "\(link.kind.title) · 无承载线路" }
+        let name = links.links.first { $0.name == carrier }.map { "\($0.kind.title)（\(carrier)）" } ?? carrier
+        return "\(link.kind.title) · 经\(name)"
+    }
+
+    /// Relay link tag → carrier link tag, for the per-link rates (RelayRates).
+    var relayCarrierTags: [String: String] {
+        var result: [String: String] = [:]
+        for link in enabledLinks where link.kind == .relay {
+            if let carrier = relays.relay(named: link.name)?.carrier {
+                result[ProfileComposer.linkTag(link.name)] = ProfileComposer.linkTag(carrier)
+            }
+        }
+        return result
+    }
+
+    /// The enabled relay links as the composer takes them. Keys are read
+    /// from the Keychain here and nowhere else.
+    private var composedRelays: [ProfileComposer.Relay] {
+        enabledLinks.filter { $0.kind == .relay }.compactMap { link in
+            guard let relay = relays.relay(named: link.name), let key = relays.key(for: relay.id) else { return nil }
+            return relay.composed(key: key)
+        }
+    }
+
+    /// Looks for relay carriers (`force`: again for every relay) and applies
+    /// the result to a running tunnel.
+    func refreshRelayCarriers(force: Bool = false) async {
+        if await relays.detectCarriers(physical: links.links, force: force) { await applyLinkChanges() }
+    }
+
+    /// Adds the relay links pasted into the links page, then finds their carriers.
+    func addRelays(_ text: String) async throws {
+        _ = try relays.add(text: text)
+        _ = await relays.detectCarriers(physical: links.links)
+        await applyLinkChanges()
+    }
+
+    func removeRelay(_ link: LinkInterface) async {
+        guard let relay = relays.relay(named: link.name) else { return }
+        relays.remove(relay.id)
+        // Its place in the order and its switches go with it.
+        linkSettings.value.preferences.order.removeAll { $0 == link.name }
+        linkSettings.value.preferences.disabled.remove(link.name)
+        linkSettings.value.preferences.backup.remove(link.name)
+        await applyLinkChanges()
+    }
 
     /// 聚合 / 代理 as the switches show them (feat-split-switches).
     var switches: ConnectionSwitches { ConnectionSwitches.shown(linkSettings.value.switches, running: isOn) }
@@ -115,7 +198,10 @@ final class AppModel {
     }
 
     /// The note under the aggregation picker, when the chosen mode is not the one running.
-    var aggregationNotice: String? { AggregationNotice.text(chosen: linkSettings.value.mode, effective: effectiveMode) }
+    var aggregationNotice: String? {
+        AggregationNotice.text(chosen: linkSettings.value.mode, effective: effectiveMode,
+                               physicalLinks: enabledLinks.filter { $0.kind != .relay }.count)
+    }
 
     /// The aggregation mode actually in effect: needs 聚合 on and two links, and 叠加 needs a server.
     var effectiveMode: AggregationMode? {
@@ -138,7 +224,8 @@ final class AppModel {
             : base
         return try ProfileComposer.compose(rerouted, links: settings.switches.aggregation ? enabledLinks : [],
                                            backup: settings.preferences.backup,
-                                           mode: settings.mode, bond: bondProvider(settings))
+                                           mode: settings.mode, bond: bondProvider(settings),
+                                           relays: settings.switches.aggregation ? composedRelays : [])
     }
 
     /// Applies link or mode changes to a running tunnel without disconnecting.

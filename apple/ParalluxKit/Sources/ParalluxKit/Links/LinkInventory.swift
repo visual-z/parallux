@@ -28,7 +28,8 @@ public enum LinkKind: String, Codable, Sendable, CaseIterable {
     }
 }
 
-/// One candidate link: a physical interface that can reach the Internet.
+/// One link: a physical interface that can reach the Internet, or a relay
+/// link (RelayLink.link), whose `name` is not an interface.
 public struct LinkInterface: Codable, Equatable, Identifiable, Sendable {
     public var name: String
     public var kind: LinkKind
@@ -36,8 +37,10 @@ public struct LinkInterface: Codable, Equatable, Identifiable, Sendable {
     public var displayName: String
     public var address: String?
     public var id: String { name }
-    /// What rows and the diagram call this link. stub: feat-relay-links
-    public var title: String { kind.title }
+    /// What rows and the diagram call this link: its kind for a physical
+    /// link ("Wi‑Fi", "有线"), its own name for a relay link, of which there
+    /// are usually several.
+    public var title: String { kind == .relay ? displayName : kind.title }
 
     public init(name: String, kind: LinkKind, displayName: String, address: String? = nil) {
         self.name = name

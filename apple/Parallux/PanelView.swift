@@ -94,7 +94,7 @@ private struct PanelHome: View {
     /// part in aggregation).
     @ViewBuilder private var links: some View {
         let prefs = app.linkSettings.value.preferences
-        let ordered = app.links.links.sorted { a, b in
+        let ordered = app.allLinks.sorted { a, b in
             let ia = prefs.order.firstIndex(of: a.name) ?? Int.max
             let ib = prefs.order.firstIndex(of: b.name) ?? Int.max
             return ia != ib ? ia < ib : a.name < b.name
@@ -107,8 +107,8 @@ private struct PanelHome: View {
         ForEach(ordered) { link in
             // Enabled but not in use (聚合 is off): no standing, nothing to report.
             let standing = standings[link.name] ?? (prefs.disabled.contains(link.name) ? .disabled : nil)
-            PanelLinkRow(symbol: link.kind.symbol, name: link.kind.title, badge: standing?.badge,
-                         detail: "\(link.displayName) · \(link.name)", trailing: carried(link, standing),
+            PanelLinkRow(symbol: link.kind.symbol, name: link.title, badge: standing?.badge,
+                         detail: app.linkDetail(link), trailing: carried(link, standing),
                          color: LinkColors.color(for: link, in: app.links.links),
                          isOn: Binding(
                              get: { !app.linkSettings.value.preferences.disabled.contains(link.name) },

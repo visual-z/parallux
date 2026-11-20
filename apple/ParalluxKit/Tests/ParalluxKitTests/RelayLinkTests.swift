@@ -327,6 +327,86 @@ private func relay(_ n: Int, carrier: String? = "en7") -> RelayLink {
     }
 }
 
+extension RelayCompositionTests {
+    static var relayFixtureURL: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("core/aggregate/testdata/composed-relay.json")
+    }
+
+    /// core/pxbridge checks this fixture with libbox.CheckConfig; the
+    /// composer must keep producing exactly it. PARALLUX_WRITE_FIXTURES=1
+    /// rewrites it (then read the diff).
+    @Test func composedRelayFixtureMatchesTheGenerator() throws {
+        let one = relay(1), two = relay(2)
+        let relays = [try #require(one.composed(key: key)), try #require(two.composed(key: key))]
+        let text = try ProfileComposer.compose(userProfile, links: [wifi, wired, one.link, two.link], backup: [two.linkName],
+                                               mode: .balance, relays: relays)
+        if ProcessInfo.processInfo.environment["PARALLUX_WRITE_FIXTURES"] == "1" {
+            try Data((text + "\n").utf8).write(to: Self.relayFixtureURL)
+        }
+        let expected = try JSONSerialization.jsonObject(with: Data(contentsOf: Self.relayFixtureURL)) as? NSDictionary
+        let generated = try JSONSerialization.jsonObject(with: Data(text.utf8)) as? NSDictionary
+        #expect(expected != nil)
+        #expect(generated == expected)
+    }
+}
+
+@Suite struct RelayCarrierTests {
+    /// A TCP listener on loopback; closing it frees the port.
+    private func listen() throws -> (fd: Int32, port: UInt16) {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        try #require(fd >= 0)
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let bound = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        try #require(bound == 0 && Darwin.listen(fd, 4) == 0)
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let named = withUnsafeMutablePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(fd, $0, &length) }
+        }
+        try #require(named == 0)
+        return (fd, UInt16(bigEndian: address.sin_port))
+    }
+
+    /// Real sockets on loopback: the carrier is the first interface, in the
+    /// caller's order, whose bound socket the relay host answers.
+    @Test func theCarrierIsTheFirstInterfaceThatReachesTheRelay() throws {
+        let server = try listen()
+        defer { close(server.fd) }
+        #expect(RelayCarrier.find(host: "127.0.0.1", port: server.port, interfaces: ["lo0"], timeout: 1) == "lo0")
+        #expect(RelayCarrier.find(host: "127.0.0.1", port: server.port, interfaces: ["nope0", "lo0"], timeout: 1) == "lo0", "an interface that is gone is passed over")
+        #expect(RelayCarrier.find(host: "localhost", port: server.port, interfaces: ["lo0"], timeout: 1) == "lo0", "a name is resolved first")
+        #expect(RelayCarrier.find(host: "127.0.0.1", port: server.port, interfaces: [], timeout: 1) == nil)
+        #expect(RelayCarrier.find(host: "127.0.0.1", port: server.port, interfaces: ["nope0"], timeout: 1) == nil)
+        #expect(RelayCarrier.find(host: "::1", port: server.port, interfaces: ["lo0"], timeout: 1) == nil, "IPv6 relay hosts are not probed (LinkProbe is IPv4-only)")
+        let closed = try listen()
+        close(closed.fd)
+        #expect(RelayCarrier.find(host: "127.0.0.1", port: closed.port, interfaces: ["lo0"], timeout: 1) == nil, "nothing listens there")
+    }
+
+    @Test func aRelayIsBlockedWithoutItsKeyOrItsCarrier() {
+        let one = relay(1)
+        #expect(one.blocker(hasKey: true, enabledPhysical: ["en0", "en7"]) == nil)
+        #expect(one.blocker(hasKey: true, enabledPhysical: ["en0"]) == .carrierOff("en7"))
+        #expect(one.blocker(hasKey: true, enabledPhysical: []) == .carrierOff("en7"))
+        #expect(relay(1, carrier: nil).blocker(hasKey: true, enabledPhysical: ["en7"]) == .noCarrier)
+        #expect(one.blocker(hasKey: false, enabledPhysical: ["en7"]) == .noKey, "a missing key comes first: nothing else can fix it")
+    }
+
+    @Test func bondOverOnePhysicalLinkSaysWhyItRunsAsFailover() {
+        #expect(AggregationNotice.text(chosen: .bond, effective: .failover, physicalLinks: 1) == "叠加需要两条物理线路，中继线路不能叠加，暂按主备运行")
+        #expect(AggregationNotice.text(chosen: .bond, effective: .failover, physicalLinks: 0) == "叠加需要两条物理线路，中继线路不能叠加，暂按主备运行")
+        #expect(AggregationNotice.text(chosen: .bond, effective: .failover, physicalLinks: 2) == "尚未设置聚合服务器，暂按主备运行")
+        #expect(AggregationNotice.text(chosen: .bond, effective: .bond, physicalLinks: 1) == nil)
+        #expect(AggregationNotice.text(chosen: .balance, effective: .balance, physicalLinks: 1) == nil)
+    }
+}
+
 @Suite struct RelayRateTests {
     @Test func relayRatesComeFromTheCoreAndLeaveTheCarrier() {
         func rate(_ up: Int64, _ down: Int64) -> LinkRates.Rate { .init(upload: up, download: down) }

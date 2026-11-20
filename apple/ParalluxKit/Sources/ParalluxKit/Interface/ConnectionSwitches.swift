@@ -44,8 +44,12 @@ public struct ConnectionSwitches: Codable, Equatable, Sendable, Hashable {
 /// The note under the aggregation picker when the chosen mode is not the one
 /// in effect (feat-split-switches).
 public enum AggregationNotice {
-    public static func text(chosen: AggregationMode, effective: AggregationMode?) -> String? {
+    /// `physicalLinks`: how many enabled links are physical. 叠加 needs two
+    /// of them whatever the relay links add (feat-relay-links); callers
+    /// that have no relay links may leave it out.
+    public static func text(chosen: AggregationMode, effective: AggregationMode?, physicalLinks: Int = 2) -> String? {
         guard let effective, chosen == .bond, effective == .failover else { return nil }
+        if physicalLinks < 2 { return "叠加需要两条物理线路，中继线路不能叠加，暂按主备运行" }
         return "尚未设置聚合服务器，暂按主备运行"
     }
 }

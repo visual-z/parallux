@@ -6,6 +6,11 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/sagernet/sing/common/buf"
+	"github.com/sagernet/sing/common/bufio"
+	M "github.com/sagernet/sing/common/metadata"
+	N "github.com/sagernet/sing/common/network"
 )
 
 // linkCounters are one link's totals inside one aggregate outbound.
@@ -63,6 +68,64 @@ func (c *countedConn) Close() error {
 
 // Upstream exposes the wrapped connection to sing's bufio fast paths.
 func (c *countedConn) Upstream() any { return c.Conn }
+
+// countedPacketConn adds a relay link's UDP traffic to its counters, and
+// counts as one active connection until closed.
+//
+// Only relay links get one (feat-relay-links): a physical link's bytes are
+// read from its interface, which sees everything, and wrapping its packet
+// conns would hide sing's fast paths for no information. A relay link's
+// bytes are mixed into its carrier's interface, so these counters are the
+// only place they can be told apart.
+type countedPacketConn struct {
+	N.NetPacketConn
+	counters *linkCounters
+	once     sync.Once
+}
+
+func newCountedPacketConn(conn net.PacketConn, counters *linkCounters) net.PacketConn {
+	counters.active.Add(1)
+	return &countedPacketConn{NetPacketConn: bufio.NewPacketConn(conn), counters: counters}
+}
+
+func (c *countedPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
+	n, addr, err := c.NetPacketConn.ReadFrom(p)
+	c.counters.download.Add(int64(n))
+	return n, addr, err
+}
+
+func (c *countedPacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
+	n, err := c.NetPacketConn.WriteTo(p, addr)
+	c.counters.upload.Add(int64(n))
+	return n, err
+}
+
+func (c *countedPacketConn) ReadPacket(buffer *buf.Buffer) (M.Socksaddr, error) {
+	before := buffer.Len()
+	destination, err := c.NetPacketConn.ReadPacket(buffer)
+	if err == nil {
+		c.counters.download.Add(int64(buffer.Len() - before))
+	}
+	return destination, err
+}
+
+func (c *countedPacketConn) WritePacket(buffer *buf.Buffer, destination M.Socksaddr) error {
+	// The writer releases the buffer, so its length is read first.
+	n := buffer.Len()
+	err := c.NetPacketConn.WritePacket(buffer, destination)
+	if err == nil {
+		c.counters.upload.Add(int64(n))
+	}
+	return err
+}
+
+func (c *countedPacketConn) Close() error {
+	c.once.Do(func() { c.counters.active.Add(-1) })
+	return c.NetPacketConn.Close()
+}
+
+// Upstream exposes the wrapped connection to sing's bufio fast paths.
+func (c *countedPacketConn) Upstream() any { return c.NetPacketConn }
 
 // registry holds the running aggregate outbounds for Snapshot.
 var registry sync.Map // tag → *Outbound

@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 	"slices"
-	"sync"
 	"sync/atomic"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -76,7 +75,11 @@ type Outbound struct {
 	mode    string
 	tags    []string
 	backup  []bool
-	bondTag string
+	// relay marks the relay links (relay.go); hasRelay spares the per-dial
+	// destination check when there are none.
+	relay    []bool
+	hasRelay bool
+	bondTag  string
 	// bondBypass: hosts kept off the bond besides local ones (bondEligible).
 	bondBypass []string
 	targets    []M.Socksaddr
@@ -86,8 +89,8 @@ type Outbound struct {
 	health   []*linkHealth
 	counters []*linkCounters
 	next     atomic.Uint64 // balance: rotation cursor
-	cancel   context.CancelFunc
-	probes   sync.WaitGroup
+	// release gives back the shared probers this outbound uses (probers.go).
+	release []func()
 	// disableProbes is for tests that drive health directly.
 	disableProbes bool
 }
@@ -121,6 +124,15 @@ func newOutbound(manager adapter.OutboundManager, logger log.ContextLogger, tag 
 			return nil, E.New("aggregate: backup link ", link, " is not in links")
 		}
 	}
+	for _, link := range options.Relays {
+		if !slices.Contains(options.Links, link) {
+			return nil, E.New("aggregate: relay link ", link, " is not in links")
+		}
+	}
+	relay := make([]bool, len(options.Links))
+	for i, link := range options.Links {
+		relay[i] = slices.Contains(options.Relays, link)
+	}
 	backup := make([]bool, len(options.Links))
 	for i, link := range options.Links {
 		backup[i] = slices.Contains(options.Backup, link)
@@ -147,6 +159,8 @@ func newOutbound(manager adapter.OutboundManager, logger log.ContextLogger, tag 
 		mode:       options.Mode,
 		tags:       options.Links,
 		backup:     backup,
+		relay:      relay,
+		hasRelay:   len(options.Relays) > 0,
 		bondTag:    options.Bond,
 		bondBypass: slices.Clone(options.BondBypass),
 		targets:    targets,
@@ -174,22 +188,18 @@ func (o *Outbound) Start(stage adapter.StartStage, _ *adapter.Scope) error {
 	}
 	o.health = make([]*linkHealth, len(o.links))
 	o.counters = make([]*linkCounters, len(o.links))
-	ctx, cancel := context.WithCancel(context.Background())
-	o.cancel = cancel
 	for i, link := range o.links {
-		o.health[i] = &linkHealth{}
-		// Optimistic until the first probe says otherwise, so the first
-		// connections after start do not wait for a probe round.
-		o.health[i].healthy.Store(true)
 		o.counters[i] = &linkCounters{}
 		if o.disableProbes {
+			o.health[i] = &linkHealth{relay: o.relay[i]}
+			o.health[i].healthy.Store(true)
 			continue
 		}
-		o.probes.Add(1)
-		go func(link adapter.Outbound, health *linkHealth) {
-			defer o.probes.Done()
-			probeLoop(ctx, link, o.targets, health)
-		}(link, o.health[i])
+		// One prober per link outbound, shared with the other aggregates
+		// over the same links (probers.go).
+		health, release := acquireProber(link, o.targets, o.relay[i])
+		o.health[i] = health
+		o.release = append(o.release, release)
 	}
 	registry.Store(o.Tag(), o)
 	return nil
@@ -197,10 +207,10 @@ func (o *Outbound) Start(stage adapter.StartStage, _ *adapter.Scope) error {
 
 func (o *Outbound) Close() error {
 	registry.Delete(o.Tag())
-	if o.cancel != nil {
-		o.cancel()
-		o.probes.Wait()
+	for _, release := range o.release {
+		release()
 	}
+	o.release = nil
 	return nil
 }
 
@@ -221,13 +231,13 @@ func (o *Outbound) DialContext(ctx context.Context, network string, destination 
 		o.logger.DebugContext(ctx, "bond ", o.bondTag, " failed, falling back to the links: ", err)
 	}
 	var lastErr error
-	for _, index := range o.order(true) {
+	for _, index := range o.dialOrder(destination) {
 		conn, err := o.links[index].DialContext(ctx, network, destination)
 		if err == nil {
 			return newCountedConn(conn, o.counters[index]), nil
 		}
 		lastErr = err
-		retry, down := dialFailure(err)
+		retry, down := o.failure(index, err)
 		if down {
 			o.markFailed(index)
 		}
@@ -249,13 +259,16 @@ func everyLinkFailed(last error) error {
 
 func (o *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	var lastErr error
-	for _, index := range o.order(true) {
+	for _, index := range o.dialOrder(destination) {
 		conn, err := o.links[index].ListenPacket(ctx, destination)
 		if err == nil {
+			if o.relay[index] {
+				return newCountedPacketConn(conn, o.counters[index]), nil
+			}
 			return conn, nil
 		}
 		lastErr = err
-		retry, down := dialFailure(err)
+		retry, down := o.failure(index, err)
 		if down {
 			o.markFailed(index)
 		}
@@ -265,6 +278,24 @@ func (o *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 		}
 	}
 	return nil, everyLinkFailed(lastErr)
+}
+
+// dialOrder is the order this connection tries the links in: the rotation or
+// priority order, without the relay links when the destination is local.
+func (o *Outbound) dialOrder(destination M.Socksaddr) []int {
+	order := o.order(true)
+	if !o.hasRelay {
+		return order
+	}
+	return relayOrder(order, o.relay, localDestination(destination))
+}
+
+// failure classifies a failed dial of one link (failure.go, relay.go).
+func (o *Outbound) failure(index int, err error) (retry bool, linkDown bool) {
+	if o.relay[index] {
+		return relayDialFailure(err)
+	}
+	return dialFailure(err)
 }
 
 // A link-level dial failure (dialFailure) is stronger evidence than a probe:

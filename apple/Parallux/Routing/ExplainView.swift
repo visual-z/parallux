@@ -123,7 +123,7 @@ private struct Steps: View {
         // Direct traffic is bonded too (feat-bond-direct); the explainer has
         // no IP for a name target, so it does not try to call it LAN here.
         let bonded = mode == .bond
-        return "\(mode.title) · \(app.activeLinks.prefix(bonded ? 2 : 9).map(\.kind.title).joined(separator: " + "))"
+        return "\(mode.title) · \(app.activeLinks.filter { !bonded || $0.kind != .relay }.prefix(bonded ? 2 : 9).map(\.title).joined(separator: " + "))"
     }
 
     private func lineWhy(_ outbound: String) -> String {

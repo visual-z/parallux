@@ -20,6 +20,9 @@ var sensitiveKeys = map[string]bool{
 	"token": true, "key": true, "secret": true, "password": true, "passwd": true,
 	"pass": true, "auth": true, "access_token": true, "apikey": true, "api_key": true,
 	"sig": true, "signature": true, "uuid": true, "sub": true,
+	// Parallux's own import links: the aggregation server's pre-shared key
+	// (the relay link's is "key", above).
+	"psk": true,
 }
 
 // longOpaque matches path segments that look like tokens: 16+ characters of
@@ -59,10 +62,12 @@ func URL(raw string) string {
 
 var userinfo = regexp.MustCompile(`(^|//)[^/@\s]+@`)
 
-// Text redacts every http(s) URL inside free text, such as an error message
-// that quotes the URL it failed on.
+// Text redacts every http(s) URL and every Parallux import link inside free
+// text, such as an error message that quotes the URL it failed on. The
+// import links (parallux://relay, parallux://aggregation-server) carry a key
+// in their query.
 func Text(s string) string {
 	return urlInText.ReplaceAllStringFunc(s, URL)
 }
 
-var urlInText = regexp.MustCompile(`https?://[^\s"'<>]+`)
+var urlInText = regexp.MustCompile(`(?:https?|parallux)://[^\s"'<>]+`)

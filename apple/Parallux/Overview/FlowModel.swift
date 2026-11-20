@@ -22,7 +22,7 @@ enum FlowModel {
         let carrying = app.activeLinks.isEmpty ? Array(app.links.links.prefix(1)) : app.activeLinks
         // Design v0.2 keeps switched-off links in the picture, faded. Only
         // with 聚合 on: off, the other links are not off, just not used.
-        let idle = app.linkSettings.value.switches.aggregation ? app.links.links.filter { !carrying.contains($0) } : []
+        let idle = app.linkSettings.value.switches.aggregation ? app.allLinks.filter { !carrying.contains($0) } : []
         let columns = LinkFlow.columns(links: carrying, linkRates: app.linkStats.rates,
                                        totalRate: status.uplink + status.downlink,
                                        exits: FlowSummary.exits(app.session.connections))
@@ -34,7 +34,7 @@ enum FlowModel {
                      rate: Double(node.rate), color: LinkColors.color(for: link, in: app.links.links))
         }
         links += idle.map { link in
-            FlowNode(id: link.name, name: link.kind.title, detail: OverviewCopy.linkDetail(enabled: false, standby: false, rate: 0),
+            FlowNode(id: link.name, name: link.title, detail: OverviewCopy.linkDetail(enabled: false, standby: false, rate: 0),
                      rate: 0, color: LinkColors.color(for: link, in: app.links.links), isDimmed: true)
         }
 

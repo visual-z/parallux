@@ -16,13 +16,15 @@ public struct AggregationServer: Codable, Equatable, Identifiable, Sendable {
 
     public static let bondTag = "parallux-bond"
 
-    /// The multipath outbound over the two highest-priority links (the
-    /// transport has exactly two legs, feat-bond). nil with fewer than two.
+    /// The multipath outbound over the two highest-priority physical links
+    /// (the transport has exactly two legs, feat-bond; relay links are never
+    /// legs, feat-relay-links). nil with fewer than two.
     public func bond(links: [LinkInterface], psk: String) -> ProfileComposer.Bond? {
-        guard links.count >= 2 else { return nil }
+        let legs = links.filter { $0.kind != .relay }
+        guard legs.count >= 2 else { return nil }
         return ProfileComposer.Bond(tag: Self.bondTag, outbound: [
             "type": .string("multipath"),
-            "outbounds": .array(links.prefix(2).map { .string(ProfileComposer.linkTag($0.name)) }),
+            "outbounds": .array(legs.prefix(2).map { .string(ProfileComposer.linkTag($0.name)) }),
             "server": .string(host),
             "server_port": .number(Double(port)),
             "psk": .string(psk),

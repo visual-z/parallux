@@ -14,8 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	"github.com/sagernet/sing-box/log"
+	"github.com/sagernet/sing/common/buf"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 )
@@ -314,6 +316,97 @@ func TestRelayPacketsAreCounted(t *testing.T) {
 	}
 	if raw != link.last {
 		t.Fatalf("the physical link's packet conn was wrapped: %T", raw)
+	}
+}
+
+// The router moves packets through sing's ReadPacket/WritePacket, not
+// ReadFrom/WriteTo; both must count.
+func TestRelayPacketsAreCountedOnSingsPacketPath(t *testing.T) {
+	relay := newPacketLink("link-relay-1")
+	o := startAggregate(t, Options{Mode: ModeBalance, Links: []string{"link-relay-1"}, Relays: []string{"link-relay-1"}}, relay)
+	conn, err := o.ListenPacket(context.Background(), M.ParseSocksaddr("example.com:443"))
+	if err != nil {
+		t.Fatalf("listen packet: %v", err)
+	}
+	defer conn.Close()
+	packets, ok := conn.(N.NetPacketConn)
+	if !ok {
+		t.Fatalf("the relay's packet conn %T is not a sing packet conn", conn)
+	}
+	destination := M.ParseSocksaddr("203.0.113.9:443")
+	if err := packets.WritePacket(buf.As([]byte("hello!!")), destination); err != nil {
+		t.Fatalf("write packet: %v", err)
+	}
+	buffer := buf.NewSize(64)
+	defer buffer.Release()
+	if _, err := packets.ReadPacket(buffer); err != nil || string(buffer.Bytes()) != "hello!!" {
+		t.Fatalf("read packet = %q, %v, want the echo", buffer.Bytes(), err)
+	}
+	for _, group := range Snapshot() {
+		if group.Tag == "agg" {
+			if got := group.Links[0]; got.Upload != 7 || got.Download != 7 {
+				t.Fatalf("relay counters on the packet path = up %d, down %d; want 7 each", got.Upload, got.Download)
+			}
+			return
+		}
+	}
+	t.Fatal("the aggregate is not in the snapshot")
+}
+
+// Two aggregates over the same link outbounds (a composed profile has one
+// per user direct outbound plus parallux-links) share one prober per link,
+// and with it the evidence; the prober stops with its last user.
+func TestAggregatesOverTheSameLinksShareOneProberPerLink(t *testing.T) {
+	proberCount := func() int {
+		probersLock.Lock()
+		defer probersLock.Unlock()
+		return len(probers)
+	}
+	before := proberCount()
+	link, relay := newPacketLink("link-en7"), newPacketLink("link-relay-1")
+	manager := &fakeManager{outbounds: map[string]adapter.Outbound{"link-en7": link, "link-relay-1": relay}}
+	start := func(tag string, manager *fakeManager) *Outbound {
+		o, err := newOutbound(manager, log.NewNOPFactory().NewLogger("test"), tag,
+			Options{Mode: ModeBalance, Links: []string{"link-en7", "link-relay-1"}, Relays: []string{"link-relay-1"}, ProbeTargets: []string{"192.0.2.1:53"}})
+		if err != nil {
+			t.Fatalf("build %s: %v", tag, err)
+		}
+		if err := o.Start(adapter.StartStateStart, nil); err != nil {
+			t.Fatalf("start %s: %v", tag, err)
+		}
+		return o
+	}
+	first, second := start("direct", manager), start("parallux-links", manager)
+	if got := proberCount() - before; got != 2 {
+		t.Fatalf("two aggregates over two links run %d probers, want 2 (one per link)", got)
+	}
+	if first.health[0] != second.health[0] || first.health[1] != second.health[1] {
+		t.Fatal("the aggregates do not share their links' health")
+	}
+	// A dial failure one group sees is evidence for the other.
+	first.markFailed(1)
+	if healthy := second.healthSnapshot(); healthy[1] {
+		t.Fatal("a link one aggregate marked down is still healthy for the other")
+	}
+	// The same tags in another core instance are other outbound objects:
+	// they get their own probers, never the old instance's.
+	other := &fakeManager{outbounds: map[string]adapter.Outbound{"link-en7": newPacketLink("link-en7"), "link-relay-1": newPacketLink("link-relay-1")}}
+	third := start("direct", other)
+	if got := proberCount() - before; got != 4 {
+		t.Fatalf("a second instance's links brought the probers to %d, want 4", got)
+	}
+	if third.health[0] == first.health[0] {
+		t.Fatal("another instance's link shares the first instance's prober")
+	}
+	third.Close()
+	first.Close()
+	if got := proberCount() - before; got != 2 {
+		t.Fatalf("after one of two users closed, %d probers run, want 2", got)
+	}
+	second.Close()
+	second.Close() // closing twice releases once
+	if got := proberCount() - before; got != 0 {
+		t.Fatalf("after every aggregate closed, %d probers still run, want 0", got)
 	}
 }
 

@@ -12,13 +12,23 @@
 #
 # The key is printed exactly once, inside the final import link. Nothing else
 # echoes it.
+#
+# With --relay it installs a relay host instead (中继主机, PLAN decision 24;
+# link format: docs/research/relay-link.md): a machine on your LAN that
+# dials out for the Mac, so it adds its own egress quota as one more link.
+#
+#   sudo sh install.sh --relay --binary ./parallux-server [--port 39100] [--host 10.0.0.21] [--name worker-1]
+#
+# That writes /etc/parallux-server/relay.key (0600, root) and installs
+# parallux-relay.service; both roles can live on one machine.
 set -eu
 
 # Release downloads arrive with M6 (no releases exist yet). Until then pass
 # --binary; set PARALLUX_SERVER_URL to fetch from your own mirror.
 PARALLUX_SERVER_URL="${PARALLUX_SERVER_URL:-}"
 
-PORT=39000
+PORT=""
+RELAY=0
 HOST=""
 NAME=""
 BINARY=""
@@ -27,11 +37,13 @@ CONFIG_DIR=/etc/parallux-server
 CONFIG="$CONFIG_DIR/config.json"
 BIN=/usr/local/bin/parallux-server
 UNIT=/etc/systemd/system/parallux-server.service
+RELAY_KEY="$CONFIG_DIR/relay.key"
+RELAY_UNIT=/etc/systemd/system/parallux-relay.service
 
 die() { echo "install.sh: $*" >&2; exit 1; }
 
 usage() {
-	sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+	sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
 	exit "${1:-0}"
 }
 
@@ -42,6 +54,7 @@ while [ $# -gt 0 ]; do
 	--host) [ $# -ge 2 ] || die "--host needs an address"; HOST="$2"; shift 2 ;;
 	--name) [ $# -ge 2 ] || die "--name needs a value"; NAME="$2"; shift 2 ;;
 	--new-psk) NEW_PSK=1; shift ;;
+	--relay) RELAY=1; shift ;;
 	-h | --help) usage 0 ;;
 	*) echo "install.sh: unknown option $1" >&2; usage 2 ;;
 	esac
@@ -49,6 +62,10 @@ done
 
 [ "$(id -u)" -eq 0 ] || die "run as root (sudo sh install.sh …)"
 command -v systemctl >/dev/null 2>&1 || die "systemd is required"
+# The relay's default port differs so one machine can run both roles.
+if [ -z "$PORT" ]; then
+	if [ "$RELAY" -eq 1 ]; then PORT=39100; else PORT=39000; fi
+fi
 case "$PORT" in '' | *[!0-9]*) die "--port must be a number" ;; esac
 [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ] || die "--port must be 1–65535"
 
@@ -66,6 +83,58 @@ if [ -z "$BINARY" ]; then
 fi
 [ -f "$BINARY" ] || die "binary $BINARY not found"
 install -m 0755 "$BINARY" "$BIN"
+
+# --- relay host -------------------------------------------------------------
+# The binary generates the key and builds the link (tested there); this
+# script only installs the service. A relay's address is normally private,
+# so unlike the aggregation server there is no public-address check.
+if [ "$RELAY" -eq 1 ]; then
+	umask 077
+	mkdir -p "$CONFIG_DIR"
+	chmod 0700 "$CONFIG_DIR"
+	if [ "$NEW_PSK" -eq 1 ]; then rm -f "$RELAY_KEY"; fi
+	"$BIN" -role relay -key-file "$RELAY_KEY" -generate-key || die "could not generate the relay key"
+	"$BIN" -role relay -check -port "$PORT" -key-file "$RELAY_KEY" || die "the relay configuration does not validate"
+
+	cat >"$RELAY_UNIT" <<UNIT_EOF
+[Unit]
+Description=Parallux relay host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=$BIN -role relay -port $PORT -key-file $RELAY_KEY
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=1048576
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=$CONFIG_DIR
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+UNIT_EOF
+	chmod 0644 "$RELAY_UNIT"
+	systemctl daemon-reload
+	systemctl enable parallux-relay.service >/dev/null
+	systemctl restart parallux-relay.service
+	sleep 1
+	systemctl is-active --quiet parallux-relay.service || die "the service did not start; see: journalctl -u parallux-relay"
+
+	if [ -z "$HOST" ] && command -v ip >/dev/null 2>&1; then
+		HOST="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -n 1)"
+	fi
+	[ -n "$HOST" ] || die "could not find this machine's address; rerun with --host <address the Mac reaches it at>"
+	[ -n "$NAME" ] || NAME="$(hostname 2>/dev/null || echo "$HOST")"
+	echo "Parallux relay host is running on port $PORT (TCP and UDP)."
+	echo "If this machine has a firewall, allow port $PORT from your Mac. Keep its clock in sync (NTP): the relay rejects peers more than 30 seconds off."
+	echo "Paste this link into Parallux › 线路 › 添加中继线路:"
+	"$BIN" -role relay -port "$PORT" -key-file "$RELAY_KEY" -host "$HOST" -name "$NAME" -link
+	exit 0
+fi
 
 # --- key --------------------------------------------------------------------
 # 32 random bytes as base64url without padding: 43 characters, URL-safe.

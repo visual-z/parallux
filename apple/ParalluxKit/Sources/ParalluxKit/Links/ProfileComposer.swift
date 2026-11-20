@@ -46,7 +46,7 @@ public enum ProfileComposer {
         }
     }
 
-    /// One relay link's outbound (feat-relay-links). stub
+    /// One relay link's outbound (PLAN decision 24, RelayLink.composed).
     public struct Relay: Equatable, Sendable {
         /// The LinkInterface name of the relay link ("relay-1a2b3c4d").
         public var name: String
@@ -65,15 +65,30 @@ public enum ProfileComposer {
         case notJSON
     }
 
-    /// nil links (fewer than two enabled) returns the profile unchanged.
+    /// Fewer than two usable links returns the profile unchanged.
+    ///
+    /// `links` are in priority order and may include relay links
+    /// (`kind == .relay`); each needs its description in `relays` and its
+    /// carrier among the physical links, or it is left out. A relay link
+    /// becomes the described outbound with `detour` to its carrier's link
+    /// outbound, never to an aggregate, so the outbounds cannot refer to
+    /// each other in a loop (INV-5).
     public static func compose(_ profile: String, links: [LinkInterface], backup: Set<String>, mode: AggregationMode,
                                bond: Bond? = nil, relays: [Relay] = []) throws -> String {
         guard var root = (try? JSONSerialization.jsonObject(with: Data(profile.utf8))) as? [String: Any] else {
             throw Failure.notJSON
         }
+        let physical = links.filter { $0.kind != .relay }
+        let carriers = Set(physical.map(\.name))
+        var described: [String: Relay] = [:]
+        for relay in relays where carriers.contains(relay.carrier) && described[relay.name] == nil { described[relay.name] = relay }
+        // A relay whose carrier is switched off or unplugged goes with it:
+        // turning a link off means no traffic on that interface.
+        let links = links.filter { $0.kind != .relay || described[$0.name] != nil }
         guard links.count >= 2 else { return profile }
         var outbounds = (root["outbounds"] as? [[String: Any]]) ?? []
         let linkTags = links.map { linkTag($0.name) }
+        let relayTags = links.filter { $0.kind == .relay }.map { linkTag($0.name) }
         let taken = Set(outbounds.compactMap { $0["tag"] as? String })
 
         // Dial options of the user's first direct outbound carry over to every
@@ -83,6 +98,12 @@ public enum ProfileComposer {
             linkBase.removeValue(forKey: key)
         }
         let linkOutbounds: [[String: Any]] = links.map { link in
+            if let relay = described[link.name] {
+                var outbound = relay.outbound.mapValues(\.foundation)
+                outbound["tag"] = linkTag(link.name)
+                outbound["detour"] = linkTag(relay.carrier)
+                return outbound
+            }
             var outbound = linkBase
             outbound["type"] = "direct"
             outbound["tag"] = linkTag(link.name)
@@ -90,7 +111,10 @@ public enum ProfileComposer {
             return outbound
         }
 
-        let useBond = mode == .bond && bond != nil
+        // The transport has exactly two legs and relay links are never legs
+        // (feat-bond, feat-relay-links): one physical link cannot bond.
+        let legs = physical.prefix(2).map { linkTag($0.name) }
+        let useBond = mode == .bond && bond != nil && legs.count == 2
         /// `carriesBond`: whether this aggregate goes through the aggregation
         /// server in 叠加. Both the nodes' detour and the direct replacements
         /// do (bondCarriesDirect); `bond_bypass` names the server so the core
@@ -102,6 +126,8 @@ public enum ProfileComposer {
                 "mode": mode == .bond && !bonded ? AggregationMode.failover.rawValue : mode.rawValue,
                 "links": linkTags,
             ]
+            // The core keeps local destinations off these (core/aggregate relay.go).
+            if !relayTags.isEmpty { outbound["relays"] = relayTags }
             let backupTags = links.filter { backup.contains($0.name) }.map { linkTag($0.name) }
             if !backupTags.isEmpty { outbound["backup"] = backupTags }
             if bonded, let bond {
@@ -131,7 +157,7 @@ public enum ProfileComposer {
             var multipath = bond.outbound.mapValues(\.foundation)
             multipath["tag"] = bond.tag
             // A bond fragment may name its legs (AggregationServer.bond picks two).
-            if multipath["outbounds"] == nil { multipath["outbounds"] = linkTags }
+            if multipath["outbounds"] == nil { multipath["outbounds"] = legs }
             added.append(multipath)
         }
         outbounds.append(contentsOf: added)

@@ -182,9 +182,13 @@ func TestTheRelayLinkRoundTripsItsFields(t *testing.T) {
 	if parsed.Scheme != "parallux" || parsed.Host != "relay" {
 		t.Fatalf("RelayLink() = %q, want parallux://relay?…", link)
 	}
-	// "+" must travel as %2B: the spec says "+" is not a space.
-	if strings.ContainsAny(parsed.RawQuery, "+/= ") {
+	// "+" must travel as %2B: the spec says "+" is not a space. ("=" and
+	// "&" are the query's own separators, so the key is checked by value.)
+	if strings.ContainsAny(parsed.RawQuery, "+/ ") {
 		t.Fatalf("the query %q carries reserved characters unencoded", parsed.RawQuery)
+	}
+	if !strings.Contains(parsed.RawQuery, "&key=ab%2B%2Fcd%2B%2Fef%2B%2Fgh%2B%2FijklmQ%3D%3D") {
+		t.Fatalf("the query %q does not carry the key percent-encoded", parsed.RawQuery)
 	}
 	values, err := url.ParseQuery(parsed.RawQuery)
 	if err != nil {

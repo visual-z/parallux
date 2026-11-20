@@ -71,6 +71,11 @@ final class LinkStatsPoller {
     /// One state per link tag, merged over every aggregate (feat-link-view).
     private(set) var states: [String: LinkView.State] = [:]
     @ObservationIgnored private var task: Task<Void, Never>?
+    /// Relay link tag → its carrier's link tag, asked every sample
+    /// (AppModel sets it). A relay link's bytes ride on its carrier's
+    /// interface, so its rate comes from the core's counters and is taken
+    /// off the carrier (RelayRates, feat-relay-links).
+    @ObservationIgnored var relayCarriers: () -> [String: String] = { [:] }
 
     /// Why 1 s: matches the status stream; per-link rates are shown at most once a second.
     static let interval: Duration = .seconds(1)
@@ -79,6 +84,7 @@ final class LinkStatsPoller {
         guard task == nil else { return }
         task = Task { [weak self] in
             var previous = InterfaceCounters.read()
+            var previousGroups: [LinkGroupStat] = []
             var last = ContinuousClock.now
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.interval)
@@ -89,12 +95,14 @@ final class LinkStatsPoller {
                 let elapsed = now - last
                 let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
                 let rates = InterfaceRates.rates(previous: previous, current: current, interval: seconds)
+                let counted = LinkRates.rates(previous: previousGroups, current: groups, interval: seconds)
                 previous = current
+                previousGroups = groups
                 last = now
                 guard let self else { return }
                 self.groups = groups
                 self.states = LinkView.merge(groups)
-                self.rates = rates
+                self.rates = RelayRates.merge(interface: rates, counted: counted, carriers: self.relayCarriers())
             }
         }
     }

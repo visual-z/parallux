@@ -25,6 +25,9 @@ struct LinkRowView: View {
     let activity: String
     @Binding var isOn: Bool
     @Binding var isBackupOnly: Bool
+    /// Relay links only (feat-relay-links): look for the carrier again, and remove the link.
+    var recheck: (() -> Void)?
+    var delete: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -52,6 +55,11 @@ struct LinkRowView: View {
             .frame(width: 136, alignment: .trailing)
             Menu("更多", systemImage: "ellipsis") {
                 Toggle("仅备用", isOn: $isBackupOnly).disabled(!isOn)
+                if let recheck { Button("刷新", action: recheck) }
+                if let delete {
+                    Divider()
+                    Button("删除", role: .destructive, action: delete)
+                }
             }
             .labelStyle(.iconOnly).menuIndicator(.hidden).buttonBorderShape(.circle).fixedSize()
             .help("更多")

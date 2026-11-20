@@ -3,6 +3,9 @@
 // inbound, reassembles them, and sends the stream on through a direct
 // outbound.
 //
+// With -role relay it is a relay host instead (中继主机, decision 24): see
+// relay.go.
+//
 // It runs from a full sing-box configuration file (-config), or builds the
 // minimal one from flags. The pre-shared key is read from a file only, so it
 // never appears in the process list, and it is never logged.
@@ -64,11 +67,11 @@ func run(args []string) error {
 	check := flags.Bool("check", false, "validate the configuration and exit")
 	version := flags.Bool("version", false, "print the version and exit")
 	role := flags.String("role", roleAggregation, "aggregation or relay")
-	flags.String("key-file", "", "relay: file holding the relay key")
-	flags.Bool("generate-key", false, "relay: write a new key to -key-file unless it exists, then exit")
-	flags.Bool("link", false, "relay: print the import link for -host and exit")
-	flags.String("host", "", "relay: the address the Mac reaches this machine at, for -link")
-	flags.String("name", "", "relay: display name for -link")
+	keyFile := flags.String("key-file", "", "relay: file holding the relay key")
+	generateKey := flags.Bool("generate-key", false, "relay: write a new key to -key-file unless it exists, then exit")
+	printLink := flags.Bool("link", false, "relay: print the import link for -host and exit")
+	host := flags.String("host", "", "relay: the address the Mac reaches this machine at, for -link")
+	name := flags.String("name", "", "relay: display name for -link")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -76,8 +79,31 @@ func run(args []string) error {
 		fmt.Fprintln(stdout, "parallux-server", Version)
 		return nil
 	}
-	if *role != roleAggregation {
-		return errors.New("role " + *role + ": not implemented")
+	if *role != roleAggregation && *role != roleRelay {
+		return fmt.Errorf("unknown role %q, want %s or %s", *role, roleAggregation, roleRelay)
+	}
+	if *role == roleRelay && *generateKey {
+		return generateRelayKey(*keyFile)
+	}
+	// -port's default is the aggregation server's; a relay has its own.
+	portSet := false
+	flags.Visit(func(f *flag.Flag) { portSet = portSet || f.Name == "port" })
+	if *role == roleRelay && !portSet {
+		*port = defaultRelayPort
+	}
+	if *port == 0 || *port > 65535 {
+		return fmt.Errorf("port %d is not 1–65535", *port)
+	}
+	if *role == roleRelay && *printLink {
+		if *host == "" {
+			return errors.New("-link needs -host, the address the Mac reaches this machine at")
+		}
+		key, err := readRelayKey(*keyFile)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, RelayLink(*host, uint16(*port), key, *name))
+		return nil
 	}
 
 	var content []byte
@@ -86,6 +112,15 @@ func run(args []string) error {
 		content, err = os.ReadFile(*configPath)
 		if err != nil {
 			return fmt.Errorf("read config: %w", err)
+		}
+	} else if *role == roleRelay {
+		key, err := readRelayKey(*keyFile)
+		if err != nil {
+			return err
+		}
+		content, err = RelayConfig(RelayOptions{Listen: *listen, Port: uint16(*port), Key: key, LogLevel: *logLevel})
+		if err != nil {
+			return err
 		}
 	} else {
 		psk, err := readPSK(*pskFile)
