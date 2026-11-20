@@ -1,6 +1,6 @@
 ---
 type: docs
-status: doing        # todo | doing | blocked | awaiting-author | done
+status: done        # todo | doing | blocked | awaiting-author | done
 weight: light
 created: 2026-11-20
 baseline: 853fdb8bdf74
@@ -31,7 +31,10 @@ baseline: 853fdb8bdf74
 ## 证据
 
 RED: none 只增加文档与调整一个检查脚本的排除路径，没有产品行为改动
+GATE: 5786879f7a4d+dirty ok tree:44f7dde1fc5e build=0 vet=0 test=0[625p/0f] fmt=0 swift-test=0[176p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-20)
 
 ## 交接
 
-开卡。下一步：放入存档、恢复手测清单的「卡」一栏、调整检查脚本，跑 `gate --record`。
+- 做了什么：53 张历史卡与进度记录放进 `docs/archive/`（附说明）；手测清单的「卡」一栏恢复，43 步都对到存档里存在的卡；`scripts/check-card-refs.sh` 跳过存档目录，对存档之外的悬空路径仍然会红（往 `docs/RELEASE.md` 加一处不存在的卡路径，退出 1）。两张存档卡各有一个相对链接因为目录加深而多了一层 `../`。
+- 卡在哪：无。存档卡的验证证据在本仓库里无法重跑，这一点写在 `docs/archive/README.md`。
+- 下一步：四十多张存档卡仍在等作者手测（`docs/MANUAL-TEST.md`）；手测通过后按存档说明另开新卡记录，不回头改存档。
