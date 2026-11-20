@@ -1,6 +1,6 @@
 ---
 type: fix
-status: doing        # todo | doing | blocked | awaiting-author | done
+status: awaiting-author        # todo | doing | blocked | awaiting-author | done
 weight: full
 created: 2026-11-20
 baseline: 24eef98c918d
@@ -133,6 +133,7 @@ D5 测的是 sing-box 的路由器在这两条规则下的行为，不是本仓�
 - `Expectation failed: try position(nil) == 0`
 - `Expectation failed: try targets(usualOutbounds, final: "Proxy").global == "Proxy"`
 - `core/aggregate/testdata/composed-modes.json is missing`
+GATE: 456626c4ddea+dirty ok tree:6535856179c3 build=0 vet=0 test=0[627p/0f] fmt=0 swift-test=0[187p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-20)
 
 ## 修订
 
@@ -141,4 +142,6 @@ D5 测的是 sing-box 的路由器在这两条规则下的行为，不是本仓�
 
 ## 交接
 
-开卡：桩、红测试与路由器对拍已提交。下一步实现 `RouteModes.add`，接进 `AppModel.compose`，生成夹具。
+- 做了什么：连接时给没有定义模式的订阅补两条路由规则（直连模式、全局模式）和一条 DNS 规则（直连模式下用订阅的本地 DNS）。订阅文件不改；自己定义了模式的订阅不动；代理开关关着时不加。真实路由器上三种模式的走向测过（`TestTheAddedModeRulesRouteByTheSelectedMode`）。界面没有改：模式列表本来就读内核给的，现在内核会给三项。
+- 卡在哪：D10 等作者手测。没有在装好的 App 里实际切换过；切换后已有连接是否保留、重连后模式是否记得，都没验证。全局模式不带走私网地址，这一点和 GUI.for.SingBox、sing-box-subscribe 不一样，是实现的选择，待作者确认。
+- 下一步：作者装上新版后在概览切一次全局和直连，看连接页的出站。
