@@ -111,26 +111,56 @@ struct TrafficCard: View {
     let downlinkTotal: Int64
     let uplinkTotal: Int64
 
+    /// Why 412: two minimum card widths and the gap between them
+    /// (OverviewGrid). From there on the card is the one that has a row to
+    /// itself in a narrow window, and it lies flat so the row is short and
+    /// the cards below stay on screen.
+    static let flatFromWidth = CGFloat(2 * OverviewGrid.minimumCardWidth + OverviewGrid.spacing)
+
     var body: some View {
         OverviewCard(title: DashboardCard.traffic.title) {
-            Text(RateFormat.bitsPerSecond(rate)).font(.title.weight(.semibold)).monospacedDigit()
-                .lineLimit(1).minimumScaleFactor(0.7)
-            Chart(Array(history.enumerated()), id: \.offset) { index, value in
-                AreaMark(x: .value("t", index), y: .value("速率", value)).foregroundStyle(.tint.opacity(0.14))
-                LineMark(x: .value("t", index), y: .value("速率", value)).foregroundStyle(.tint)
-                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+            ViewThatFits(in: .horizontal) {
+                // Flat: the rate, the chart taking the room between, the totals.
+                HStack(alignment: .center, spacing: 16) {
+                    rateText.fixedSize()
+                    chart
+                    VStack(spacing: 4) { totals }.frame(width: 150)
+                }
+                .frame(minWidth: Self.flatFromWidth - 28)
+                // Upright: the rate, the chart taking the spare height, the totals.
+                VStack(alignment: .leading, spacing: 6) {
+                    rateText
+                    chart
+                    totals
+                }
             }
-            .chartXAxis(.hidden).chartYAxis(.hidden).chartLegend(.hidden)
-            .chartXScale(domain: 0...max(window - 1, 1))
-            // The chart is the part of this card that can grow: it takes the
-            // height the row's tallest card leaves. 46 is its smallest and
-            // its ideal, so this card never makes the row taller.
-            .frame(minHeight: 46, idealHeight: 46, maxHeight: .infinity)
-            .accessibilityHidden(true)
-            // This session's totals, each on its own row.
-            CardRow(label: "下载", value: "↓ \(RateFormat.bytes(downlinkTotal))")
-            CardRow(label: "上传", value: "↑ \(RateFormat.bytes(uplinkTotal))")
         }
+    }
+
+    private var rateText: some View {
+        Text(RateFormat.bitsPerSecond(rate)).font(.title.weight(.semibold)).monospacedDigit()
+            .lineLimit(1).minimumScaleFactor(0.7)
+    }
+
+    /// The part of this card that can grow: it takes the room the row's
+    /// tallest card leaves. 46 is its smallest and its ideal height, so this
+    /// card never makes the row taller.
+    private var chart: some View {
+        Chart(Array(history.enumerated()), id: \.offset) { index, value in
+            AreaMark(x: .value("t", index), y: .value("速率", value)).foregroundStyle(.tint.opacity(0.14))
+            LineMark(x: .value("t", index), y: .value("速率", value)).foregroundStyle(.tint)
+                .lineStyle(StrokeStyle(lineWidth: 1.5))
+        }
+        .chartXAxis(.hidden).chartYAxis(.hidden).chartLegend(.hidden)
+        .chartXScale(domain: 0...max(window - 1, 1))
+        .frame(minHeight: 46, idealHeight: 46, maxHeight: .infinity)
+        .accessibilityHidden(true)
+    }
+
+    /// This session's totals, each on its own row.
+    @ViewBuilder private var totals: some View {
+        CardRow(label: "下载", value: "↓ \(RateFormat.bytes(downlinkTotal))")
+        CardRow(label: "上传", value: "↑ \(RateFormat.bytes(uplinkTotal))")
     }
 }
 
