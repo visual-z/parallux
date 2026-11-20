@@ -47,7 +47,7 @@ public struct Profile: Codable, Identifiable, Equatable, Sendable {
         self.autoUpdate = autoUpdate
         self.autoUpdateInterval = autoUpdateInterval
         self.lastUpdated = lastUpdated
-        self.usage = usage
+        self.usage = nil
     }
 }
 
