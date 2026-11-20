@@ -1,0 +1,5 @@
+#!/bin/sh
+# Push the evidence (refs/keel/*) for what is being pushed, so a teammate's
+# clone and CI can check it. Never blocks the push; `keel sync` retries.
+command -v keel >/dev/null 2>&1 || exit 0
+exec keel hook pre-push "$1" "$2"
