@@ -115,7 +115,7 @@ public enum RouteModes {
     static func definesModes(_ rules: [[String: Any]]) -> Bool {
         rules.contains { rule in
             if let mode = rule["clash_mode"] as? String, !mode.isEmpty { return true }
-            return definesModes((rule["rules"] as? [[String: Any]]) ?? [])
+            return false
         }
     }
 }
