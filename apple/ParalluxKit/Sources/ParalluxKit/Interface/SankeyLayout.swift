@@ -219,3 +219,31 @@ public struct SankeyLayout: Equatable, Sendable {
         #endif
     }
 }
+
+/// A flow diagram with any number of columns (docs/tasks/fix-overview-layout-and-flow.md, INV-12).
+public struct ColumnLayout: Equatable, Sendable {
+    public struct Link: Equatable, Sendable {
+        /// Between column `stage` and `stage + 1`.
+        public var stage: Int
+        public var from: Int
+        public var to: Int
+        public var rate: Double
+        public init(stage: Int, from: Int, to: Int, rate: Double) {
+            self.stage = stage; self.from = from; self.to = to; self.rate = rate
+        }
+    }
+
+    public struct Band: Equatable, Sendable {
+        public var stage: Int
+        public var from: Int
+        public var to: Int
+        public var start: Span
+        public var end: Span
+    }
+
+    /// Nodes per column, top to bottom.
+    public var columns: [[Span]] = []
+    public var bands: [Band] = []
+
+    public static func make(nodes: [Int], links: [Link], height: Double, gap: Double) -> ColumnLayout { ColumnLayout() }
+}

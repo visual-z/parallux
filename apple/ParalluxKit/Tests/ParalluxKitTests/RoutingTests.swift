@@ -163,3 +163,41 @@ private func group(_ tag: String, _ type: String, selected: String, _ items: [St
         #expect(RouteOverrides.apply(RouteOverrides(), to: "not json").applied.isEmpty)
     }
 }
+
+/// docs/tasks/perf-routing-relayout.md
+@Suite struct ExitChainsTests {
+    private func group(_ tag: String, _ type: String, selected: String, _ items: [String]) -> OutboundGroupModel {
+        OutboundGroupModel(tag: tag, type: type, selectable: type == "selector", selected: selected,
+                           items: items.map { .init(tag: $0, type: "trojan", delay: 0) })
+    }
+
+    @Test func exitChainsComputedOnceMatchFlattening() {
+        let groups = [
+            group("proxy", "selector", selected: "DE Auto", ["DE Auto", "HK-03"]),
+            group("DE Auto", "urltest", selected: "DE-1", ["DE-1", "DE-2"]),
+            group("loop-a", "selector", selected: "loop-b", ["loop-b"]),
+            group("loop-b", "selector", selected: "loop-a", ["loop-a"]),
+            group("empty", "selector", selected: "", []),
+        ]
+        let tags = ["direct", "block", "proxy", "DE Auto", "HK-03", "DE-1", "DE-2", "loop-a", "loop-b", "empty"]
+        let exits = ["proxy", "direct", "DE Auto", "loop-a", "missing", "empty", "HK-03"]
+
+        func reference(_ exit: String, tags: [String], groups: [OutboundGroupModel]) -> ExitChain {
+            var all = Set(tags)
+            all.formUnion(groups.map(\.tag))
+            for group in groups { all.formUnion(group.items.map(\.tag)) }
+            return ExitChain.flatten(exit, groups: groups, outbounds: all)
+        }
+
+        for (tagSet, groupSet) in [(tags, groups), ([], groups), (tags, []), ([], [])] {
+            let chains = ExitChains(outboundTags: tagSet, groups: groupSet, exits: exits)
+            for exit in exits {
+                #expect(chains.chain(exit) == reference(exit, tags: tagSet, groups: groupSet), "\(exit) with \(tagSet.count) tags, \(groupSet.count) groups")
+            }
+        }
+        // An exit it was not asked about is not invented.
+        #expect(ExitChains(outboundTags: tags, groups: groups, exits: ["proxy"]).chain("direct") == nil)
+        #expect(ExitChains(outboundTags: [], groups: [], exits: []).chain("proxy") == nil)
+    }
+}
+

@@ -19,6 +19,7 @@
 | INV-9 | 流向图交给 GPU 的每片流带网格面积等于厚度 × 宽度，顶点都在绘图范围内，顶点总数不超过上限 | property | `flowMeshCoversEachBandExactly` |
 | INV-10 | 流向图与路线图里已经显示的节点只在闲置超过保留时长后才离开，离开之前相对顺序不变，节点数不超过上限 | property | `flowSlotsKeepTheirPlaceWhileTrafficComesAndGoes` |
 | INV-11 | 菜单栏只在连接且代理开关开启时标记代理；运行中的异常保留有效聚合方式和代理标记，关闭聚合后的旧线路告警不污染仅代理状态 | 穷举开关、连接、有效方式和错误组合 | `theIconFollowsTheEffectiveModeAndDisplayedSwitches` |
+| INV-12 | 三栏流向图每一栏的节点高度之和相等，每个节点等于流经它的流带之和，每股流带在三处一样厚 | property | `threeColumnFlowConservesWidthEverywhere` |
 
 ## 写法提示
 

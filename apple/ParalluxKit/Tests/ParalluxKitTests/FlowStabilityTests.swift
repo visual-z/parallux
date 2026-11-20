@@ -314,3 +314,98 @@ import Testing
         #expect(StatusLine.text(setup: .ready, tunnel: .connected, actionError: nil, coreError: "EOF", linkKind: "Wi‑Fi").contains("读不到内核"))
     }
 }
+
+/// docs/tasks/fix-overview-layout-and-flow.md
+@Suite struct ThreeColumnFlowTests {
+    private func row(_ id: Int, rule: String, node: String, type: String = "trojan", rate: Int64) -> ConnectionRow {
+        var row = ConnectionRow(id: "\(id)", process: "", destination: "", rule: rule, outbound: node)
+        row.outboundType = type
+        row.downlink = rate
+        return row
+    }
+
+    @Test func flowColumnsGroupConnectionsByRuleAndNode() throws {
+        let name = { (rule: String) in rule.isEmpty ? TrafficLabel.finalName : rule.replacingOccurrences(of: "rule_set=", with: "") }
+        #expect(FlowColumns.make([], ruleName: name, maxRules: 4, maxNodes: 4).flows.isEmpty)
+        #expect(FlowColumns.make([row(0, rule: "x", node: "A", rate: 0)], ruleName: name, maxRules: 4, maxNodes: 4).flows.isEmpty, "no rate, not counted")
+
+        let rows = [
+            row(1, rule: "rule_set=youtube", node: "HK-03", rate: 400),
+            row(2, rule: "rule_set=youtube", node: "HK-03", rate: 100),
+            row(3, rule: "rule_set=youtube", node: "JP-01", rate: 50),
+            row(4, rule: "rule_set=cn", node: "direct", type: "direct", rate: 300),
+            row(5, rule: "rule_set=cn", node: "direct", type: "aggregate", rate: 20),
+            row(6, rule: "", node: "HK-03", rate: 80),
+            row(7, rule: "rule_set=github", node: "US-05", rate: 10),
+            row(8, rule: "rule_set=steam", node: "direct", type: "direct", rate: 5),
+            row(9, rule: "rule_set=apple", node: "SG-02", rate: 0),
+        ]
+        let result = FlowColumns.make(rows, ruleName: name, maxRules: 3, maxNodes: 3)
+        #expect(result.rules.map(\.name) == ["youtube", "cn", TrafficLabel.finalName, FlowSummary.otherName])
+        #expect(result.rules.map(\.rate) == [550, 320, 80, 15])
+        #expect(result.nodes.map(\.name) == ["HK-03", FlowSummary.directName, "JP-01", FlowSummary.otherName])
+        #expect(result.nodes.map(\.rate) == [580, 325, 50, 10])
+        let total = rows.map { Double($0.downlink) }.reduce(0, +)
+        #expect(result.flows.map(\.rate).reduce(0, +) == total)
+        #expect(result.rules.map(\.rate).reduce(0, +) == total)
+        #expect(result.nodes.map(\.rate).reduce(0, +) == total)
+        func flow(_ rule: String, _ node: String) -> Double { result.flows.filter { $0.rule == rule && $0.node == node }.map(\.rate).reduce(0, +) }
+        #expect(flow("youtube", "HK-03") == 500)
+        #expect(flow("youtube", "JP-01") == 50)
+        #expect(flow("cn", FlowSummary.directName) == 320, "a rewritten direct outbound is still 直连")
+        #expect(flow(TrafficLabel.finalName, "HK-03") == 80)
+        #expect(flow(FlowSummary.otherName, FlowSummary.otherName) == 10, "github → US-05: both merged")
+        #expect(flow(FlowSummary.otherName, FlowSummary.directName) == 5, "steam → direct: the rule merged, the node kept")
+        // Every flow names a node and a rule that are in the columns, once each.
+        for item in result.flows {
+            #expect(result.rules.contains { $0.name == item.rule } && result.nodes.contains { $0.name == item.node })
+        }
+        #expect(Set(result.flows.map { "\($0.rule)|\($0.node)" }).count == result.flows.count, "one flow per pair")
+    }
+
+    @Test func threeColumnFlowConservesWidthEverywhere() throws {
+        var rng = SplitMix64(seed: 0x3C0)
+        let height = 400.0, gap = 30.0
+        #expect(ColumnLayout.make(nodes: [2, 3, 2], links: [], height: height, gap: gap).bands.isEmpty)
+        for round in 0..<300 {
+            let counts = [1 + rng.int(3), 1 + rng.int(5), 1 + rng.int(5)]
+            var links: [ColumnLayout.Link] = []
+            // Stage 0 (links → rules) and stage 1 (rules → nodes), with every rule's inflow equal to its outflow.
+            var ruleIn = [Double](repeating: 0, count: counts[1])
+            for from in 0..<counts[0] { for to in 0..<counts[1] where rng.int(3) > 0 {
+                let rate = [0.0, 1, 95, 420][rng.int(4)]
+                links.append(.init(stage: 0, from: from, to: to, rate: rate)); ruleIn[to] += rate
+            } }
+            for rule in 0..<counts[1] where ruleIn[rule] > 0 {
+                let targets = (0..<counts[2]).filter { _ in rng.bool() }
+                let picks = targets.isEmpty ? [rng.int(counts[2])] : targets
+                for node in picks { links.append(.init(stage: 1, from: rule, to: node, rate: ruleIn[rule] / Double(picks.count))) }
+            }
+            let layout = ColumnLayout.make(nodes: counts, links: links, height: height, gap: gap)
+            let context = Comment(rawValue: "round \(round): \(counts)")
+            try #require(layout.columns.map(\.count) == counts, context)
+            let total = links.filter { $0.stage == 0 }.map(\.rate).reduce(0, +)
+            if total == 0 { #expect(layout.bands.isEmpty, context); continue }
+            let sums = layout.columns.map { $0.map(\.length).reduce(0, +) }
+            for sum in sums { #expect(abs(sum - sums[0]) <= 1e-6 * height, "columns differ \(sums) (\(context))") }
+            let room = counts.map { height - gap * Double(max($0 - 1, 0)) }.min()!
+            #expect(abs(sums[0] - room) <= 1e-6 * height, "fills \(sums[0]) of \(room) (\(context))")
+            for column in layout.columns {
+                for span in column { #expect(span.lower >= -1e-6 && span.upper <= height + 1e-6, context) }
+                for (a, b) in zip(column, column.dropFirst()) { #expect(b.lower - a.upper >= gap - 1e-6, context) }
+            }
+            for band in layout.bands { #expect(abs(band.start.length - band.end.length) <= 1e-9 * height, context) }
+            for (c, column) in layout.columns.enumerated() {
+                for (i, node) in column.enumerated() {
+                    let inflow = layout.bands.filter { $0.stage == c - 1 && $0.to == i }
+                    let outflow = layout.bands.filter { $0.stage == c && $0.from == i }
+                    if c > 0, !inflow.isEmpty { #expect(abs(inflow.map(\.end.length).reduce(0, +) - node.length) <= 1e-6 * height, context) }
+                    if c < layout.columns.count - 1, !outflow.isEmpty { #expect(abs(outflow.map(\.start.length).reduce(0, +) - node.length) <= 1e-6 * height, context) }
+                    for band in inflow { #expect(band.end.lower >= node.lower - 1e-6 && band.end.upper <= node.upper + 1e-6, context) }
+                    for band in outflow { #expect(band.start.lower >= node.lower - 1e-6 && band.start.upper <= node.upper + 1e-6, context) }
+                }
+            }
+        }
+    }
+}
+

@@ -153,3 +153,28 @@ public struct RouteRows: Equatable, Sendable {
         idle = order.filter { !shown.contains($0) }
     }
 }
+
+/// The overview's three columns from the live connections: rules and nodes,
+/// and the flow between them (docs/tasks/fix-overview-layout-and-flow.md).
+public enum FlowColumns {
+    public struct Flow: Equatable, Sendable {
+        public var rule: String
+        public var node: String
+        public var rate: Double
+    }
+
+    public struct Result: Equatable, Sendable {
+        /// Busiest first; 其他 last when anything was merged.
+        public var rules: [(name: String, rate: Double)]
+        public var nodes: [(name: String, rate: Double)]
+        public var flows: [Flow]
+        public static func == (a: Result, b: Result) -> Bool {
+            a.rules.map(\.name) == b.rules.map(\.name) && a.rules.map(\.rate) == b.rules.map(\.rate)
+                && a.nodes.map(\.name) == b.nodes.map(\.name) && a.nodes.map(\.rate) == b.nodes.map(\.rate) && a.flows == b.flows
+        }
+    }
+
+    public static func make(_ connections: [ConnectionRow], ruleName: (String) -> String, maxRules: Int, maxNodes: Int) -> Result {
+        Result(rules: [], nodes: [], flows: [])
+    }
+}

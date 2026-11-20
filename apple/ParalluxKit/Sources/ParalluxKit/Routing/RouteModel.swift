@@ -103,6 +103,13 @@ public struct ExitChain: Equatable, Sendable {
     }
 }
 
+/// Every exit's flattened chain, computed once for the current groups
+/// (docs/tasks/perf-routing-relayout.md).
+public struct ExitChains: Equatable, Sendable {
+    public init(outboundTags: [String], groups: [OutboundGroupModel], exits: [String]) {}
+    public func chain(_ exit: String) -> ExitChain? { nil }
+}
+
 /// A traffic class on the route map: one rule (or route.final) and its live rate.
 public struct TrafficClass: Equatable, Identifiable, Sendable {
     public var id: String
