@@ -121,12 +121,17 @@ var rootQuery = []byte{
 }
 
 // answers sends rootQuery and reports whether the far end replied before
-// ctx's deadline. The reply is not parsed: its length prefix arriving is
-// what proves the path through the relay.
+// ctx ends. The reply is not parsed: its length prefix arriving is what
+// proves the path through the relay.
 func answers(ctx context.Context, conn net.Conn) bool {
 	if deadline, ok := ctx.Deadline(); ok {
 		conn.SetDeadline(deadline)
 	}
+	// Cancellation (the core stopping or reloading) must end the read at
+	// once, not at the deadline: closing waits for every prober, and a
+	// second per silent relay adds up.
+	stop := context.AfterFunc(ctx, func() { conn.Close() })
+	defer stop()
 	if _, err := conn.Write(rootQuery); err != nil {
 		return false
 	}

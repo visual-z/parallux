@@ -237,7 +237,7 @@ func (o *Outbound) DialContext(ctx context.Context, network string, destination 
 			return newCountedConn(conn, o.counters[index]), nil
 		}
 		lastErr = err
-		retry, down := o.failure(index, err)
+		retry, down := o.failure(ctx, index, err)
 		if down {
 			o.markFailed(index)
 		}
@@ -268,7 +268,7 @@ func (o *Outbound) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 			return conn, nil
 		}
 		lastErr = err
-		retry, down := o.failure(index, err)
+		retry, down := o.failure(ctx, index, err)
 		if down {
 			o.markFailed(index)
 		}
@@ -291,8 +291,14 @@ func (o *Outbound) dialOrder(destination M.Socksaddr) []int {
 }
 
 // failure classifies a failed dial of one link (failure.go, relay.go).
-func (o *Outbound) failure(index int, err error) (retry bool, linkDown bool) {
+func (o *Outbound) failure(ctx context.Context, index int, err error) (retry bool, linkDown bool) {
 	if o.relay[index] {
+		// The caller's own deadline or cancellation fails every dial that
+		// follows in the same way; counting it would mark one relay after
+		// another down for a slow destination.
+		if ctx.Err() != nil {
+			return false, false
+		}
 		return relayDialFailure(err)
 	}
 	return dialFailure(err)

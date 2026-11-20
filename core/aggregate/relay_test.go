@@ -193,6 +193,33 @@ func TestARelayThatRefusesIsSkippedAndMarkedDown(t *testing.T) {
 	}
 }
 
+// A caller whose own deadline has passed fails on every link the same way;
+// that is not evidence against any relay.
+func TestACallersExpiredDeadlineDoesNotMarkRelaysDown(t *testing.T) {
+	first, second := newPacketLink("link-relay-1"), newPacketLink("link-relay-2")
+	first.dialErr = context.DeadlineExceeded
+	second.dialErr = context.DeadlineExceeded
+	o := startAggregate(t, Options{Mode: ModeFailover, Links: []string{"link-relay-1", "link-relay-2"}, Relays: []string{"link-relay-1", "link-relay-2"}}, first, second)
+	expired, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	if _, err := o.DialContext(expired, N.NetworkTCP, M.ParseSocksaddr("example.com:443")); err == nil {
+		t.Fatal("a dial with an expired deadline succeeded")
+	}
+	if healthy := o.healthSnapshot(); !healthy[0] || !healthy[1] {
+		t.Fatalf("health after the caller's deadline passed = %v, want both relays still up", healthy)
+	}
+	if second.dials.Load() != 0 {
+		t.Fatalf("the second relay was dialed %d times after the caller's deadline passed, want 0", second.dials.Load())
+	}
+	// The same error with a live caller is the relay's own timeout.
+	if _, err := o.DialContext(context.Background(), N.NetworkTCP, M.ParseSocksaddr("example.com:443")); err == nil {
+		t.Fatal("a dial over two failing relays succeeded")
+	}
+	if healthy := o.healthSnapshot(); healthy[0] || healthy[1] {
+		t.Fatalf("health after both relays timed out for a live caller = %v, want both down", healthy)
+	}
+}
+
 // answeringDialer hands out connections whose far end is `serve`.
 type answeringDialer struct {
 	serve func(server net.Conn)
@@ -260,6 +287,18 @@ func TestARelayIsHealthyOnlyWhenARoundTripComesBack(t *testing.T) {
 	}
 	if took := time.Since(start); took > probeTimeout+500*time.Millisecond {
 		t.Fatalf("a silent relay held the probe for %v, want at most the probe timeout %v", took, probeTimeout)
+	}
+
+	// Stopping the core must not wait out a silent relay: cancellation ends
+	// the round trip at once.
+	cancelled, cancel := context.WithCancel(ctx)
+	time.AfterFunc(50*time.Millisecond, cancel)
+	start = time.Now()
+	if probeOnce(cancelled, silent, dns, true) {
+		t.Fatal("a cancelled probe of a silent relay was healthy")
+	}
+	if took := time.Since(start); took > 500*time.Millisecond {
+		t.Fatalf("a cancelled probe of a silent relay returned after %v, want at once", took)
 	}
 
 	// Without a DNS target there is nothing to ask: connecting is all the

@@ -50,7 +50,7 @@ log stream --predicate 'subsystem BEGINSWITH "io.github.visual-z.parallux"'
 | 3.1 | 线路页：列出 Wi‑Fi、有线、iPhone；开关、拖动排序、仅备用；「检测出口」 | 改动立即生效不断线；同一出口时有提示 | `feat-links-interface` D5 |
 | 3.2 | 面板选「分流」，开多个下载 | 连接分到两条线路，概览左列两股 | `feat-links-aggregate` D10 |
 | 3.3 | 选「主备」，拔掉首选线路 | 2 秒内新连接走另一条；收到「线路不可用」通知 | `feat-links-aggregate` D10 |
-| 3.4 | 中继线路（需要局域网里至少两台 Linux 机器，时钟开着 NTP）：`scripts/build-server.sh`，把 `parallux-server` 与 `server/install.sh` 拷到每台机器，`sudo sh install.sh --relay --binary ./parallux-server --name worker-1`；线路页「添加中继线路 › 添加」，把几条链接一起粘进去 | 每台打印一条 `parallux://relay?…`；线路页多出几行，第二行写着「中继 · 经有线（en…）」，几秒内状态变成「已连接」；面板与概览的流向图左列有它们 | `feat-relay-links` D19、D20 |
+| 3.4 | 中继线路（需要局域网里至少两台 Linux 机器，时钟开着 NTP）。**先在一台节点上跑 `dig +tcp . NS @223.5.5.5`**：1 秒内没有回答就停下告诉我，中继线路的健康检查靠它，办公网不放行的话要换探测目标。然后 `scripts/build-server.sh`，把 `parallux-server` 与 `server/install.sh` 拷到每台机器，`sudo sh install.sh --relay --binary ./parallux-server --name worker-1`；线路页「添加中继线路 › 添加」，把几条链接一起粘进去 | 每台打印一条 `parallux://relay?…`；线路页多出几行，第二行写着「中继 · 经有线（en…）」，几秒内状态变成「已连接」；面板与概览的流向图左列有它们 | `feat-relay-links` D19、D20 |
 | 3.5 | 选「分流」，开多线程下载（或诊断 › 测速逐条线路） | 中继线路各自有速率，合计超过单台设备的配额；有线那一行显示的是它自己承载的部分 | `feat-relay-links` D19 |
 | 3.6 | 在一台中继主机上 `sudo systemctl stop parallux-relay`；访问 NAS 或打印机；关掉线路页的「有线」 | 2 秒内那条中继线路「不可用」并收到通知，其余连接照常；局域网设备照常访问；关掉有线后经它的中继线路变成「未使用」 | `feat-relay-links` D19 |
 

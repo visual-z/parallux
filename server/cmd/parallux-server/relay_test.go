@@ -169,6 +169,54 @@ func TestARelayCarriesAConnectionForTheOutboundTheAppComposes(t *testing.T) {
 	if _, err := io.ReadFull(conn, reply); err != nil || string(reply) != "ping" {
 		t.Fatalf("echo through the relay = %q, %v", reply, err)
 	}
+
+	// A name, not an address: a node's `server` reaches the relay as a
+	// name (a detour leaves resolving to the far end), so the relay host
+	// resolves it itself, with nothing but its direct outbound.
+	_, echoPort, _ := net.SplitHostPort(echo.Addr().String())
+	named, err := client.DialContext(ctx, N.NetworkTCP, M.ParseSocksaddr("localhost:"+echoPort))
+	if err != nil {
+		t.Fatalf("dial a host name through the relay: %v", err)
+	}
+	defer named.Close()
+	named.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, err := named.Write([]byte("name")); err != nil {
+		t.Fatalf("write to a host name: %v", err)
+	}
+	if _, err := io.ReadFull(named, reply); err != nil || string(reply) != "name" {
+		t.Fatalf("echo from a host name through the relay = %q, %v", reply, err)
+	}
+
+	// UDP: QUIC nodes (hysteria2, tuic) and DNS go through the relay as packets.
+	udpEcho, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { udpEcho.Close() })
+	go func() {
+		buffer := make([]byte, 64)
+		for {
+			n, from, err := udpEcho.ReadFrom(buffer)
+			if err != nil {
+				return
+			}
+			udpEcho.WriteTo(buffer[:n], from)
+		}
+	}()
+	packets, err := client.ListenPacket(ctx, M.ParseSocksaddr(udpEcho.LocalAddr().String()))
+	if err != nil {
+		t.Fatalf("open a packet connection through the relay: %v", err)
+	}
+	defer packets.Close()
+	packets.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, err := packets.WriteTo([]byte("udp!"), udpEcho.LocalAddr()); err != nil {
+		t.Fatalf("send a packet through the relay: %v", err)
+	}
+	datagram := make([]byte, 64)
+	n, _, err := packets.ReadFrom(datagram)
+	if err != nil || string(datagram[:n]) != "udp!" {
+		t.Fatalf("packet echo through the relay = %q, %v", datagram[:n], err)
+	}
 }
 
 func TestTheRelayLinkRoundTripsItsFields(t *testing.T) {
@@ -189,6 +237,12 @@ func TestTheRelayLinkRoundTripsItsFields(t *testing.T) {
 	}
 	if !strings.Contains(parsed.RawQuery, "&key=ab%2B%2Fcd%2B%2Fef%2B%2Fgh%2B%2FijklmQ%3D%3D") {
 		t.Fatalf("the query %q does not carry the key percent-encoded", parsed.RawQuery)
+	}
+	// No value carries a raw "=": each pair has exactly the one separator.
+	for _, pair := range strings.Split(parsed.RawQuery, "&") {
+		if strings.Count(pair, "=") != 1 {
+			t.Fatalf("the query pair %q carries a raw \"=\" in its value", pair)
+		}
 	}
 	values, err := url.ParseQuery(parsed.RawQuery)
 	if err != nil {
