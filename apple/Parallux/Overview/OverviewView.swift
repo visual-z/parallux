@@ -39,7 +39,7 @@ struct OverviewView: View {
                         }
                         SteadyFlowDiagram(app: app)
                             .frame(minHeight: Self.minimumDiagramHeight, maxHeight: .infinity)
-                        OverviewCardRow {
+                        OverviewCardGrid {
                             ForEach(app.settings.value.dashboard.visible) { card in
                                 switch card {
                                 case .traffic: trafficCard
@@ -110,7 +110,7 @@ struct OverviewView: View {
         let session = app.session
         return RouteModeCard(modes: session.routeModes,
                              mode: Binding(get: { session.routeMode ?? "" }, set: { session.setRouteMode($0) }),
-                             topRule: OverviewCopy.topRule(session.connections),
+                             topRule: OverviewCopy.topRuleParts(session.connections),
                              aggregation: Binding(get: { app.switches.aggregation }, set: { on in Task { await app.setSwitch(.aggregation, on: on) } }),
                              aggregationDisabled: app.tunnel.isBusy || !app.controlsLocalCore || app.enabledLinks.count < 2,
                              proxy: Binding(get: { app.switches.proxy }, set: { on in Task { await app.setSwitch(.proxy, on: on) } }),
@@ -127,7 +127,7 @@ struct OverviewView: View {
         let usage = profile.map {
             UsageSummary.make(usage: $0.usage, sessionTotal: (status?.downlinkTotal ?? 0) &+ (status?.uplinkTotal ?? 0), now: now)
         }
-        return ProfileCard(name: profile?.name, detail: profile.map { ProfileDescription.detail($0, now: now) } ?? "",
+        return ProfileCard(name: profile?.name, details: profile.map { ProfileDescription.detail($0, now: now).components(separatedBy: " · ") } ?? [],
                            connections: status.map { Int($0.connections) }, memory: status?.memory, usage: usage)
     }
 }

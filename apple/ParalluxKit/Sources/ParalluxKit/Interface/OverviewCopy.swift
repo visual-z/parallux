@@ -46,23 +46,31 @@ public enum OverviewCopy {
     /// connections. A connection carries the rule it matched (libbox
     /// Connection.rule: the condition only), so this needs nothing from the
     /// profile. nil when no connection matched a rule (only route.final).
-    /// The most-hit rule in parts, for a card that lays them out in rows. stub
+    /// The most-hit rule in parts: the overview's card gives each its own
+    /// place, so a long rule name cannot push the share off the line.
     public struct TopRule: Equatable, Sendable {
+        /// A single rule set by its name (design: 「geosite‑cn」), anything
+        /// else in sing-box's own `key=value` form.
         public var rule: String
+        /// Where most of its connections left; empty when unknown.
         public var exit: String
+        /// Its share of the connections, in percent.
         public var share: Int
         public init(rule: String, exit: String, share: Int) {
             self.rule = rule
             self.exit = exit
             self.share = share
         }
-        public var route: String { "" }
-        public var percent: String { "" }
+        /// 「geosite‑cn → 直连」, or the rule alone without an exit.
+        public var route: String { exit.isEmpty ? rule : "\(rule) → \(exit)" }
+        public var percent: String { "\(share)%" }
     }
 
-    public static func topRuleParts(_ connections: [ConnectionRow]) -> TopRule? { nil }
-
-    public static func topRule(_ connections: [ConnectionRow]) -> String? {
+    /// The rule most live connections matched and where they left, from the
+    /// connections. A connection carries the rule it matched (libbox
+    /// Connection.rule: the condition only), so this needs nothing from the
+    /// profile. nil when no connection matched a rule (only route.final).
+    public static func topRuleParts(_ connections: [ConnectionRow]) -> TopRule? {
         // Without DNS lookups (the connections page's 隐藏 DNS test): on a
         // profile that routes DNS by rule they would nearly always win, and
         // the line is about where traffic goes.
@@ -76,12 +84,15 @@ public enum OverviewCopy {
             exits[FlowSummary.directTypes.contains(hit.outboundType) ? FlowSummary.directName : hit.outbound, default: 0] += 1
         }
         let exit = exits.min { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }?.key ?? ""
-        // A single rule set reads as its name (design: 「geosite‑cn」); anything
-        // else keeps sing-box's own `key=value` form.
         let single = "rule_set="
         let name = rule.hasPrefix(single) && !rule.contains(" ") && !rule.contains("[") ? String(rule.dropFirst(single.count)) : rule
         let share = Int((Double(hits.count) / Double(connections.count) * 100).rounded())
-        return exit.isEmpty ? "命中最多：\(name)（\(share)%）" : "命中最多：\(name) → \(exit)（\(share)%）"
+        return TopRule(rule: name, exit: exit, share: share)
+    }
+
+    /// 「命中最多：geosite‑cn → 直连（61%）」 as one sentence.
+    public static func topRule(_ connections: [ConnectionRow]) -> String? {
+        topRuleParts(connections).map { "命中最多：\($0.route)（\($0.share)%）" }
     }
 
     /// Above the centre bar: 「叠加 · 731 Mbps」.

@@ -3,18 +3,51 @@ import Charts
 import ParalluxKit
 import SwiftUI
 
-/// The overview's three cards as design v0.2 lays them out. They take values
-/// and bindings only, so they can be rendered on their own with any numbers;
-/// OverviewView feeds them from the live session.
+/// The overview's three cards. They take values and bindings only, so they
+/// can be rendered on their own with any numbers; OverviewView feeds them
+/// from the live session.
+///
+/// Every figure has a row of its own, label on the left and value on the
+/// right (CardRow). No card joins several figures into one sentence: such a
+/// sentence is what got cut off, or broke in the middle, when a card was
+/// narrow (docs/tasks/fix-overview-responsive.md).
 
-/// A row of cards of equal height; in a window too narrow for them side by
-/// side they stack (docs/design/copy-and-style.md §2, 响应式).
-struct OverviewCardRow<Content: View>: View {
-    @ViewBuilder var content: Content
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 12) { content }.fixedSize(horizontal: false, vertical: true)
-            VStack(spacing: 12) { content }
+/// Lays the cards out in rows by the width it is given (OverviewGrid,
+/// INV-15). Cards of one row are equally wide and as tall as the tallest of
+/// them; rows have their own heights.
+struct OverviewCardGrid: Layout {
+    private func rows(_ subviews: Subviews, width: CGFloat) -> [Range<Int>] {
+        OverviewGrid.rows(count: subviews.count, width: Double(width))
+    }
+
+    private func cardWidth(_ row: Range<Int>, width: CGFloat) -> CGFloat {
+        max(0, (width - CGFloat(row.count - 1) * CGFloat(OverviewGrid.spacing)) / CGFloat(row.count))
+    }
+
+    /// The row's height: its tallest card at the row's card width.
+    private func height(_ row: Range<Int>, _ subviews: Subviews, cardWidth: CGFloat) -> CGFloat {
+        row.map { subviews[$0].sizeThatFits(ProposedViewSize(width: cardWidth, height: nil)).height }.max() ?? 0
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        // Asked for its ideal size, it answers with everything in one row.
+        let ideal = CGFloat(subviews.count) * CGFloat(OverviewGrid.minimumCardWidth) + CGFloat(max(subviews.count - 1, 0)) * CGFloat(OverviewGrid.spacing)
+        let width = proposal.width.map { $0.isFinite ? $0 : ideal } ?? ideal
+        let rows = rows(subviews, width: width)
+        let heights = rows.map { height($0, subviews, cardWidth: cardWidth($0, width: width)) }
+        return CGSize(width: width, height: heights.reduce(0, +) + CGFloat(max(rows.count - 1, 0)) * CGFloat(OverviewGrid.spacing))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in rows(subviews, width: bounds.width) {
+            let width = cardWidth(row, width: bounds.width)
+            let height = height(row, subviews, cardWidth: width)
+            for (column, index) in row.enumerated() {
+                let x = bounds.minX + CGFloat(column) * (width + CGFloat(OverviewGrid.spacing))
+                subviews[index].place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(width: width, height: height))
+            }
+            y += height + CGFloat(OverviewGrid.spacing)
         }
     }
 }
@@ -30,13 +63,42 @@ struct OverviewCard<Content: View>: View {
             content
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
-        // Why 190: the narrowest a card can be before 「本次会话 ↓ … · ↑ …」
-        // truncates; below three of these the row stacks. The ideal width is
-        // pinned to it as well: left to the content, one long line (a rule
-        // name, a profile name) made the whole row stack in a window with
-        // plenty of room; the line truncates instead.
-        .frame(minWidth: 190, idealWidth: 190, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // The grid decides the width and the row's height; the card fills both.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(DesignMetrics.cardFill, in: RoundedRectangle(cornerRadius: DesignMetrics.cardRadius))
+    }
+}
+
+/// One figure of a card: the label on the left, the value on the right.
+/// The value is never cut off or wrapped; when the two do not fit side by
+/// side the value moves under the label, and only the label may shorten.
+struct CardRow: View {
+    let label: String
+    let value: String
+    /// A value that is a name rather than a number may wrap to two lines.
+    var valueIsText = false
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                labelText.fixedSize()
+                Spacer(minLength: 0)
+                valueText.fixedSize()
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                labelText
+                if valueIsText { valueText.lineLimit(2).truncationMode(.middle) } else { valueText.fixedSize() }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var labelText: some View {
+        Text(label).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+    }
+
+    private var valueText: some View {
+        Text(value).font(.subheadline.weight(.medium)).monospacedDigit().lineLimit(valueIsText ? nil : 1)
     }
 }
 
@@ -52,6 +114,7 @@ struct TrafficCard: View {
     var body: some View {
         OverviewCard(title: DashboardCard.traffic.title) {
             Text(RateFormat.bitsPerSecond(rate)).font(.title.weight(.semibold)).monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.7)
             Chart(Array(history.enumerated()), id: \.offset) { index, value in
                 AreaMark(x: .value("t", index), y: .value("速率", value)).foregroundStyle(.tint.opacity(0.14))
                 LineMark(x: .value("t", index), y: .value("速率", value)).foregroundStyle(.tint)
@@ -59,25 +122,24 @@ struct TrafficCard: View {
             }
             .chartXAxis(.hidden).chartYAxis(.hidden).chartLegend(.hidden)
             .chartXScale(domain: 0...max(window - 1, 1))
-            // The cards of a row are as tall as the tallest one. The chart
-            // is the part of this card that can grow, so it takes the
-            // height the others leave; at a fixed 46 pt the card's lower
-            // half stayed empty. 46 is still its smallest and its ideal, so
-            // this card never makes the row taller.
+            // The chart is the part of this card that can grow: it takes the
+            // height the row's tallest card leaves. 46 is its smallest and
+            // its ideal, so this card never makes the row taller.
             .frame(minHeight: 46, idealHeight: 46, maxHeight: .infinity)
             .accessibilityHidden(true)
-            Text("本次会话 ↓ \(RateFormat.bytes(downlinkTotal)) · ↑ \(RateFormat.bytes(uplinkTotal))")
-                .font(.subheadline).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
+            // This session's totals, each on its own row.
+            CardRow(label: "下载", value: "↓ \(RateFormat.bytes(downlinkTotal))")
+            CardRow(label: "上传", value: "↑ \(RateFormat.bytes(uplinkTotal))")
         }
     }
 }
 
 struct RouteModeCard: View {
-    /// The clash modes the running configuration offers (often just one).
+    /// The clash modes the running configuration offers.
     let modes: [String]
     @Binding var mode: String
-    /// 「命中最多：…」 (OverviewCopy.topRule); nil before any rule was hit.
-    var topRule: String?
+    /// The most-hit rule (OverviewCopy.topRuleParts); nil before any rule was hit.
+    var topRule: OverviewCopy.TopRule?
     /// Decision 21: 聚合 and 代理 sit with the other mode controls.
     @Binding var aggregation: Bool
     var aggregationDisabled = false
@@ -97,9 +159,14 @@ struct RouteModeCard: View {
                 .padding(.bottom, 4)
             }
             if let topRule {
-                Text(topRule).font(.subheadline).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                    .help(topRule)
-                    .padding(.bottom, 4)
+                // The share has its place on the label's row; the rule and
+                // where it leads get the full width below, and two lines.
+                VStack(alignment: .leading, spacing: 1) {
+                    CardRow(label: "命中最多", value: topRule.percent)
+                    Text(topRule.route).font(.subheadline.weight(.medium)).lineLimit(2).truncationMode(.middle)
+                        .help(topRule.route)
+                }
+                .padding(.bottom, 4)
             }
             row("聚合", isOn: $aggregation).disabled(aggregationDisabled)
             row("代理", isOn: $proxy).disabled(proxyDisabled)
@@ -111,7 +178,7 @@ struct RouteModeCard: View {
     /// Design: the label on the left in the card's quiet type, the switch on the right.
     private func row(_ title: String, isOn: Binding<Bool>) -> some View {
         Toggle(isOn: isOn) {
-            Text(title).font(.callout.weight(.medium)).foregroundStyle(.secondary)
+            Text(title).font(.callout.weight(.medium)).foregroundStyle(.secondary).lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .toggleStyle(.switch).controlSize(.small)
@@ -120,7 +187,9 @@ struct RouteModeCard: View {
 
 struct ProfileCard: View {
     let name: String?
-    let detail: String
+    /// 「远程」「每 1 小时更新」「51 分钟前更新」: the parts of the profile's
+    /// description, one per line so none is cut in the middle.
+    let details: [String]
     let connections: Int?
     let memory: Int64?
     /// Traffic used over the subscription's quota (UsageSummary); nil without a profile.
@@ -129,64 +198,32 @@ struct ProfileCard: View {
     var body: some View {
         OverviewCard(title: DashboardCard.profile.title) {
             if let name {
-                Text(name).font(.title3.weight(.semibold)).lineLimit(1)
-                Text(detail).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                Text(name).font(.title3.weight(.semibold)).lineLimit(1).truncationMode(.middle).help(name)
+                ViewThatFits(in: .horizontal) {
+                    Text(details.joined(separator: " · ")).fixedSize()
+                    VStack(alignment: .leading, spacing: 1) { ForEach(details, id: \.self) { Text($0).lineLimit(1) } }
+                }
+                .font(.subheadline).foregroundStyle(.secondary)
             } else {
                 Text("无配置").font(.title3.weight(.semibold)).foregroundStyle(.secondary)
             }
-            if let connections, let memory {
-                Text("连接 \(connections) · 内存 \(RateFormat.bytes(memory))")
-                    .font(.subheadline).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
-            }
+            // The figures sit at the card's foot; the spacer takes whatever
+            // height the row's tallest card adds.
+            Spacer(minLength: 2)
+            if let connections { CardRow(label: "连接", value: "\(connections)") }
+            if let memory { CardRow(label: "内存", value: RateFormat.bytes(memory)) }
             if let usage {
-                // The usage sits at the card's foot; the spacer takes
-                // whatever height the row's tallest card adds.
-                Spacer(minLength: 2)
-                HStack(spacing: 8) {
-                    UsageRing(fraction: usage.fraction)
-                    VStack(alignment: .leading, spacing: 2) {
-                        // One line at the usual card width: the longest
-                        // wording (「本次会话已用 … / 无限」) broke at the
-                        // slash on the installed build. It may shrink a
-                        // little first, and wraps only in a narrow window.
-                        Text(usage.text).font(.subheadline.weight(.medium)).monospacedDigit()
-                            .lineLimit(2).minimumScaleFactor(0.85)
-                        if let note = usage.note {
-                            Text(note).font(.caption).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
-                        }
-                    }
+                CardRow(label: usage.label, value: usage.value)
+                // Used share of the quota; an empty track when there is no
+                // quota to take a share of.
+                ProgressView(value: usage.fraction ?? 0)
+                    .progressViewStyle(.linear)
+                    .accessibilityHidden(true)
+                if let note = usage.note {
+                    Text(note).font(.caption).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
                 }
-                .accessibilityElement(children: .combine)
             }
         }
-    }
-}
-
-/// Used share of the quota as a ring with the percentage inside; an empty
-/// ring with ∞ when there is no quota to take a share of.
-struct UsageRing: View {
-    let fraction: Double?
-    /// Why 46: two lines of the usage text beside it are about this tall,
-    /// "100%" still fits inside at callout size, and at the overview's
-    /// usual width it leaves the text enough room for one line.
-    static let diameter: CGFloat = 46
-    private static let lineWidth: CGFloat = 6
-
-    var body: some View {
-        ZStack {
-            Circle().stroke(.quaternary, lineWidth: Self.lineWidth)
-            if let fraction, fraction > 0 {
-                Circle().trim(from: 0, to: fraction)
-                    .stroke(.tint, style: StrokeStyle(lineWidth: Self.lineWidth, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-            }
-            Text(fraction.map { "\(Int(($0 * 100).rounded()))%" } ?? "∞")
-                .font(.callout.weight(.semibold)).monospacedDigit()
-                .foregroundStyle(fraction == nil ? .secondary : .primary)
-        }
-        .padding(Self.lineWidth / 2)
-        .frame(width: Self.diameter, height: Self.diameter)
-        .accessibilityHidden(true)
     }
 }
 

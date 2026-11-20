@@ -58,22 +58,27 @@ public struct SubscriptionUsage: Codable, Equatable, Sendable {
     }
 }
 
-/// The profile card's usage line and bar (overview).
+/// The profile card's usage row and bar (overview).
 public struct UsageSummary: Equatable, Sendable {
-    public var text: String
-    /// `text` in two parts, for a row with the label on one side. stub
-    public var label: String { "" }
-    public var value: String { "" }
+    /// 「已用」, or 「本次会话已用」 when the figure is this session's.
+    public var label: String
+    /// 「25 GB / 100 GB」 or 「2 GB / 无限」. Kept apart from the label so the
+    /// card can put them on two sides of a row and never break the figures.
+    public var value: String
     /// Used share of the quota, 0...1; nil when there is no quota to draw.
     public var fraction: Double?
     /// The expiry, when the server states one.
     public var note: String?
 
-    public init(text: String, fraction: Double?, note: String?) {
-        self.text = text
+    public init(label: String, value: String, fraction: Double?, note: String?) {
+        self.label = label
+        self.value = value
         self.fraction = fraction
         self.note = note
     }
+
+    /// The row as one sentence (accessibility, and the tests of the wording).
+    public var text: String { "\(label) \(value)" }
 
     /// - Parameters:
     ///   - usage: the selected profile's, nil when its server reports none
@@ -83,7 +88,7 @@ public struct UsageSummary: Equatable, Sendable {
     ///     is: it is not the account's running total.
     public static func make(usage: SubscriptionUsage?, sessionTotal: Int64, now: Date, timeZone: TimeZone = .current) -> UsageSummary {
         guard let usage else {
-            return UsageSummary(text: "本次会话已用 \(RateFormat.bytes(sessionTotal)) / 无限", fraction: nil, note: nil)
+            return UsageSummary(label: "本次会话已用", value: "\(RateFormat.bytes(sessionTotal)) / 无限", fraction: nil, note: nil)
         }
         var note: String?
         if let expires = usage.expires {
@@ -91,11 +96,11 @@ public struct UsageSummary: Equatable, Sendable {
             note = expires <= now ? "已于 \(day) 到期" : "\(day) 到期"
         }
         guard let total = usage.total else {
-            return UsageSummary(text: "已用 \(RateFormat.bytes(usage.used)) / 无限", fraction: nil, note: note)
+            return UsageSummary(label: "已用", value: "\(RateFormat.bytes(usage.used)) / 无限", fraction: nil, note: note)
         }
         // total > 0 by SubscriptionUsage.parse; a hand-built 0 draws a full bar.
         let fraction = total > 0 ? min(max(Double(usage.used) / Double(total), 0), 1) : 1
-        return UsageSummary(text: "已用 \(RateFormat.bytes(usage.used)) / \(RateFormat.bytes(total))", fraction: fraction, note: note)
+        return UsageSummary(label: "已用", value: "\(RateFormat.bytes(usage.used)) / \(RateFormat.bytes(total))", fraction: fraction, note: note)
     }
 
     /// The calendar day in the user's time zone, as 2026-12-31.
