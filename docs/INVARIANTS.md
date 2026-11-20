@@ -20,6 +20,7 @@
 | INV-10 | 流向图与路线图里已经显示的节点只在闲置超过保留时长后才离开，离开之前相对顺序不变，节点数不超过上限 | property | `flowSlotsKeepTheirPlaceWhileTrafficComesAndGoes` |
 | INV-11 | 菜单栏只在连接且代理开关开启时标记代理；运行中的异常保留有效聚合方式和代理标记，关闭聚合后的旧线路告警不污染仅代理状态 | 穷举开关、连接、有效方式和错误组合 | `theIconFollowsTheEffectiveModeAndDisplayedSwitches` |
 | INV-12 | 三栏流向图每一栏的节点高度之和相等，每个节点等于流经它的流带之和，每股流带在三处一样厚 | property | `threeColumnFlowConservesWidthEverywhere` |
+| INV-13 | 菜单栏开启代理只填入原图包围的空白，异常只减去原有墨色。两者都在错相标志内部表达 | 两种原生比例下比较各组轮廓内外的像素集合 | `turningOnTheProxyFillsOnlyAnEnclosedPartOfTheMark`、`aFaultOnlyRemovesInkFromTheHealthyMark` |
 
 ## 写法提示
 

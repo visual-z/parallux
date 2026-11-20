@@ -1,7 +1,7 @@
 import AppKit
 
-/// The two halves describe aggregation. The outbound arrow and the warning
-/// occupy different corners so either can change without hiding the other.
+/// Each template uses the two halves of the app icon. The upper half carries
+/// the proxy fill and the fault cut. The lower half describes aggregation.
 public enum MenuBarIcon {
     fileprivate enum Shape: Hashable, Sendable {
         case disconnected, connecting, disconnecting
@@ -37,7 +37,7 @@ public enum MenuBarIcon {
         public static let allCases = [disconnected, connecting, disconnecting, connectionFailed]
             + running.flatMap { [$0, Self($0.shape, proxy: $0.proxy, warning: true)] }
 
-        /// The proxy arrow means the switch is on. A rule can still send an
+        /// The filled upper half means the switch is on. A rule can still send an
         /// individual connection directly. A saved preference is idle when off.
         public static func resolve(tunnel: StatusLine.Tunnel, switches: ConnectionSwitches,
                                    effectiveMode: AggregationMode?, serviceError: Bool, linkError: Bool) -> Self {
@@ -91,20 +91,56 @@ public enum MenuBarIcon {
 
     private enum HalfStyle { case solid, outline, arc }
 
-    /// A circular arc carries the silhouette of the two SVG layers at menu size.
-    /// An arc omits its diameter, leaving an open end during a transition.
-    private static func half(_ context: CGContext, at center: CGPoint, radius: CGFloat,
-                             lower: Bool = false, style: HalfStyle = .solid) {
+    /// The endpoints ease into the diameter like the two layers in AppIcon.icon.
+    /// The same contour bounds both the hollow and the filled half.
+    private static func addCap(to path: CGMutablePath, halfWidth w: CGFloat, height h: CGFloat, base: CGFloat) {
+        path.move(to: CGPoint(x: -0.92 * w, y: base))
+        path.addQuadCurve(to: CGPoint(x: -0.994 * w, y: base - 0.10 * h),
+                          control: CGPoint(x: -w, y: base))
+        path.addCurve(to: CGPoint(x: 0, y: base - h),
+                      control1: CGPoint(x: -0.94 * w, y: base - 0.63 * h),
+                      control2: CGPoint(x: -0.51 * w, y: base - h))
+        path.addCurve(to: CGPoint(x: 0.994 * w, y: base - 0.10 * h),
+                      control1: CGPoint(x: 0.51 * w, y: base - h),
+                      control2: CGPoint(x: 0.94 * w, y: base - 0.63 * h))
+        path.addQuadCurve(to: CGPoint(x: 0.92 * w, y: base),
+                          control: CGPoint(x: w, y: base))
+        path.closeSubpath()
+    }
+
+    private static func half(_ context: CGContext, at center: CGPoint, radius: CGFloat, style: HalfStyle,
+                             lower: Bool = false, interrupted: Bool = false) {
         context.saveGState()
         defer { context.restoreGState() }
         context.translateBy(x: center.x, y: center.y)
         if lower { context.rotate(by: .pi) }
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: -radius, y: 0))
-        path.addArc(center: .zero, radius: radius, startAngle: .pi, endAngle: .pi * 2, clockwise: false)
-        if style != .arc { path.closeSubpath() }
-        context.addPath(path)
-        context.drawPath(using: style == .solid ? .fill : .stroke)
+
+        // These dimensions are optical adjustments for the existing 18 pt canvas.
+        // One common rim stays legible at 1× and matches the weight of nearby system symbols.
+        let rim: CGFloat = 1.5
+        if interrupted {
+            // Trim the tip perpendicular to the seam. The flat end is wide
+            // enough to read at 1× and leaves the active fill and lower half visible.
+            let extent = radius + rim
+            let cutAt = 0.45 * radius
+            context.clip(to: CGRect(x: -extent, y: -extent, width: extent + cutAt, height: 2 * extent))
+        }
+
+        if style == .arc {
+            context.setLineWidth(rim)
+            context.setLineCap(.round)
+            context.addArc(center: .zero, radius: radius - rim / 2,
+                           startAngle: .pi + 0.12, endAngle: 2 * .pi - 0.12, clockwise: false)
+            context.strokePath()
+        } else {
+            let path = CGMutablePath()
+            addCap(to: path, halfWidth: radius, height: radius, base: 0)
+            if style == .outline {
+                addCap(to: path, halfWidth: radius - rim * 1.25, height: radius - 2 * rim, base: -rim)
+            }
+            context.addPath(path)
+            context.drawPath(using: .eoFill)
+        }
     }
 
     private static func draw(_ state: State, in context: CGContext) {
@@ -113,63 +149,28 @@ public enum MenuBarIcon {
         let ink = CGColor(gray: 0, alpha: 1)
         context.setFillColor(ink)
         context.setStrokeColor(ink)
-        context.setLineCap(.round)
-        context.setLineJoin(.round)
-        context.saveGState()
-        // Keep the same anchor as the switches and health change. The right
-        // edge belongs to the two indicators even when neither is present.
-        context.translateBy(x: 7.2, y: 9.4)
+        context.translateBy(x: pointSize / 2, y: pointSize / 2)
         context.rotate(by: -35 * .pi / 180)
-        context.setLineWidth(1.4)
-        let upper = CGPoint(x: -1.1, y: -1)
-        let lower = CGPoint(x: 1.1, y: 1.1)
-        let radius: CGFloat = 5.8
-        switch state.shape {
-        case .disconnected:
-            half(context, at: upper, radius: 5.25, style: .outline)
-            half(context, at: lower, radius: 5.25, lower: true, style: .outline)
-        case .connecting:
-            half(context, at: .zero, radius: radius, style: .arc)
-            for x: CGFloat in [-3, 0, 3] {
-                context.fillEllipse(in: CGRect(x: x - 0.85, y: 1, width: 1.7, height: 1.7))
-            }
-        case .disconnecting:
-            half(context, at: upper, radius: 4.7, style: .arc)
-            half(context, at: lower, radius: 4.7, lower: true, style: .arc)
-        case .proxyOnly:
-            half(context, at: CGPoint(x: 0, y: 1.9), radius: 6.35)
-        case .waitingForLinks:
-            half(context, at: upper, radius: 5.25, style: .outline)
-            context.setLineWidth(1.65)
-            context.strokeLineSegments(between: [CGPoint(x: -2.2, y: 2), CGPoint(x: -0.6, y: 2),
-                                                 CGPoint(x: 2.4, y: 2), CGPoint(x: 4, y: 2)])
-        case .balance:
-            half(context, at: upper, radius: radius)
-            half(context, at: lower, radius: radius, lower: true)
-        case .bond:
-            half(context, at: CGPoint(x: 0, y: -0.8), radius: radius)
-            half(context, at: CGPoint(x: 0, y: 0.8), radius: radius, lower: true)
-            context.fill(CGRect(x: -2.1, y: -1, width: 4.2, height: 2))
-        case .failover:
-            half(context, at: upper, radius: radius)
-            context.setLineWidth(2)
-            context.strokeLineSegments(between: [CGPoint(x: -2.5, y: 2.3), CGPoint(x: 5.45, y: 2.3)])
+
+        let primary: HalfStyle = state.proxy ? .solid : .outline
+        let styles: (upper: HalfStyle, lower: HalfStyle) = switch state.shape {
+        case .disconnected: (.arc, .arc)
+        case .connecting: (.outline, .arc)
+        case .disconnecting: (.arc, .outline)
+        case .proxyOnly: (primary, .arc)
+        case .waitingForLinks: (primary, .outline)
+        case .balance, .failover, .bond: (primary, .solid)
         }
-        context.restoreGState()
-        if state.proxy {
-            context.setLineWidth(1.65)
-            context.beginPath()
-            context.move(to: CGPoint(x: 12.3, y: 6.65))
-            context.addLine(to: CGPoint(x: 16.5, y: 2.45))
-            context.move(to: CGPoint(x: 12.9, y: 2.45))
-            context.addLine(to: CGPoint(x: 16.5, y: 2.45))
-            context.addLine(to: CGPoint(x: 16.5, y: 6.05))
-            context.strokePath()
-        }
-        if state.warning {
-            context.setLineWidth(2)
-            context.strokeLineSegments(between: [CGPoint(x: 15.8, y: 9.4), CGPoint(x: 15.8, y: 12.8)])
-            context.fillEllipse(in: CGRect(x: 14.65, y: 14.75, width: 2.3, height: 2.3))
-        }
+
+        // Measured against the master mark: the two centers differ by about half
+        // a radius along the seam. In 叠加 both centers sit on one axis.
+        let radius: CGFloat = 6.55
+        let offset: CGFloat = state.shape == .bond ? 0 : 1.65
+        // A 1.6 pt seam stays open even across diagonally adjacent 1× pixels.
+        let halfGap: CGFloat = state.shape == .bond ? 0.80 : 1.06
+        let secondRadius = state.shape == .failover ? radius * 0.62 : radius
+        half(context, at: CGPoint(x: -offset, y: -halfGap), radius: radius, style: styles.upper,
+             interrupted: state.warning)
+        half(context, at: CGPoint(x: offset, y: halfGap), radius: secondRadius, style: styles.lower, lower: true)
     }
 }
