@@ -1,0 +1,115 @@
+# keel configuration for Parallux: a Go core (sing-box + aggregation) and a
+# Swift app with a packet tunnel system extension. Steps run in order.
+[keel]
+version = "1.3.0"   # the keel release this repository is checked with
+
+[project]
+name = "parallux"
+stack = "go"
+
+[[gate.step]]
+name = "build"
+cmd = ["go", "build", "./..."]
+
+[[gate.step]]
+name = "vet"
+cmd = ["go", "vet", "./..."]
+
+[[gate.step]]
+name = "test"
+cmd = ["go", "test", "-race", "-count=1", "-json", "./..."]
+runner = "go-json"
+
+[[gate.step]]
+name = "fmt"
+cmd = ["sh", "-c", "test -z \"$(gofmt -l core)\""]
+
+# ParalluxKit: the Swift code shared by the app and the extension.
+[[gate.step]]
+name = "swift-test"
+cmd = ["scripts/swift-test.sh", "{junit}"]
+runner = "junit"
+
+# Builds Libbox.xcframework when the Go sources changed, then compiles the app
+# and the system extension unsigned. Proves the Swift side links the core.
+[[gate.step]]
+name = "apple-build"
+cmd = ["scripts/build-apple.sh"]
+timeout_s = 1800
+
+# The aggregation server for Linux VPSes (PLAN decision 18), plus its
+# installer's syntax and shellcheck.
+[[gate.step]]
+name = "server-build"
+cmd = ["scripts/build-server.sh"]
+timeout_s = 900
+
+# Release gate (docs/RELEASE.md): the last release.sh output must be fit to
+# ship. Only `keel gate --tier release` runs it; the normal gate never does.
+[[gate.step]]
+name = "release-check"
+cmd = ["scripts/check-release.sh", ".build/release/latest/Parallux.app"]
+tier = "release"
+
+[[gate.step]]
+name = "boundaries"
+cmd = ["keel", "check-boundaries"]
+
+[[gate.step]]
+name = "docs"
+cmd = ["keel", "check-docs"]
+
+[[gate.step]]
+name = "cards"
+cmd = ["keel", "lint"]
+
+[[gate.step]]
+name = "freeze"
+cmd = ["keel", "freeze-check"]
+
+[guard]
+base = "main"
+
+[docs]
+agents_max_lines = 150     # AGENTS.md 是地图不是百科；超了就把细节下沉或机械化
+playbook_max_rules = 120   # 规则只增不减会撞墙；超了就合并或改写成检查
+glossary_source_dirs = ["core", "apple/Parallux", "apple/PacketTunnel", "apple/ParalluxKit/Sources"]
+
+# 边界规则：正则级的「Never」。每条新规则都要先故意违规一次确认它会红。
+
+# The core runs inside a sandboxed system extension: it cannot spawn processes,
+# and a helper binary would need its own signing and launchd plumbing.
+# Demonstrated red on 2026-11-18.
+[[boundary.rule]]
+name = "core 不启动子进程"
+paths = ["core/**/*.go"]
+except = ["core/tools.go"]
+forbid = ['"os/exec"']
+
+# Swift UI code talks to the core only through Libbox (and later the command
+# client); it never reaches into the extension's sources.
+[[boundary.rule]]
+name = "app 不引用扩展源码"
+paths = ["apple/Parallux/**/*.swift", "apple/ParalluxKit/**/*.swift"]
+forbid = ['PacketTunnelProvider']
+
+[red]
+runner = "go-json"   # go test -json: structured events, no text parsing
+# {args}: RED: <commit> -run '^TestName$' ./core/...
+command = ["go", "test", "-count=1", "-json", "{args}"]
+link = []
+env = {}
+timeout_s = 1800
+
+[red.profile.swift]
+runner = "junit"
+command = ["scripts/swift-test.sh", "{junit}", "{filter}"]
+
+[tests]
+paths = ["**/*_test.go", "apple/ParalluxKit/Tests/**/*.swift"]
+assert_patterns = ['\bt\.(Error|Errorf|Fatal|Fatalf|Fail|FailNow)\(', '\b(require|assert)\.\w+\(', '#expect\(', '#require\(', 'Issue\.record\(']
+skip_patterns = ['\bt\.Skip(f|Now)?\(', '\.disabled\(', '\.enabled\(if:']
+suspicious_patterns = ['\bos\.Exit\(', '\bexit\(']
+
+[mutate]
+command = []   # e.g. ["gremlins", "unleash", "--diff", "{base}"]

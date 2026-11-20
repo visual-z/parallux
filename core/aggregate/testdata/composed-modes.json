@@ -1,0 +1,121 @@
+{
+  "dns" : {
+    "rules" : [
+      {
+        "clash_mode" : "Direct",
+        "server" : "local"
+      }
+    ],
+    "servers" : [
+      {
+        "tag" : "local",
+        "type" : "local"
+      }
+    ]
+  },
+  "inbounds" : [
+    {
+      "auto_route" : true,
+      "tag" : "tun-in",
+      "type" : "tun"
+    }
+  ],
+  "outbounds" : [
+    {
+      "outbounds" : [
+        "DE-01",
+        "Auto",
+        "direct"
+      ],
+      "tag" : "Proxy",
+      "type" : "selector"
+    },
+    {
+      "outbounds" : [
+        "DE-01"
+      ],
+      "tag" : "Auto",
+      "type" : "urltest"
+    },
+    {
+      "detour" : "parallux-links",
+      "server" : "de.example.com",
+      "server_port" : 443,
+      "tag" : "DE-01",
+      "type" : "vless",
+      "uuid" : "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "links" : [
+        "link-en0",
+        "link-en7"
+      ],
+      "mode" : "balance",
+      "tag" : "direct",
+      "type" : "aggregate"
+    },
+    {
+      "tag" : "block",
+      "type" : "block"
+    },
+    {
+      "bind_interface" : "en0",
+      "tag" : "link-en0",
+      "type" : "direct"
+    },
+    {
+      "bind_interface" : "en7",
+      "tag" : "link-en7",
+      "type" : "direct"
+    },
+    {
+      "links" : [
+        "link-en0",
+        "link-en7"
+      ],
+      "mode" : "balance",
+      "tag" : "parallux-links",
+      "type" : "aggregate"
+    }
+  ],
+  "route" : {
+    "final" : "Proxy",
+    "rules" : [
+      {
+        "action" : "sniff"
+      },
+      {
+        "action" : "hijack-dns",
+        "protocol" : "dns"
+      },
+      {
+        "clash_mode" : "Direct",
+        "outbound" : "direct"
+      },
+      {
+        "mode" : "and",
+        "outbound" : "Proxy",
+        "rules" : [
+          {
+            "clash_mode" : "Global"
+          },
+          {
+            "invert" : true,
+            "ip_is_private" : true
+          }
+        ],
+        "type" : "logical"
+      },
+      {
+        "ip_is_private" : true,
+        "outbound" : "direct"
+      },
+      {
+        "domain_suffix" : [
+          "example.org"
+        ],
+        "outbound" : "DE-01"
+      }
+    ]
+  }
+}
