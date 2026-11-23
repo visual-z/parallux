@@ -66,6 +66,8 @@ private struct AggregationSettings: View {
                 Picker("默认聚合方式", selection: Binding(get: { app.linkSettings.value.mode }, set: { mode in Task { await app.setMode(mode) } })) {
                     ForEach(AggregationMode.allCases) { Text($0.title).tag($0) }
                 }
+                // A refused choice (叠加, no server) rebuilds the control from what is saved.
+                .id(app.refusedModeChoices)
                 Toggle("线路掉线时通知", isOn: $settings.value.notifyLinkChanges)
             }
         }

@@ -10,11 +10,7 @@ enum URLRouter {
             do {
                 switch route {
                 case let .addAggregationServer(link):
-                    let server = try app.servers.add(link: link)
-                    if app.linkSettings.value.bondServerID == nil {
-                        app.linkSettings.value.bondServerID = server.id
-                        await app.applyLinkChanges()
-                    }
+                    let server = try await app.addAggregationServer(link: link)
                     inform("已添加聚合服务器", "「\(server.name)」可用于叠加。")
                 case let .importRemoteProfile(link):
                     try await app.profiles.importLink(link)

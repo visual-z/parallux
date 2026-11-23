@@ -3,8 +3,9 @@ import Foundation
 /// What the links page and the aggregation switch persist.
 public struct LinkSettings: Codable, Equatable, Sendable {
     public var preferences = LinkPreferences()
-    public var mode: AggregationMode = .bond
-    /// The aggregation server used for 叠加 (AggregationServer.id), if any.
+    public var mode: AggregationMode = LinkSettings.defaultMode
+    /// The aggregation server used for 叠加 (AggregationServer.id): one on the
+    /// list whenever the list has any (ModeChoice.swift, INV-16).
     public var bondServerID: UUID?
     /// 聚合 / 代理 as last run; missing in old data = both on.
     public var switches: ConnectionSwitches = .both
@@ -27,7 +28,7 @@ public struct LinkSettings: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         preferences = try container.decodeIfPresent(LinkPreferences.self, forKey: .preferences) ?? LinkPreferences()
-        mode = try container.decodeIfPresent(AggregationMode.self, forKey: .mode) ?? .bond
+        mode = try container.decodeIfPresent(AggregationMode.self, forKey: .mode) ?? LinkSettings.defaultMode
         bondServerID = try container.decodeIfPresent(UUID.self, forKey: .bondServerID)
         switches = try container.decodeIfPresent(ConnectionSwitches.self, forKey: .switches) ?? .both
     }

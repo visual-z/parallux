@@ -23,6 +23,7 @@
 | INV-13 | 菜单栏开启代理只填入原图包围的空白，异常只减去原有墨色。两者都在错相标志内部表达 | 两种原生比例下比较各组轮廓内外的像素集合 | `turningOnTheProxyFillsOnlyAnEnclosedPartOfTheMark`、`aFaultOnlyRemovesInkFromTheHealthyMark` |
 | INV-14 | 目标在局域网时，拨号顺序等于完整选线顺序去掉中继线路（其余线路相对顺序不变）；其他目标的拨号顺序就是完整选线顺序 | property | `TestLocalDialOrderDropsOnlyRelaysAndKeepsTheRest` |
 | INV-15 | 概览卡片的分行覆盖每张卡片恰好一次且顺序不变；同一行里的卡片都不窄于最小宽度；只有第一行可以比其余行短 | property | `gridRowsCoverEveryCardOnceAndNeverSqueezeOne` |
+| INV-16 | 保存的聚合方式是叠加时，一定选中了一台在列表里的聚合服务器；列表不空时选中的服务器一定在列表里，列表空时没有选中的服务器 | 代码断言（`checkInvariants`，每次修改后）+ property | `anyChoiceSequenceKeepsBondBehindAServer` |
 
 ## 写法提示
 

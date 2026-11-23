@@ -19,8 +19,9 @@ public struct TunnelSettings: Codable, Equatable, Sendable {
 public struct AppSettings: Codable, Equatable, Sendable {
     public var showRateInMenuBar = false
     public var keepInMenuBarAfterClose = true
-    /// Design default 叠加; applies once aggregation exists (M3).
-    public var defaultAggregationMode: AggregationMode = .bond
+    /// Nothing reads this: the mode in use and its default live in
+    /// LinkSettings. Kept equal to that default and kept in the saved format.
+    public var defaultAggregationMode: AggregationMode = LinkSettings.defaultMode
     public var tunnel = TunnelSettings()
     public var onDemandEnabled = false
     public var onDemandRules: [OnDemandRuleModel] = []

@@ -1,6 +1,6 @@
 ---
 type: fix
-status: doing       # todo | doing | blocked | awaiting-author | done
+status: awaiting-author       # todo | doing | blocked | awaiting-author | done
 weight: full
 created: 2026-11-23
 baseline: a5caf406f403
@@ -97,9 +97,17 @@ keel gate --record docs/tasks/fix-bond-needs-server.md
 
 ## 证据
 
-<!-- RED 的 commit 在开卡提交之后填入。 -->
+RED(swift): 92853a8 aFreshInstallStartsInAModeThatNeedsNoServer  # D1
+RED(swift): 92853a8 choosingBondWithoutAServerChangesNothingAndAsksForOne  # D2
+RED(swift): 92853a8 choosingBondWithAServerAppliesAndUsesAListedServer  # D2
+RED(swift): 92853a8 settingsSavedAsBondWithoutAServerBecomeBalance  # D3
+RED(swift): 92853a8 removingTheServerInUseMovesToTheNextAndTheLastOneEndsBond  # D4
+RED(swift): 92853a8 addingAServerAfterAskingForBondFinishesTheSwitch  # D5
+RED(swift): 92853a8 usingAServerOnlyTakesListedOnes  # D5
+RED(swift): 92853a8 anyChoiceSequenceKeepsBondBehindAServer  # D6
+RED(swift): 92853a8 aMenuMarksBondAsOpeningSomethingWhileThereIsNoServer  # D7
 
-开卡时的失败断言（占位实现保持现有行为）：
+开卡时的失败断言（占位实现保持当时的行为）：
 
 - `aFreshInstallStartsInAModeThatNeedsNoServer`：`LinkSettings.defaultMode == .balance`
 - `choosingBondWithoutAServerChangesNothingAndAsksForOne`：`settings.choose(.bond, servers: []) == .needsServer`
@@ -112,10 +120,17 @@ keel gate --record docs/tasks/fix-bond-needs-server.md
 - `aMenuMarksBondAsOpeningSomethingWhileThereIsNoServer`：`AggregationMode.bond.menuTitle(hasServer: false) == "叠加…"`
 - `choosingBalanceOrFailoverNeverNeedsAServer` 开卡时就是绿的：它钉的是不许变的行为，不算 RED。
 
+边界规则先红后绿（D8）：加上规则、还没改界面时 `keel check-boundaries` 退出码 1，8 处违规，分布在 `AggregationServersView.swift`（5）、`PanelView.swift`（1）、`URLRouter.swift`（2）；改完后退出码 0，0 处违规。
+
+实现中发现并改掉的一处：`choose` 起初只在选叠加时才核对选中的服务器，对一份还没和服务器列表对齐过的设置选分流，会让代码断言（INV-16）中止测试进程（信号 5）。现在选任何方式都先对齐。
+
+这台 Mac 上保存的设置（2026-11-23 读取）：`mode` 是 `bond`，没有 `bondServerID`，服务器列表为空。新版本启动后会变成分流。
+GATE: 92853a8c393b+dirty ok tree:a32064789a26 build=0 vet=0 test=0[627p/0f] fmt=0 swift-test=0[201p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-23)
+
 ## 修订
 
 ## 交接
 
-- 做了什么：开卡，九个红测试和保持现有行为的占位实现。
-- 卡在哪：还没有实现。
-- 下一步：实现三个纯函数，把七处入口收到 `AppModel`，加边界规则。
+- 做了什么：叠加只有在有聚合服务器时才能选（`ModeChoice.swift` 的三个纯函数，INV-16，决策 27）；改聚合方式、换服务器、增删服务器的七处入口都收到 `AppModel`，并有一条边界规则；没有服务器时点叠加打开聚合服务器页并说明原因，添加后自动切到叠加，删除最后一台前确认；新安装默认分流，旧数据启动时对齐。
+- 卡在哪：等作者手测 D11（`docs/MANUAL-TEST.md` 4.9–4.12）。分段控件被拒绝后是否回到原来那一段，没有在装好的 App 里看过。
+- 下一步：作者决定要不要做「App 经 SSH 自动把聚合服务器装到自己的机器上」（Amnezia 的做法；SSH 库已在依赖图里）。另有两处没有动：钥匙串里密钥读不出时的提示仍写「尚未设置聚合服务器」，不准确；`AppSettings.defaultAggregationMode` 没有任何读取方，可以删。
