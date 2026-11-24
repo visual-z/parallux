@@ -43,9 +43,8 @@ public enum TunnelXPC {
     public static let probeTimeout: TimeInterval = LinkProbe.timeout + 2
 
     /// Asks the extension to probe every link; see TunnelXPCProtocol.probeLinks.
-    public static func probeLinks(over connection: NSXPCConnection, timeout: TimeInterval = probeTimeout) throws -> [LinkProbeResult] {
-        connection.remoteObjectInterface = makeInterface()
-        connection.resume()
+    public static func probeLinks(over connection: NSXPCConnection, timeout: TimeInterval = probeTimeout, resume: Bool = true) throws -> [LinkProbeResult] {
+        prepare(connection, resume: resume)
         let done = DispatchSemaphore(value: 0)
         let box = ReplyBox()
         let proxy = connection.remoteObjectProxyWithErrorHandler { error in
@@ -68,47 +67,75 @@ public enum TunnelXPC {
     }
 
     /// Reads per-link counters from the extension; "[]" when it does not answer in time.
-    public static func linkStats(over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout) -> String {
-        connection.remoteObjectInterface = makeInterface()
-        connection.resume()
+    public static func linkStats(over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout, resume: Bool = true) -> String {
+        (try? fetchLinkStats(over: connection, timeout: timeout, resume: resume)) ?? "[]"
+    }
+
+    /// The same call, but a silent extension is an error the caller can act on.
+    public static func fetchLinkStats(over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout, resume: Bool = true) throws -> String {
+        prepare(connection, resume: resume)
         let done = DispatchSemaphore(value: 0)
         let box = ReplyBox()
-        let proxy = connection.remoteObjectProxyWithErrorHandler { _ in done.signal() } as? TunnelXPCProtocol
-        proxy?.linkStats { json in
+        let proxy = connection.remoteObjectProxyWithErrorHandler { error in
+            box.set(.failure(.remote(error.localizedDescription)))
+            done.signal()
+        } as? TunnelXPCProtocol
+        guard let proxy else { throw DialError.remote("the connection does not export TunnelXPCProtocol") }
+        proxy.linkStats { json in
             box.set(.success(Data(json.utf8)))
             done.signal()
         }
-        guard proxy != nil, done.wait(timeout: .now() + timeout) == .success, case let .success(data)? = box.get() else { return "[]" }
+        guard done.wait(timeout: .now() + timeout) == .success, case let .success(data)? = box.get() else {
+            throw DialError.timedOut
+        }
         return String(decoding: data, as: UTF8.self)
     }
 
     /// Fetches queued core notifications; empty when the extension does not answer in time.
-    public static func drainNotifications(over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout) -> [CoreNotification] {
-        connection.remoteObjectInterface = makeInterface()
-        connection.resume()
+    public static func drainNotifications(over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout, resume: Bool = true) -> [CoreNotification] {
+        (try? fetchNotifications(over: connection, timeout: timeout, resume: resume)) ?? []
+    }
+
+    public static func fetchNotifications(over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout, resume: Bool = true) throws -> [CoreNotification] {
+        prepare(connection, resume: resume)
         let done = DispatchSemaphore(value: 0)
         let box = ReplyBox()
-        let proxy = connection.remoteObjectProxyWithErrorHandler { _ in done.signal() } as? TunnelXPCProtocol
-        proxy?.drainNotifications { data in
+        let proxy = connection.remoteObjectProxyWithErrorHandler { error in
+            box.set(.failure(.remote(error.localizedDescription)))
+            done.signal()
+        } as? TunnelXPCProtocol
+        guard let proxy else { throw DialError.remote("the connection does not export TunnelXPCProtocol") }
+        proxy.drainNotifications { data in
             box.set(.success(data))
             done.signal()
         }
-        guard proxy != nil, done.wait(timeout: .now() + timeout) == .success, case let .success(data)? = box.get() else { return [] }
+        guard done.wait(timeout: .now() + timeout) == .success, case let .success(data)? = box.get() else {
+            throw DialError.timedOut
+        }
         return NotificationQueue.decode(data)
     }
 
     /// Asks the extension to explain a target's route; "" when it does not answer in time.
-    public static func explainRoute(_ target: String, over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout) -> String {
-        connection.remoteObjectInterface = makeInterface()
-        connection.resume()
+    public static func explainRoute(_ target: String, over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout, resume: Bool = true) -> String {
+        (try? fetchRouteExplanation(target, over: connection, timeout: timeout, resume: resume)) ?? ""
+    }
+
+    public static func fetchRouteExplanation(_ target: String, over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout, resume: Bool = true) throws -> String {
+        prepare(connection, resume: resume)
         let done = DispatchSemaphore(value: 0)
         let box = ReplyBox()
-        let proxy = connection.remoteObjectProxyWithErrorHandler { _ in done.signal() } as? TunnelXPCProtocol
-        proxy?.explainRoute(target) { json in
+        let proxy = connection.remoteObjectProxyWithErrorHandler { error in
+            box.set(.failure(.remote(error.localizedDescription)))
+            done.signal()
+        } as? TunnelXPCProtocol
+        guard let proxy else { throw DialError.remote("the connection does not export TunnelXPCProtocol") }
+        proxy.explainRoute(target) { json in
             box.set(.success(Data(json.utf8)))
             done.signal()
         }
-        guard proxy != nil, done.wait(timeout: .now() + timeout) == .success, case let .success(data)? = box.get() else { return "" }
+        guard done.wait(timeout: .now() + timeout) == .success, case let .success(data)? = box.get() else {
+            throw DialError.timedOut
+        }
         return String(decoding: data, as: UTF8.self)
     }
 
@@ -136,6 +163,14 @@ public enum TunnelXPC {
         var values: [LinkProbeResult] { lock.withLock { slots.compactMap { $0 } } }
     }
 
+    /// Readies a connection for a call. A caller that keeps the connection
+    /// alive resumes it once itself and passes `resume: false`: resuming a
+    /// live connection twice is misuse, not a no-op.
+    private static func prepare(_ connection: NSXPCConnection, resume: Bool) {
+        connection.remoteObjectInterface = makeInterface()
+        if resume { connection.resume() }
+    }
+
     /// Whitelists FileHandle in the reply; NSXPC refuses classes it was not told about.
     public static func makeInterface() -> NSXPCInterface {
         let interface = NSXPCInterface(with: TunnelXPCProtocol.self)
@@ -150,9 +185,8 @@ public enum TunnelXPC {
 
     /// Asks the extension behind `connection` for a command-server socket and
     /// returns a descriptor the caller owns. Never waits longer than `timeout`.
-    public static func dialCommandSocket(over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout) throws -> Int32 {
-        connection.remoteObjectInterface = makeInterface()
-        connection.resume()
+    public static func dialCommandSocket(over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout, resume: Bool = true) throws -> Int32 {
+        prepare(connection, resume: resume)
         let outcome = Outcome()
         let proxy = connection.remoteObjectProxyWithErrorHandler { error in
             outcome.finish(.failure(.remote(error.localizedDescription)))

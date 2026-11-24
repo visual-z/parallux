@@ -20,6 +20,7 @@
 | INV-10 | 菜单栏只在连接且代理开关开启时标记代理；运行中的异常保留有效聚合方式和代理标记，关闭聚合后的旧线路告警不污染仅代理状态 | 穷举开关、连接、有效方式和错误组合 | `theIconFollowsTheEffectiveModeAndDisplayedSwitches` |
 | INV-11 | 菜单栏开启代理只填入原图包围的空白，异常只减去原有墨色。两者都在错相标志内部表达 | 两种原生比例下比较各组轮廓内外的像素集合 | `turningOnTheProxyFillsOnlyAnEnclosedPartOfTheMark`、`aFaultOnlyRemovesInkFromTheHealthyMark` |
 | INV-12 | 代理组选择器的每一行都带着它所指的那个组，且来自同一次组快照；快照为空时全部条目落到节点，行与节点按原顺序拼起来恰好是全部条目 | property | `randomSnapshotsPartitionTheItemsIntoRowsAndNodes` |
+| INV-13 | 到扩展的 Mach 服务全 App 只有一条连接：复用直到系统作废，轮询失败后按 250 ms 起、4 s 封顶的窗口退避 | property | `theLinkOpensOneConnectionHoweverManyPollsArrive`、`aFailingExtensionCoolsThePollsDownInsteadOfDialingEveryTick`、`thePollCooldownGrowsAndStopsAtItsCap` |
 
 ## 写法提示
 

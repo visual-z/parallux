@@ -48,10 +48,13 @@ baseline: b9199e7abb98
 
 ## 证据
 
-（RED：本提交即冻结点，hash 与过滤串在下一次提交写回）
+RED(swift): edfb8d7 theLinkOpensOneConnectionHoweverManyPollsArrive  # D1
+RED(swift): edfb8d7 aFailingExtensionCoolsThePollsDownInsteadOfDialingEveryTick  # D2
+RED(swift): edfb8d7 thePollCooldownGrowsAndStopsAtItsCap  # D3
 
 ## 交接
 
-- 做了什么：开卡；冻结 `TunnelXPCLink` 的复用与退避判据。
-- 卡在哪：先提 RED（stub + 三条测试），再实现并接进两处调用点。
-- 下一步：RED 提交后实现，`CommandXPCDialer` 与 `CoreNotificationForwarder` 改走这条连接。
+- 做了什么：`TunnelXPCLink` 一条连接复用到底（失效才换），轮询失败按 250 ms 起、4 s 封顶退避；
+  `CommandXPCDialer` 与 `CoreNotificationForwarder` 都改走它，全 App 只剩一处 `NSXPCConnection`。
+- 卡在哪：verify-red 与 gate --record 之后交作者按 D5 看 `log stream`。
+- 下一步：作者确认 D5 后改 done。

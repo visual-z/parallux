@@ -2,25 +2,28 @@ import Foundation
 @testable import ParalluxKit
 import Testing
 
-/// Counters shared with the closures a link captures.
+/// State shared with the closures a link captures.
 private final class Box: @unchecked Sendable {
-    var opened = 0
     var clock: Duration = .zero
+    var failStats = false
+    var transports: [FakeTransport] = []
 }
 
 /// Stands in for one connection to the extension.
 private final class FakeTransport: TunnelXPCTransport, @unchecked Sendable {
+    init(box: Box) { self.box = box }
+
+    private let box: Box
     private let lock = NSLock()
     private var alive = true
-    private var statsCalls = 0
-    var failStats = false
+    private var calls = 0
 
     var isAlive: Bool { lock.withLock { alive } }
-    var linkStatsCalls: Int { lock.withLock { statsCalls } }
+    var linkStatsCalls: Int { lock.withLock { calls } }
 
     func linkStats(timeout _: TimeInterval) throws -> String {
-        lock.withLock { statsCalls += 1 }
-        if failStats { throw TunnelXPC.DialError.timedOut }
+        lock.withLock { calls += 1 }
+        if box.failStats { throw TunnelXPC.DialError.timedOut }
         return "[]"
     }
 
@@ -32,65 +35,64 @@ private final class FakeTransport: TunnelXPCTransport, @unchecked Sendable {
     func explainRoute(_: String, timeout _: TimeInterval) throws -> String { "" }
     func probeLinks(timeout _: TimeInterval) throws -> [LinkProbeResult] { [] }
 
-    func invalidate() {
-        lock.withLock { alive = false }
-    }
+    func invalidate() { die() }
 
-    /// What an invalidationHandler does to a real connection.
+    /// What the system's invalidationHandler does to a real connection.
     func die() {
         lock.withLock { alive = false }
     }
 }
 
 @Suite struct TunnelXPCLinkTests {
+    private func makeLink(_ box: Box) -> TunnelXPCLink {
+        TunnelXPCLink(open: {
+            let transport = FakeTransport(box: box)
+            box.transports.append(transport)
+            return transport
+        }, now: { box.clock })
+    }
+
     @Test func theLinkOpensOneConnectionHoweverManyPollsArrive() {
         let box = Box()
-        let fake = FakeTransport()
-        let link = TunnelXPCLink(open: {
-            box.opened += 1
-            return fake
-        }, now: { box.clock })
+        let link = makeLink(box)
 
         for _ in 0..<50 { _ = link.linkStats() }
-        #expect(box.opened == 1)
-        #expect(fake.linkStatsCalls == 50)
+        #expect(box.transports.count == 1)
+        #expect(box.transports.first?.linkStatsCalls == 50)
 
-        // A connection the remote side invalidated is replaced once, not per call.
-        fake.die()
+        // A connection the system invalidated is replaced once, not per call.
+        box.transports[0].die()
         _ = link.linkStats()
         _ = link.linkStats()
-        #expect(box.opened == 2)
+        #expect(box.transports.count == 2)
+        #expect(box.transports[1].linkStatsCalls == 2)
     }
 
     @Test func aFailingExtensionCoolsThePollsDownInsteadOfDialingEveryTick() throws {
         let box = Box()
-        let fake = FakeTransport()
-        fake.failStats = true
-        let link = TunnelXPCLink(open: {
-            box.opened += 1
-            return fake
-        }, now: { box.clock })
+        box.failStats = true
+        let link = makeLink(box)
 
         _ = link.linkStats()
-        #expect(fake.linkStatsCalls == 1)
+        #expect(box.transports.count == 1)
+        #expect(box.transports[0].linkStatsCalls == 1)
         let cooldown = try #require(TunnelXPCPollRetry.delay(after: 1))
 
         box.clock += cooldown / 2
         _ = link.linkStats()
-        #expect(fake.linkStatsCalls == 1, "inside the cooldown the poll does not dial")
-        #expect(box.opened == 1)
+        #expect(box.transports.count == 1, "inside the cooldown the poll does not dial")
 
         box.clock += cooldown
-        fake.failStats = false
+        box.failStats = false
         _ = link.linkStats()
-        #expect(fake.linkStatsCalls == 2)
-        #expect(box.opened == 2, "after the cooldown the link reconnects")
+        #expect(box.transports.count == 2, "after the cooldown the link reconnects")
+        #expect(box.transports[1].linkStatsCalls == 1)
 
         // One answer clears the cooldown: the next poll goes straight through.
         box.clock += .milliseconds(1)
         _ = link.linkStats()
-        #expect(fake.linkStatsCalls == 3)
-        #expect(box.opened == 2)
+        #expect(box.transports.count == 2)
+        #expect(box.transports[1].linkStatsCalls == 2)
     }
 
     @Test func thePollCooldownGrowsAndStopsAtItsCap() throws {
