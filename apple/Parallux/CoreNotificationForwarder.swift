@@ -31,10 +31,9 @@ final class CoreNotificationForwarder {
     }
 
     nonisolated private static func fetch() -> [CoreNotification] {
-        guard let service = MachService.name(in: .main) else { return [] }
-        let connection = NSXPCConnection(machServiceName: service)
-        defer { connection.invalidate() }
-        return TunnelXPC.drainNotifications(over: connection)
+        // The app-wide link, not one connection per tick
+        // (fix-tunnel-xpc-connection-churn).
+        CommandXPCDialer.notifications()
     }
 
     private func post(_ items: [CoreNotification]) async {

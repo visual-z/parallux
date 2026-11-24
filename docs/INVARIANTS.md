@@ -17,11 +17,8 @@
 | INV-7 | 带量程的流向图里，节点、中柱与流带都不超出绘图高度，同列相邻节点间距不小于最小间距，中柱上的流带首尾相接且总和等于中柱 | 代码断言 + property | `aFlowLayoutWithCapacityIsProportionalAndNeverOverflows` |
 | INV-8 | 流向图的粒子数不超过上限，每个粒子都落在一股现存流带的范围内 | property | `flowParticlesStayBoundedAndInsideTheirBands` |
 | INV-9 | 流向图交给 GPU 的每片流带网格面积等于厚度 × 宽度，顶点都在绘图范围内，顶点总数不超过上限 | property | `flowMeshCoversEachBandExactly` |
-| INV-10 | 流向图与路线图里已经显示的节点只在闲置超过保留时长后才离开，离开之前相对顺序不变，节点数不超过上限 | property | `flowSlotsKeepTheirPlaceWhileTrafficComesAndGoes` |
-| INV-11 | 菜单栏只在连接且代理开关开启时标记代理；运行中的异常保留有效聚合方式和代理标记，关闭聚合后的旧线路告警不污染仅代理状态 | 穷举开关、连接、有效方式和错误组合 | `theIconFollowsTheEffectiveModeAndDisplayedSwitches` |
-| INV-12 | 三栏流向图每一栏的节点高度之和相等，每个节点等于流经它的流带之和，每股流带在三处一样厚 | property | `threeColumnFlowConservesWidthEverywhere` |
-| INV-13 | 菜单栏开启代理只填入原图包围的空白，异常只减去原有墨色。两者都在错相标志内部表达 | 两种原生比例下比较各组轮廓内外的像素集合 | `turningOnTheProxyFillsOnlyAnEnclosedPartOfTheMark`、`aFaultOnlyRemovesInkFromTheHealthyMark` |
-| INV-14 | 目标在局域网时，拨号顺序等于完整选线顺序去掉中继线路（其余线路相对顺序不变）；其他目标的拨号顺序就是完整选线顺序 | property | `TestLocalDialOrderDropsOnlyRelaysAndKeepsTheRest` |
+| INV-15 | 代理组选择器的每一行都带着它所指的那个组，且来自同一次组快照；快照为空时全部条目落到节点，行与节点按原顺序拼起来恰好是全部条目 | property | `randomSnapshotsPartitionTheItemsIntoRowsAndNodes` |
+| INV-16 | 到扩展的 Mach 服务全 App 只有一条连接：复用直到系统作废，轮询失败后按 250 ms 起、4 s 封顶的窗口退避 | property | `theLinkOpensOneConnectionHoweverManyPollsArrive`、`aFailingExtensionCoolsThePollsDownInsteadOfDialingEveryTick`、`thePollCooldownGrowsAndStopsAtItsCap` |
 
 ## 写法提示
 
