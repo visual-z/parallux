@@ -1,6 +1,6 @@
 ---
 type: fix
-status: doing        # todo | doing | blocked | awaiting-author | done
+status: awaiting-author  # todo | doing | blocked | awaiting-author | done
 weight: light
 created: 2026-11-24
 baseline: b9199e7abb98
@@ -51,6 +51,7 @@ baseline: b9199e7abb98
 RED(swift): edfb8d7 theLinkOpensOneConnectionHoweverManyPollsArrive  # D1
 RED(swift): edfb8d7 aFailingExtensionCoolsThePollsDownInsteadOfDialingEveryTick  # D2
 RED(swift): edfb8d7 thePollCooldownGrowsAndStopsAtItsCap  # D3
+GATE: 495d986b66d1 ok tree:4b60555f2b7c build=0 vet=0 test=0[596p/0f] fmt=0 swift-test=0[153p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-24)
 
 ## 交接
 
