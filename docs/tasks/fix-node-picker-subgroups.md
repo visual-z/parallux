@@ -1,6 +1,6 @@
 ---
 type: fix
-status: doing        # todo | doing | blocked | awaiting-author | done
+status: awaiting-author  # todo | doing | blocked | awaiting-author | done
 weight: light
 created: 2026-11-24
 baseline: 348886f9b2e8
@@ -40,12 +40,13 @@ SwiftUI 仍用旧元素回调内容闭包，查表落空，`!` 解包 nil。
 
 ## 证据
 
-RED: 4bd5477 randomSnapshotsPartitionTheItemsIntoRowsAndNodes  # D1
-RED: 4bd5477 aRowKeepsTheGroupFromTheSnapshotItWasSplitAgainst  # D2
+RED(swift): 4bd5477 randomSnapshotsPartitionTheItemsIntoRowsAndNodes  # D1
+RED(swift): 4bd5477 aRowKeepsTheGroupFromTheSnapshotItWasSplitAgainst  # D2
+GATE: 32ebe5ed389a+dirty ok tree:eb7fb251033e build=0 vet=0 test=0[596p/0f] fmt=0 swift-test=0[150p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-24)
 
 ## 交接
 
 - 做了什么：`OutboundGroupModel.split(among:)` 一次快照算出「行（带组）」与「节点」；NodePicker 的 body 只用它，
   闭包里不再查表、不再强解包。INV-12 登记了这个性质。
-- 卡在哪：verify-red 与 gate --record 之后交作者拔网线手测（D4）。
-- 下一步：D4 手测。
+- 卡在哪：等作者按 D4 拔网线手测（原路径：主窗口 › 路由，选中带子代理组的出口）。
+- 下一步：作者确认 D4 后改 done。
