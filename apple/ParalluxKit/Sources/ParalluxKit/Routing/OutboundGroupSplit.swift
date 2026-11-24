@@ -33,8 +33,23 @@ extension OutboundGroupModel {
     /// Splits the items into the ones that name another group (paired with it)
     /// and the nodes, against one snapshot of `groups`.
     ///
-    /// stub: returns nothing yet (fix-node-picker-subgroups).
+    /// Why first wins on a duplicate tag: the core lists every group once, so a
+    /// duplicate is a core bug; taking the first keeps the split deterministic
+    /// instead of letting dictionary order decide what a row shows.
     public func split(among groups: [OutboundGroupModel]) -> OutboundGroupSplit {
-        OutboundGroupSplit()
+        var byTag: [String: OutboundGroupModel] = [:]
+        byTag.reserveCapacity(groups.count)
+        for group in groups where byTag[group.tag] == nil { byTag[group.tag] = group }
+        var split = OutboundGroupSplit()
+        split.subgroups.reserveCapacity(items.count)
+        split.nodes.reserveCapacity(items.count)
+        for item in items {
+            if let group = byTag[item.tag] {
+                split.subgroups.append(.init(item: item, group: group))
+            } else {
+                split.nodes.append(item)
+            }
+        }
+        return split
     }
 }

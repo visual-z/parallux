@@ -40,10 +40,12 @@ SwiftUI 仍用旧元素回调内容闭包，查表落空，`!` 解包 nil。
 
 ## 证据
 
-（待填：RED 提交后写回 commit 与过滤串）
+RED: 4bd5477 randomSnapshotsPartitionTheItemsIntoRowsAndNodes  # D1
+RED: 4bd5477 aRowKeepsTheGroupFromTheSnapshotItWasSplitAgainst  # D2
 
 ## 交接
 
-- 做了什么：开卡；冻结 D1、D2 的纯函数接口与两条判据。
-- 卡在哪：先提 RED（stub + 两条测试），再实现并接进 NodePicker。
-- 下一步：RED 提交后实现 `OutboundGroupModel.split(among:)`，选择器改用行里带的组。
+- 做了什么：`OutboundGroupModel.split(among:)` 一次快照算出「行（带组）」与「节点」；NodePicker 的 body 只用它，
+  闭包里不再查表、不再强解包。INV-12 登记了这个性质。
+- 卡在哪：verify-red 与 gate --record 之后交作者拔网线手测（D4）。
+- 下一步：D4 手测。
