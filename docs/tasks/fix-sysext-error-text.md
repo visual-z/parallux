@@ -1,6 +1,6 @@
 ---
 type: fix
-status: doing        # todo | doing | blocked | awaiting-author | done
+status: done        # todo | doing | blocked | awaiting-author | done
 created: 2026-11-25
 weight: light
 baseline: HEAD
@@ -36,10 +36,15 @@ baseline: HEAD
 
 ## 证据
 
-RED: 8cee647 systemExtensionErrorsAreReadable
+RED(swift): 63094d2 systemExtensionErrorsAreReadable
+GATE: ae7e4a712831+dirty ok tree:1debaf803ae5 build=0 vet=0 test=0[625p/0f] fmt=0 swift-test=0[182p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-25)
 
 ## 交接
 
-- 做了什么：
-- 卡在哪：
-- 下一步：
+- 做了什么：错误码表按 `SystemExtensions.h` 重写（3=位置、8=签名无效、9=校验失败…13=需要授权）；
+  `build-signed.sh --install` 改用 `ditto` 并 `chmod -R a+rX`；`scripts/env.sh` 固定 `umask 022`；
+  `build-signed.sh` 与 `release.sh` 在打包时补全 `AppIcon.icns`（16…1024）。
+  作者机器上已用 Apple Development 签名重装（build 20261125095454，扩展 `[activated enabled]`）。
+- 卡在哪：无。
+- 下一步：无。D2 实测 `/Applications/Parallux.app` 主可执行与扩展可执行都是 `-rwxr-xr-x`；Developer ID 版激活失败是公证问题，
+  见 `docs/tasks/release-sysext-needs-notarization.md`。

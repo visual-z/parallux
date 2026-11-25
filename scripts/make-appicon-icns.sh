@@ -57,4 +57,7 @@ icon_512x512 512
 icon_512x512@2x 1024
 SIZES
 iconutil -c icns "$iconset" -o "$out"
+# iconutil writes with the caller's umask; a 0600 icon still loads but ships a
+# bundle whose resources differ by machine (docs/tasks/chore-notification-app-icon.md).
+chmod 644 "$out"
 echo "wrote $out"
