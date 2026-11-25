@@ -98,6 +98,44 @@ if ! has_developer_id_profile; then
   mode=development
 fi
 
+# Manual signing does not pick a profile by bundle id, and one xcodebuild
+# setting applies to every target, so each bundle gets its own variable
+# (fix-release-profile-selection). Only the Direct (Developer ID) profiles
+# count: a Mac Team profile names the same App ID but is tied to this Mac's
+# devices, and shipping with it would sign for a device list nobody else has.
+bundle_id="$(sed -n 's/^BUNDLE_ID *= *//p' apple/Config/Base.xcconfig | tr -d ' ')"
+direct_profile_name() {
+  local want="$1" dir="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" f plist name der
+  [ -d "$dir" ] || return 1
+  for f in "$dir"/*.provisionprofile; do
+    [ -e "$f" ] || continue
+    plist="$(security cms -D -i "$f" 2>/dev/null || true)"
+    grep -q "<key>ProvisionedDevices</key>" <<<"$plist" && continue
+    name="$(sed -n '/<key>Name<\/key>/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;q;}' <<<"$plist")"
+    # Xcode names Direct profiles after the App ID. The DER blob carries the
+    # authoritative application-identifier; it is the fallback if that changes.
+    if [ "$name" = "Mac Team Direct Provisioning Profile: $want" ]; then
+      echo "$name"
+      return 0
+    fi
+    der="$(plutil -extract DER-Encoded-Profile raw -o - - <<<"$plist" 2>/dev/null | base64 -D 2>/dev/null || true)"
+    if grep -a -q "$team\.$want" <<<"$der"; then
+      echo "$name"
+      return 0
+    fi
+  done
+  return 1
+}
+app_profile="" widget_profile="" tunnel_profile=""
+if [ "$mode" = developer-id ]; then
+  app_profile="$(direct_profile_name "$bundle_id")" ||
+    missing "a Developer ID provisioning profile for $bundle_id (docs/RELEASE.md, step 4)"
+  widget_profile="$(direct_profile_name "$bundle_id.widget")" ||
+    missing "a Developer ID provisioning profile for $bundle_id.widget (docs/RELEASE.md, step 4)"
+  tunnel_profile="$(direct_profile_name "$bundle_id.tunnel")" ||
+    missing "a Developer ID provisioning profile for $bundle_id.tunnel (docs/RELEASE.md, step 4)"
+fi
+
 archive="$out/Parallux.xcarchive"
 echo "==> archive ($mode)"
 archive_settings=(
@@ -106,7 +144,14 @@ archive_settings=(
   DEVELOPMENT_TEAM="$team"
 )
 if [ "$mode" = developer-id ]; then
-  archive_settings+=(PARALLUX_NE_PROVIDER=packet-tunnel-provider-systemextension CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application")
+  archive_settings+=(
+    PARALLUX_NE_PROVIDER=packet-tunnel-provider-systemextension
+    CODE_SIGN_STYLE=Manual
+    CODE_SIGN_IDENTITY="Developer ID Application"
+    PARALLUX_PROFILE_APP="$app_profile"
+    PARALLUX_PROFILE_WIDGET="$widget_profile"
+    PARALLUX_PROFILE_TUNNEL="$tunnel_profile"
+  )
 fi
 if ! xcodebuild -project apple/Parallux.xcodeproj -scheme Parallux -configuration Release \
   -destination 'generic/platform=macOS' -derivedDataPath .build/xcode-release \
