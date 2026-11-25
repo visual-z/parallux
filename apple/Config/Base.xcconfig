@@ -32,13 +32,6 @@ PARALLUX_HELPER_MACH_SERVICE = $(PARALLUX_APP_GROUP).helper.$(MARKETING_VERSION)
 // packet-tunnel-provider. Override in Local.xcconfig for development signing.
 PARALLUX_NE_PROVIDER = packet-tunnel-provider-systemextension
 
-// Developer ID provisioning profile per bundle: Manual signing does not pick a
-// profile by bundle id, so scripts/release.sh fills these in when it archives.
-// Empty means "let Xcode decide", which is what Apple Development builds need.
-PARALLUX_PROFILE_APP =
-PARALLUX_PROFILE_WIDGET =
-PARALLUX_PROFILE_TUNNEL =
-
 // Sparkle update feeds and EdDSA public key (docs/RELEASE.md). Empty here, so
 // development builds never check for updates; set them in Local.xcconfig or on
 // the release.sh command line. Feeds must be https.

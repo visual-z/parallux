@@ -66,74 +66,20 @@ scripts/check-apple-config.sh
 # macOS replace the installed system extension.
 build_number="$(date -u +%Y%m%d%H%M%S)"
 
-# Developer ID needs a Developer ID provisioning profile for the -systemextension
-# Network Extension entitlement. Creating one changes the team's account, which
-# decision 15 did not authorize, so this script never passes
-# -allowProvisioningUpdates for it. --dry-run falls back to Apple Development.
-has_developer_id_profile() {
-  local dir="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
-  [ -d "$dir" ] || return 1
-  local f
-  for f in "$dir"/*.provisionprofile; do
-    [ -e "$f" ] || continue
-    local plist
-    plist="$(security cms -D -i "$f" 2>/dev/null || true)"
-    if grep -q "io.github.visual-z.parallux.tunnel" <<<"$plist" && grep -q "packet-tunnel-provider-systemextension" <<<"$plist" &&
-      ! grep -q "<key>ProvisionedDevices</key>" <<<"$plist"; then
-      return 0
-    fi
-  done
-  return 1
-}
-
+# A Developer ID build is signed for distribution, so Xcode needs the Direct
+# (Developer ID) profiles for the app, the widget and the system extension.
+# -allowProvisioningUpdates lets xcodebuild take them from the team account;
+# the author approved that on 2026-11-25 for this step
+# (docs/tasks/fix-release-profile-selection.md), which is the one exception to
+# decision 15's "Apple Development only".
 mode=developer-id
-if ! has_developer_id_profile; then
+if ! security find-identity -v -p codesigning | grep -q "Developer ID Application"; then
   if [ "$dry_run" = 0 ]; then
-    missing "a Developer ID provisioning profile for io.github.visual-z.parallux.tunnel with packet-tunnel-provider-systemextension.
-  Create it at developer.apple.com › Profiles (Developer ID, App ID io.github.visual-z.parallux.tunnel), or allow
-  this script to let Xcode create it (docs/RELEASE.md, step 4). Then download it in Xcode › Settings › Accounts."
+    missing "a Developer ID Application certificate in the login keychain (Xcode › Settings › Accounts › Manage Certificates)"
   fi
-  echo "NOTE  no Developer ID provisioning profile: --dry-run builds with Apple Development instead;"
+  echo "NOTE  no Developer ID Application certificate: --dry-run builds with Apple Development instead;"
   echo "      check-release.sh will fail on signing, which is expected for this fallback."
   mode=development
-fi
-
-# Manual signing does not pick a profile by bundle id, and one xcodebuild
-# setting applies to every target, so each bundle gets its own variable
-# (fix-release-profile-selection). Only the Direct (Developer ID) profiles
-# count: a Mac Team profile names the same App ID but is tied to this Mac's
-# devices, and shipping with it would sign for a device list nobody else has.
-bundle_id="$(sed -n 's/^BUNDLE_ID *= *//p' apple/Config/Base.xcconfig | tr -d ' ')"
-direct_profile_name() {
-  local want="$1" dir="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" f plist name der
-  [ -d "$dir" ] || return 1
-  for f in "$dir"/*.provisionprofile; do
-    [ -e "$f" ] || continue
-    plist="$(security cms -D -i "$f" 2>/dev/null || true)"
-    grep -q "<key>ProvisionedDevices</key>" <<<"$plist" && continue
-    name="$(sed -n '/<key>Name<\/key>/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;q;}' <<<"$plist")"
-    # Xcode names Direct profiles after the App ID. The DER blob carries the
-    # authoritative application-identifier; it is the fallback if that changes.
-    if [ "$name" = "Mac Team Direct Provisioning Profile: $want" ]; then
-      echo "$name"
-      return 0
-    fi
-    der="$(plutil -extract DER-Encoded-Profile raw -o - - <<<"$plist" 2>/dev/null | base64 -D 2>/dev/null || true)"
-    if grep -a -q "$team\.$want" <<<"$der"; then
-      echo "$name"
-      return 0
-    fi
-  done
-  return 1
-}
-app_profile="" widget_profile="" tunnel_profile=""
-if [ "$mode" = developer-id ]; then
-  app_profile="$(direct_profile_name "$bundle_id")" ||
-    missing "a Developer ID provisioning profile for $bundle_id (docs/RELEASE.md, step 4)"
-  widget_profile="$(direct_profile_name "$bundle_id.widget")" ||
-    missing "a Developer ID provisioning profile for $bundle_id.widget (docs/RELEASE.md, step 4)"
-  tunnel_profile="$(direct_profile_name "$bundle_id.tunnel")" ||
-    missing "a Developer ID provisioning profile for $bundle_id.tunnel (docs/RELEASE.md, step 4)"
 fi
 
 archive="$out/Parallux.xcarchive"
@@ -143,19 +89,9 @@ archive_settings=(
   CURRENT_PROJECT_VERSION="$build_number"
   DEVELOPMENT_TEAM="$team"
 )
-if [ "$mode" = developer-id ]; then
-  archive_settings+=(
-    PARALLUX_NE_PROVIDER=packet-tunnel-provider-systemextension
-    CODE_SIGN_STYLE=Manual
-    CODE_SIGN_IDENTITY="Developer ID Application"
-    PARALLUX_PROFILE_APP="$app_profile"
-    PARALLUX_PROFILE_WIDGET="$widget_profile"
-    PARALLUX_PROFILE_TUNNEL="$tunnel_profile"
-  )
-fi
 if ! xcodebuild -project apple/Parallux.xcodeproj -scheme Parallux -configuration Release \
   -destination 'generic/platform=macOS' -derivedDataPath .build/xcode-release \
-  -archivePath "$archive" "${archive_settings[@]}" archive >>"$log" 2>&1; then
+  -archivePath "$archive" "${archive_settings[@]}" -allowProvisioningUpdates archive >>"$log" 2>&1; then
   grep -E "error:" "$log" | head -20 >&2 || tail -30 "$log" >&2
   exit 1
 fi
@@ -168,12 +104,12 @@ cat >"$out/ExportOptions.plist" <<PLIST
 <dict>
   <key>method</key><string>$([ "$mode" = developer-id ] && echo developer-id || echo debugging)</string>
   <key>teamID</key><string>$team</string>
-  <key>signingStyle</key><string>$([ "$mode" = developer-id ] && echo manual || echo automatic)</string>
+  <key>signingStyle</key><string>automatic</string>
 </dict>
 </plist>
 PLIST
 if ! xcodebuild -exportArchive -archivePath "$archive" -exportPath "$out/export" \
-  -exportOptionsPlist "$out/ExportOptions.plist" >>"$log" 2>&1; then
+  -exportOptionsPlist "$out/ExportOptions.plist" -allowProvisioningUpdates >>"$log" 2>&1; then
   grep -E "error:" "$log" | tail -20 >&2 || tail -30 "$log" >&2
   exit 1
 fi

@@ -38,6 +38,10 @@ scripts/release.sh 0.2.0             # 正式：公证并装订 App 与 DMG，�
 
 缺凭据或描述文件时脚本退出 2，并打印要运行的命令。发布门：`keel gate --tier release` 会对 `.build/release/latest/Parallux.app` 跑 `check-release.sh`。
 
+描述文件由 Xcode 自己取：archive 与 export 都带 `-allowProvisioningUpdates`，export 用自动签名与 `developer-id` 方式
+（作者 2026-11-25 授权，见 `docs/tasks/fix-release-profile-selection.md`）。公证仍要第 1 步的 `store-credentials`；
+没配时脚本能出 Developer ID 签名并过 `check-release.sh` 的未公证包，`spctl` 会判 `Unnotarized Developer ID`。
+
 ## 上传（手动，建议做法）
 
 - DMG：上传到 GitHub Releases（`gh release create v0.2.0 .build/release/0.2.0/Parallux-0.2.0.dmg`）。

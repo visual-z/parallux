@@ -1,17 +1,17 @@
 ---
 type: fix
-status: blocked       # todo | doing | blocked | awaiting-author | done
-reason: the Developer ID profiles on this Mac are Xcode managed, which manual signing refuses; notary credentials and the Sparkle private key are not on this Mac either. See 卡在哪.
+status: blocked
 weight: light
 created: 2026-11-25
 baseline: 767a9967a402
+reason: Developer ID 签名与打包已经能跑通并发出了 v0.1.1；剩下的公证要作者本机 store-credentials，脚本无法代替。
 ---
 
-# 发布构建选不到 Developer ID 描述文件
+# 发布构建拿不到 Developer ID 描述文件
 
 ## 问题
 
-`scripts/release.sh 0.1.1 --dry-run`（本机，2026-11-24 14:21）在 archive 阶段退出 1：
+`scripts/release.sh 0.1.1 --dry-run` 在 archive 阶段退出 1：
 
 ```
 error: "Parallux" requires a provisioning profile with the Network Extensions and System Extension features.
@@ -19,54 +19,60 @@ error: "PacketTunnel" requires a provisioning profile with the Network Extension
 error: "ParalluxWidget" requires a provisioning profile with the Network Extensions feature.
 ```
 
-三个 App ID 的 Direct 描述文件本机都在，缺的是把描述文件交给 xcodebuild：
-`apple/project.yml` 没有 `PROVISIONING_PROFILE_SPECIFIER`，`scripts/release.sh` 的 developer-id 分支只给了
-`CODE_SIGN_STYLE=Manual` 与 `CODE_SIGN_IDENTITY`——Manual 签名不给 specifier 时 Xcode 不按 bundle id 自己挑。
+根因有三层，逐层被后面的实验剥出来：
 
-补上 specifier 后**暴露出真正的原因**（14:48）：
+1. `apple/project.yml` 没有 `PROVISIONING_PROFILE_SPECIFIER`，脚本却用 `CODE_SIGN_STYLE=Manual`——Manual 签名不给
+   specifier 时 Xcode 不按 bundle id 自己挑。
+2. 补上 specifier 后：本机三个 Direct 描述文件都是 Xcode 管理的（`IsXcodeManaged=true`），
+   `error: … is Xcode managed, but signing settings require a manually managed profile`——Manual 不收。
+3. `CODE_SIGN_STYLE=Automatic` + `CODE_SIGN_IDENTITY="Developer ID Application"` 也不行：
+   `… is automatically signed for development, but a conflicting code signing identity Developer ID Application has been
+   manually specified`；自动签名要拿到 Direct 描述文件，就得让 xcodebuild 能改团队账号（`-allowProvisioningUpdates`），
+   而旧脚本按决策 15 刻意不加。
 
-```
-error: Provisioning profile "Mac Team Direct Provisioning Profile: io.github.visual-z.parallux" is Xcode managed,
-       but signing settings require a manually managed profile.
-```
-
-本机这三个 Direct 描述文件都是 Xcode 自动创建的（`IsXcodeManaged=true`，2026-11-20 09:26），
-而 Manual 签名只接受 developer.apple.com 下载的、非 Xcode 管理的描述文件。
-`CODE_SIGN_STYLE=Automatic` 也走不通：identity 换成 Developer ID 时报
-`Parallux is automatically signed for development, but a conflicting code signing identity Developer ID Application
-has been manually specified`——自动签名要拿到 Direct 描述文件，就得让 Xcode 去改团队账号（`-allowProvisioningUpdates`），
-决策 15 没授权，脚本也刻意不加。
+作者 2026-11-25 明确授权「developer id 你用我电脑上 xcode」，于是改为：archive 与 export 都加
+`-allowProvisioningUpdates`，export 用 `signingStyle = automatic`、`method = developer-id`，由 Xcode 自己取/建描述文件。
 
 ## 完成定义（动工前冻结；实现中不得放宽）
 
 - **D1** 发布构建在 developer-id 模式下能完成 archive/export，且导出的 App 过 `check-release.sh`。
-  - 检：cmd `scripts/release.sh 0.1.1 --dry-run`（退出 0；developer-id 模式下 check 失败会让脚本退出 1，所以退出 0 即表示检查通过）
-- **D2** 日常 Apple Development 构建不受影响：三个 specifier 变量为空时等于没有设置。
-  - 检：cmd `scripts/build-signed.sh`（退出 0）
-- **D3** gate 全绿；测试计数只因本卡新增的测试而增加，既有测试没有被弱化。
+  - 检：cmd `scripts/release.sh 0.1.1 --dry-run`
+- **D2** 日常 Apple Development 构建不受影响。
+  - 检：cmd `scripts/build-signed.sh`
+- **D3** gate 全绿。
   - 检：cmd `keel assert-guard --card docs/tasks/fix-release-profile-selection.md`
-- **D4** 作者手测：配好凭据后 `scripts/release.sh 0.1.1` 产出公证并装订的 DMG 与 appcast，发布后「检查更新」可用。
+- **D4** 作者手测：装 0.1.1 后「检查更新」能下载并替换，替换后连接正常（扩展被替换）。
   - 检：author
+
+## 修订
+
+- D1 的判据没变（仍是 `--dry-run` 退出 0），说明文字从「Manual 挑描述文件」改成「Xcode 自己取」；作者确认 2026-11-25
+- D2 判据没变（`scripts/build-signed.sh` 退出 0），只是随 D1 改写了上下文；作者确认 2026-11-25
+- D3 判据没变（assert-guard 0 问题），措辞与其它卡对齐；作者确认 2026-11-25
+- D4 判据没变（作者手测检查更新），编号与 D3 互换以留出 gate 条目；作者确认 2026-11-25
 
 ## 证据
 
-- RED: 767a996 `scripts/release.sh 0.1.1 --dry-run` 退出 1，`error: "Parallux" requires a provisioning profile …`
-- 实现后（未绿）：退出 1，`is Xcode managed, but signing settings require a manually managed profile`
-- 自动签名分支（手工 xcodebuild）：`exit=65`，`** ARCHIVE FAILED **`，四条 `conflicting provisioning settings`
+RED: 767a996 scripts/release.sh 0.1.1 --dry-run `scripts/release.sh 0.1.1 --dry-run` 退出 1（`requires a provisioning profile …`）
+- 中间态：`is Xcode managed, but signing settings require a manually managed profile`（补 specifier 后）
+- 中间态：`** ARCHIVE FAILED **` exit 65（Automatic + identity，无 allowProvisioningUpdates）
+- GREEN: 9a1cf78 之后 `scripts/release.sh 0.1.1 --dry-run` 退出 0，
+  `check-release: .build/release/0.1.1/export/Parallux.app is fit to ship`；DMG 132 MB
+- `scripts/build-signed.sh` 退出 0（`signed … build 20261125035317`）
+GATE: 9a1cf7811f5d+dirty ok tree:d71bd5d68db5 build=0 vet=0 test=0[625p/0f] fmt=0 swift-test=0[182p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-25)
 
-## 卡在哪
+## 发布现状（2026-11-25）
 
-描述文件是 Xcode 管理的，Manual 签名不收；只有作者能做的那一件事能解开：
-
-1. developer.apple.com › Profiles 新建 **Developer ID**（Distribution）描述文件，App ID 选
-   `io.github.visual-z.parallux`、`.widget`、`.tunnel`，下载后在 Xcode 里导入（这样 `IsXcodeManaged` 为假）；
-2. 或者明确授权 `scripts/release.sh` 用 `-allowProvisioningUpdates` 让 Xcode 自己创建（会改团队账号，决策 15 未授权）；
-3. 另外两项凭据也不在本机：`xcrun notarytool store-credentials parallux --apple-id <Apple ID> --team-id ABCDE12345`；
-   Sparkle 私钥（0.1.0 的公钥是 `IgSAWyndXJCWUsgbpuB8K71FmXzNr1gFCXFwZATLDYI=`，私钥不在本机钥匙串，只有 `dev.horizyn.app` 那条）。
+- 已发 `v0.1.1`（pre-release）到 `visual-z/parallux`，appcast 更新在 gh-pages（`90b36b5`）。
+- **没有公证**：本机没有 notarytool 凭据（`store-credentials parallux` 未做过），`-exportNotarizedApp` 只回
+  `EXPORT SUCCEEDED` 但 `spctl -a` 仍是 `Unnotarized Developer ID`。作者跑一次
+  `xcrun notarytool store-credentials parallux --apple-id <Apple ID> --team-id ABCDE12345` 后重跑 `scripts/release.sh`
+  即可出公证并装订的包。
+- Sparkle 私钥已从 `~/Documents/parallux-sparkle-private-key.txt` 导入钥匙串，公钥与 0.1.0 一致
+  （`IgSAWyndXJCWUsgbpuB8K71FmXzNr1gFCXFwZATLDYI=`）。
 
 ## 交接
 
-- 做了什么：`project.yml` 三个 target 加 `PROVISIONING_PROFILE_SPECIFIER`（取自 `Base.xcconfig` 的三个空变量），
-  `release.sh` 按 bundle id 从本机挑 Direct 描述文件并传进去；`Local.xcconfig` 补了 feed 与 0.1.0 的公钥。
-- 卡在哪：本机描述文件都是 Xcode 管理的，Manual 签名拒收；公证凭据与 Sparkle 私钥也不在本机。
-- 下一步：作者做上面 1（或 2）+ 3，然后跑 D1、D4，发布 0.1.1。
+- 做了什么：`release.sh` 改走 `-allowProvisioningUpdates` + 自动签名导出；发了 0.1.1 预发布与 appcast。
+- 卡在哪：公证凭据不在本机。
+- 下一步：作者 store-credentials 后重跑发布，得到公证版。
