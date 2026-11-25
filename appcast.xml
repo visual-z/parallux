@@ -3,13 +3,12 @@
     <channel>
         <title>Parallux</title>
         <item>
-            <title>0.1.0</title>
-            <pubDate>Fri, 20 Nov 2026 21:37:52 +0800</pubDate>
-            <link>https://github.com/visual-z/parallux</link>
-            <sparkle:version>20261120133309</sparkle:version>
-            <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+            <title>0.1.1</title>
+            <pubDate>Wed, 25 Nov 2026 17:04:52 +0800</pubDate>
+            <sparkle:version>20261125085602</sparkle:version>
+            <sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/visual-z/parallux/releases/download/v0.1.0/Parallux-0.1.0.dmg" length="132543247" type="application/octet-stream" sparkle:edSignature="aubUGwc6J/y2X6g0xBZmZ5Rilvikt7lk2kHNZkaV6/X3K4/8Dk1evohc/mEhjEIqECDenbgtPVrxMn25CyscAw=="/>
+            <enclosure url="https://github.com/visual-z/parallux/releases/download/v0.1.1/Parallux-0.1.1.dmg" length="132658721" type="application/octet-stream" sparkle:edSignature="MmraJ5b/MJZnsdi451hbpe3mAYVBkoj57dTLmD2QxG3Xx8AKWX0EITjoEFHAMoITldhxNDq5mele5dKD0h2KDQ=="/>
         </item>
     </channel>
 </rss>
