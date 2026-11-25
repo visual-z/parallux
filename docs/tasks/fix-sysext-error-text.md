@@ -37,7 +37,7 @@ baseline: HEAD
 ## 证据
 
 RED(swift): 63094d2 systemExtensionErrorsAreReadable
-GATE: ae7e4a712831+dirty ok tree:1debaf803ae5 build=0 vet=0 test=0[625p/0f] fmt=0 swift-test=0[182p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-25)
+GATE: 11d2d552f991 ok tree:1debaf803ae5 build=0 vet=0 test=0[625p/0f] fmt=0 swift-test=0[182p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-25)
 
 ## 交接
 
