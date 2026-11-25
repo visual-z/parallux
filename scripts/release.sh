@@ -96,6 +96,16 @@ if ! xcodebuild -project apple/Parallux.xcodeproj -scheme Parallux -configuratio
   exit 1
 fi
 
+# The Icon Composer asset compiles into Assets.car plus an AppIcon.icns that
+# stops at 256 px; the notification banner asks for a larger flat rendition and
+# draws a blank tile without one. Replace it inside the archive — export
+# re-signs the app, so the shipped signature covers the new file
+# (docs/tasks/chore-notification-app-icon.md).
+archived_app="$archive/Products/Applications/Parallux.app"
+if [ -d "$archived_app" ]; then
+  scripts/make-appicon-icns.sh "$archived_app" "$archived_app/Contents/Resources/AppIcon.icns" >/dev/null
+fi
+
 echo "==> export"
 cat >"$out/ExportOptions.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
