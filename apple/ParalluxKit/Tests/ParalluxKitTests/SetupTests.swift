@@ -68,9 +68,10 @@ import Testing
 
     @Test func systemExtensionErrorsAreReadable() {
         // OSSystemExtensionError codes (SystemExtensions.framework).
-        #expect(SystemExtensionErrorText.text(code: 8, fallback: "x") != "x", "unsupported parent bundle location")
-        #expect(SystemExtensionErrorText.text(code: 8, fallback: "x").contains("应用程序"))
-        #expect(SystemExtensionErrorText.text(code: 9, fallback: "x") != "x", "extension missing identifier / invalid")
+        // Values from SystemExtensions.h; entry N must name SDK code N.
+        #expect(SystemExtensionErrorText.text(code: 3, fallback: "x").contains("应用程序"), "unsupported parent bundle location")
+        #expect(SystemExtensionErrorText.text(code: 8, fallback: "x").contains("签名"), "code signature invalid")
+        #expect(SystemExtensionErrorText.text(code: 9, fallback: "x") != "x", "validation failed")
         #expect(SystemExtensionErrorText.text(code: 4, fallback: "x") != "x", "extension not found")
         #expect(SystemExtensionErrorText.text(code: 13, fallback: "x") != "x", "authorization required")
         #expect(SystemExtensionErrorText.text(code: 999, fallback: "原文") == "原文")
