@@ -1,6 +1,6 @@
 ---
 type: chore
-status: doing        # todo | doing | blocked | awaiting-author | done
+status: awaiting-author  # todo | doing | blocked | awaiting-author | done
 weight: light
 created: 2026-11-25
 baseline: 007d701
@@ -41,10 +41,11 @@ baseline: 007d701
 ## 证据
 
 RED: none 非行为卡：改的是打包步骤（`.icns` 的档位），判据是产物检查（见上）
+GATE: f47ed5c66e1f+dirty ok tree:2b990baf1e27 build=0 vet=0 test=0[625p/0f] fmt=0 swift-test=0[182p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-25)
 
 ## 交接
 
 - 做了什么：新增 `scripts/make-appicon-icns.sh`（从 bundle 自身解析出的图标重做 16…1024 的 `.icns`，带暖色哨兵）；
   `release.sh` 在 archive 之后、export 之前替换归档里的 `AppIcon.icns`，export 会重新签名。
 - 卡在哪：D4 要作者看一次横幅。
-- 下一步：发 0.1.2，作者确认后改 done。
+- 下一步：0.1.2 已发（`v0.1.2`），已装到 `/Applications`（build 20261125092600）；作者触发一次通知看横幅图标，确认后改 done。
