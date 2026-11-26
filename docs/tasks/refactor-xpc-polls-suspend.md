@@ -1,6 +1,6 @@
 ---
 type: refactor
-status: doing       # todo | doing | blocked | awaiting-author | done
+status: awaiting-author  # todo | doing | blocked | awaiting-author | done
 weight: full
 created: 2026-11-26
 baseline: 98d4203d6bc1
@@ -83,6 +83,27 @@ keel gate --record docs/tasks/refactor-xpc-polls-suspend.md
 
 ## 证据
 
+RED(swift): b437205 aSilentExtensionTimesOutEveryCallTogetherInsteadOfInWaves  # D1
+RED(swift): b437205 cancellingACallReturnsAtOnce  # D2
+
+开卡时的失败断言（占位实现仍然阻塞等待）：
+
+- D1：`Expectation failed: ContinuousClock.now - started < .milliseconds(750)`，整批 1.271 s（72 个调用全部 `timedOut`，计数断言通过，只有耗时不过）。
+- D2：`Expectation failed: ContinuousClock.now - started < .seconds(1)`；`expected error of type CancellationError, but ".timedOut" of type DialError was thrown instead`，耗时 5.005 s。
+
+修后：`scripts/swift-test.sh <junit> TunnelXPC` 连跑 10 次 10/10 通过（19 个测试，每次约 0.3 s）。
+
+D3：`CommandXPCDialer.swift` 的 `probeLinks`、`explainRoute`、`linkStats`、`notifications` 四个 `static func` 都是 `async`；
+`TunnelXPCLink.swift` 里 `DispatchSemaphore` 只在 `Reply.wait`，`reply.wait` 只被 `NSXPCLinkTransport.dialCommandSocket` 调用；
+协议与链路上唯一的同步请求是 `dialCommandSocket`。
+
+D4：`TunnelXPCLinkTests` 三个测试原有断言逐条保留，只是调用改为 `await`。
+GATE: a4210bbcec62+dirty ok tree:ce6476b91f81 build=0 vet=0 test=0[628p/0f] fmt=0 swift-test=0[211p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-26)
+
 ## 修订
 
 ## 交接
+
+- 做了什么：对扩展的 XPC 请求改为挂起等待（continuation + 先到者生效 + dispatch 定时器硬超时 + 取消即返回），五处调用方不再 `Task.detached` 阻塞；同步只剩 libbox 的拨号；登记 INV-20。
+- 卡在哪：D7 作者手测（概览速率、路由解释、诊断扩展内检测）。
+- 下一步：作者在新发布版上确认 D7 后改 done。

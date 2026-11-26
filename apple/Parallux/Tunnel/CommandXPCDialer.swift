@@ -27,24 +27,24 @@ final class CommandXPCDialer: NSObject, LibboxXPCDialerProtocol, @unchecked Send
     }
 
     /// Probes every link from inside the extension.
-    static func probeLinks() throws -> [LinkProbeResult] {
+    static func probeLinks() async throws -> [LinkProbeResult] {
         guard let link else { throw missingAppGroup }
-        return try link.probeLinks()
+        return try await link.probeLinks()
     }
 
     /// Which rule of the running configuration `target` matches; nil when the extension is unreachable.
-    static func explainRoute(_ target: String) -> RouteExplanation? {
+    static func explainRoute(_ target: String) async -> RouteExplanation? {
         guard let link else { return nil }
-        return RouteExplanation.decode(link.explainRoute(target))
+        return RouteExplanation.decode(await link.explainRoute(target))
     }
 
     /// Per-link counters; "[]" when the extension is unreachable.
-    static func linkStats() -> String {
-        link?.linkStats() ?? "[]"
+    static func linkStats() async -> String {
+        await link?.linkStats() ?? "[]"
     }
 
     /// Queued core notifications; empty when the extension is unreachable.
-    static func notifications() -> [CoreNotification] {
-        link?.notifications() ?? []
+    static func notifications() async -> [CoreNotification] {
+        await link?.notifications() ?? []
     }
 }

@@ -198,13 +198,11 @@ struct LinksView: View {
     }
 
     private func detectEgress() {
-        Task.detached {
-            let results = (try? CommandXPCDialer.probeLinks()) ?? []
-            await MainActor.run {
-                var egress: [String: String] = [:]
-                for result in results { if let ip = result.egressIP { egress[result.interface] = ip } }
-                app.links.egress = egress
-            }
+        Task {
+            let results = (try? await CommandXPCDialer.probeLinks()) ?? []
+            var egress: [String: String] = [:]
+            for result in results { if let ip = result.egressIP { egress[result.interface] = ip } }
+            app.links.egress = egress
         }
     }
 }

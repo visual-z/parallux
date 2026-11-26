@@ -193,13 +193,11 @@ struct DiagnosticsView: View {
 
     private func runTunnel() {
         tunnel = .running
-        Task.detached {
-            let outcome = Result { try CommandXPCDialer.probeLinks() }
-            await MainActor.run {
-                switch outcome {
-                case let .success(rows): tunnel = .done(rows, tunnelWasOn: true)
-                case let .failure(error): tunnel = .failed(error.localizedDescription)
-                }
+        Task {
+            do {
+                tunnel = .done(try await CommandXPCDialer.probeLinks(), tunnelWasOn: true)
+            } catch {
+                tunnel = .failed(error.localizedDescription)
             }
         }
     }

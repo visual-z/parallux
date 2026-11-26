@@ -27,6 +27,7 @@
 | INV-17 | 代理组选择器的每一行都带着它所指的那个组，且来自同一次组快照；快照为空时全部条目落到节点，行与节点按原顺序拼起来恰好是全部条目 | property | `randomSnapshotsPartitionTheItemsIntoRowsAndNodes` |
 | INV-18 | 到扩展的 Mach 服务全 App 只有一条连接：复用直到系统作废，轮询失败后按 250 ms 起、4 s 封顶的窗口退避 | property | `theLinkOpensOneConnectionHoweverManyPollsArrive`、`aFailingExtensionCoolsThePollsDownInsteadOfDialingEveryTick`、`thePollCooldownGrowsAndStopsAtItsCap` |
 | INV-19 | 隧道 XPC 连接的配置（接口、处理器）只在 `NSXPCLinkTransport.init` 里、resume 之前设一次；之后任何调用、任何并发都只发消息，连接上的接口始终是 resume 时那一个 | 样例 + 并发压力（8 线程 × 500 次） | `aKeptConnectionKeepsTheInterfaceItWasResumedWithAcrossEveryCall`、`concurrentCallsOverOneKeptConnectionAllGetTheirReply` |
+| INV-20 | 对扩展的每个请求恰好结束一次：回复、连接错误、超时、取消四者先到者生效，其余被丢弃；晚到的命令 socket 描述符被关闭；等待时不占协作线程池的线程（libbox 的同步拨号除外） | 样例 + 并发压力（4 × 核数个同时超时） | `aSilentExtensionTimesOutEveryCallTogetherInsteadOfInWaves`、`cancellingACallReturnsAtOnce`、`aCommandSocketHandedOverXPCCarriesBytes` |
 
 ## 写法提示
 

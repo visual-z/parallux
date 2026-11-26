@@ -24,16 +24,12 @@ final class CoreNotificationForwarder {
                 try? await Task.sleep(for: Self.interval)
                 guard let self else { return }
                 guard self.app.tunnel.isConnected else { continue }
-                let items = await Task.detached { Self.fetch() }.value
+                // Suspends while the extension answers; holds no thread
+                // (refactor-xpc-polls-suspend).
+                let items = await CommandXPCDialer.notifications()
                 if !items.isEmpty { await self.post(items) }
             }
         }
-    }
-
-    nonisolated private static func fetch() -> [CoreNotification] {
-        // The app-wide link, not one connection per tick
-        // (fix-tunnel-xpc-connection-churn).
-        CommandXPCDialer.notifications()
     }
 
     private func post(_ items: [CoreNotification]) async {

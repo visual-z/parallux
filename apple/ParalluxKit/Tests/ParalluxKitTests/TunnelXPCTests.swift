@@ -99,47 +99,47 @@ private final class Counter: @unchecked Sendable {
         }
     }
 
-    @Test func probeResultsComeBackOverXPCIntact() throws {
+    @Test func probeResultsComeBackOverXPCIntact() async throws {
         let server = SocketServer(served: nil)
         let (listener, connection) = connect(to: server)
         let transport = NSXPCLinkTransport(connection: connection)
         defer { transport.invalidate(); listener.invalidate() }
-        let results = try transport.probeLinks(timeout: 3)
+        let results = try await transport.probeLinks(timeout: 3)
         #expect(results.map(\.interface) == ["nope0"])
         #expect(results.first?.errno == ENXIO)
     }
 
-    @Test func coreNotificationsComeBackOverXPC() throws {
+    @Test func coreNotificationsComeBackOverXPC() async throws {
         let server = SocketServer(served: nil)
         let (listener, connection) = connect(to: server)
         let transport = NSXPCLinkTransport(connection: connection)
         defer { transport.invalidate(); listener.invalidate() }
-        #expect(try transport.drainNotifications(timeout: 2).map(\.identifier) == ["core-1"])
+        #expect(try await transport.drainNotifications(timeout: 2).map(\.identifier) == ["core-1"])
     }
 
-    @Test func routeExplanationsComeBackOverXPC() throws {
+    @Test func routeExplanationsComeBackOverXPC() async throws {
         let server = SocketServer(served: nil)
         let (listener, connection) = connect(to: server)
         let transport = NSXPCLinkTransport(connection: connection)
         defer { transport.invalidate(); listener.invalidate() }
-        let step = try #require(RouteExplanation.decode(try transport.explainRoute("youtube.com", timeout: 2)))
+        let step = try #require(RouteExplanation.decode(try await transport.explainRoute("youtube.com", timeout: 2)))
         #expect(step.ruleIndex == 2)
         #expect(step.outbound == "proxy")
         #expect(RouteExplanation.decode("") == nil)
     }
 
-    @Test func linkStatsComeBackOverXPC() throws {
+    @Test func linkStatsComeBackOverXPC() async throws {
         let server = SocketServer(served: nil)
         let (listener, connection) = connect(to: server)
         let transport = NSXPCLinkTransport(connection: connection)
         defer { transport.invalidate(); listener.invalidate() }
-        #expect(LinkGroupStat.decode(try transport.linkStats(timeout: 2)).map(\.tag) == ["direct"])
+        #expect(LinkGroupStat.decode(try await transport.linkStats(timeout: 2)).map(\.tag) == ["direct"])
     }
 
     /// The app keeps one resumed connection and calls it from several pollers;
     /// swapping its interface mid-flight freed one another call was still
     /// reading (fix-tunnel-xpc-interface-race).
-    @Test func aKeptConnectionKeepsTheInterfaceItWasResumedWithAcrossEveryCall() throws {
+    @Test func aKeptConnectionKeepsTheInterfaceItWasResumedWithAcrossEveryCall() async throws {
         let server = SocketServer(served: nil)
         let (listener, connection) = connect(to: server)
         let transport = NSXPCLinkTransport(connection: connection)
@@ -147,15 +147,15 @@ private final class Counter: @unchecked Sendable {
         let resumedWith = try #require(connection.remoteObjectInterface)
 
         _ = try? transport.dialCommandSocket(timeout: 2)
-        _ = try? transport.linkStats(timeout: 2)
-        _ = try? transport.drainNotifications(timeout: 2)
-        _ = try? transport.explainRoute("youtube.com", timeout: 2)
-        _ = try? transport.probeLinks(timeout: 3)
+        _ = try? await transport.linkStats(timeout: 2)
+        _ = try? await transport.drainNotifications(timeout: 2)
+        _ = try? await transport.explainRoute("youtube.com", timeout: 2)
+        _ = try? await transport.probeLinks(timeout: 3)
 
         #expect(connection.remoteObjectInterface === resumedWith)
     }
 
-    @Test func concurrentCallsOverOneKeptConnectionAllGetTheirReply() {
+    @Test func concurrentCallsOverOneKeptConnectionAllGetTheirReply() async {
         let server = SocketServer(served: nil)
         let (listener, connection) = connect(to: server)
         let transport = NSXPCLinkTransport(connection: connection)
@@ -163,12 +163,16 @@ private final class Counter: @unchecked Sendable {
         let threads = 8, callsPerThread = 500
         let answered = Counter()
 
-        DispatchQueue.concurrentPerform(iterations: threads) { thread in
-            for _ in 0..<callsPerThread {
-                let ok = thread.isMultiple(of: 2)
-                    ? (try? transport.linkStats(timeout: 2)) == #"[{"tag":"direct","mode":"balance","links":[]}]"#
-                    : (try? transport.drainNotifications(timeout: 2))?.map(\.identifier) == ["core-1"]
-                if ok { answered.add() }
+        await withTaskGroup(of: Void.self) { group in
+            for thread in 0..<threads {
+                group.addTask {
+                    for _ in 0..<callsPerThread {
+                        let ok = thread.isMultiple(of: 2)
+                            ? (try? await transport.linkStats(timeout: 2)) == #"[{"tag":"direct","mode":"balance","links":[]}]"#
+                            : (try? await transport.drainNotifications(timeout: 2))?.map(\.identifier) == ["core-1"]
+                        if ok { answered.add() }
+                    }
+                }
             }
         }
         #expect(answered.value == threads * callsPerThread)

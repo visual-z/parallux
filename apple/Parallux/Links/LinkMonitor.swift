@@ -88,7 +88,7 @@ final class LinkStatsPoller {
             var last = ContinuousClock.now
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.interval)
-                let json = await Task.detached { CommandXPCDialer.linkStats() }.value
+                let json = await CommandXPCDialer.linkStats()
                 let groups = LinkGroupStat.decode(json)
                 let current = InterfaceCounters.read()
                 let now = ContinuousClock.now

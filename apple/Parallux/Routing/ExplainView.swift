@@ -71,12 +71,10 @@ struct ExplainView: View {
         let value = target.trimmingCharacters(in: .whitespaces)
         guard !value.isEmpty else { return }
         running = true
-        Task.detached {
-            let explanation = CommandXPCDialer.explainRoute(value)
-            await MainActor.run {
-                result = explanation ?? RouteExplanation(target: value, ruleIndex: -1, error: "内核暂不可用")
-                running = false
-            }
+        Task {
+            let explanation = await CommandXPCDialer.explainRoute(value)
+            result = explanation ?? RouteExplanation(target: value, ruleIndex: -1, error: "内核暂不可用")
+            running = false
         }
     }
 }

@@ -1,6 +1,6 @@
 ---
 type: fix
-status: doing       # todo | doing | blocked | awaiting-author | done
+status: done        # todo | doing | blocked | awaiting-author | done
 weight: light
 created: 2026-11-26
 baseline: b437205a441b
@@ -33,4 +33,15 @@ App 里对应「流量正在路由时切换 规则/全局/直连」：路由器�
 
 ## 证据
 
+RED: a4210bb -race -run '^TestSwitchingTheModeWhileItIsReadIsRaceFree$' ./core/aggregate/  # D1
+
+开卡时：`-race` 报 `WARNING: DATA RACE`（`clashmode.(*Manager).SetMode` 写、`Mode` 读），`--- FAIL`，3/3 次。
+fork 提交 `visual-z/sing-box@e6a7d1e8`（分支 `parallux/v1.14.4`）加锁后：本测试 `-count=3` 通过；
+D2 `go test -race -count=30 -run '^TestTheAddedModeRulesRouteByTheSelectedMode$' ./core/aggregate/` 退出 0，`DATA RACE` 0 次。
+GATE: a4210bbcec62+dirty ok tree:ce6476b91f81 build=0 vet=0 test=0[628p/0f] fmt=0 swift-test=0[211p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-26)
+
 ## 交接
+
+- 做了什么：fork 给 `clashmode.Manager.mode` 加读写锁（`e6a7d1e8`），`go.mod` 的 replace 指到它；新增竞态测试。
+- 卡在哪：无。
+- 下一步：上游 sing-box 也有同样的问题，可以考虑提交给上游。
