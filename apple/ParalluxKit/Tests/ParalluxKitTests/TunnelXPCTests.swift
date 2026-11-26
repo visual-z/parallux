@@ -49,6 +49,13 @@ private func connect(to server: SocketServer) -> (NSXPCListener, NSXPCConnection
     return (listener, connection)
 }
 
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func add() { lock.withLock { count += 1 } }
+    var value: Int { lock.withLock { count } }
+}
+
 @Suite struct TunnelXPCTests {
     @Test func aCommandSocketHandedOverXPCCarriesBytes() throws {
         var fds: [Int32] = [0, 0]
@@ -119,6 +126,44 @@ private func connect(to server: SocketServer) -> (NSXPCListener, NSXPCConnection
         let (listener, connection) = connect(to: server)
         defer { connection.invalidate(); listener.invalidate() }
         #expect(LinkGroupStat.decode(TunnelXPC.linkStats(over: connection, timeout: 2)).map(\.tag) == ["direct"])
+    }
+
+    /// The app keeps one resumed connection and calls it from several pollers;
+    /// swapping its interface mid-flight freed one another call was still
+    /// reading (fix-tunnel-xpc-interface-race).
+    @Test func aKeptConnectionKeepsTheInterfaceItWasResumedWithAcrossEveryCall() throws {
+        let server = SocketServer(served: nil)
+        let (listener, connection) = connect(to: server)
+        let transport = NSXPCLinkTransport(connection: connection)
+        defer { transport.invalidate(); listener.invalidate() }
+        let resumedWith = try #require(connection.remoteObjectInterface)
+
+        _ = try? transport.dialCommandSocket(timeout: 2)
+        _ = try? transport.linkStats(timeout: 2)
+        _ = try? transport.drainNotifications(timeout: 2)
+        _ = try? transport.explainRoute("youtube.com", timeout: 2)
+        _ = try? transport.probeLinks(timeout: 3)
+
+        #expect(connection.remoteObjectInterface === resumedWith)
+    }
+
+    @Test func concurrentCallsOverOneKeptConnectionAllGetTheirReply() {
+        let server = SocketServer(served: nil)
+        let (listener, connection) = connect(to: server)
+        let transport = NSXPCLinkTransport(connection: connection)
+        defer { transport.invalidate(); listener.invalidate() }
+        let threads = 8, callsPerThread = 500
+        let answered = Counter()
+
+        DispatchQueue.concurrentPerform(iterations: threads) { thread in
+            for _ in 0..<callsPerThread {
+                let ok = thread.isMultiple(of: 2)
+                    ? (try? transport.linkStats(timeout: 2)) == #"[{"tag":"direct","mode":"balance","links":[]}]"#
+                    : (try? transport.drainNotifications(timeout: 2))?.map(\.identifier) == ["core-1"]
+                if ok { answered.add() }
+            }
+        }
+        #expect(answered.value == threads * callsPerThread)
     }
 
     @Test func connectingToAMissingSocketReportsTheCall() {

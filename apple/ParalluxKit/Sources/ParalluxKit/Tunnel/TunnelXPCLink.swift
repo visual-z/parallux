@@ -163,8 +163,12 @@ public enum TunnelXPCPollRetry {
 /// The real connection: one `NSXPCConnection`, resumed once, dead once the
 /// system invalidates it (the extension was replaced or quit).
 public final class NSXPCLinkTransport: TunnelXPCTransport, @unchecked Sendable {
-    public init(service: String) {
-        let connection = NSXPCConnection(machServiceName: service)
+    public convenience init(service: String) {
+        self.init(connection: NSXPCConnection(machServiceName: service))
+    }
+
+    /// Takes a connection nobody has resumed yet; tests pass one to an anonymous listener.
+    init(connection: NSXPCConnection) {
         self.connection = connection
         connection.remoteObjectInterface = TunnelXPC.makeInterface()
         connection.interruptionHandler = { [weak self] in self?.markDead() }
