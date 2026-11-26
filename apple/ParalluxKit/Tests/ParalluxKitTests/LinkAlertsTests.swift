@@ -82,6 +82,7 @@ import Testing
     @Test func randomTimelinesOnlyAnnounceLastingChangesWithAFallback() {
         var rng = SplitMix64(seed: 0xA1E7)
         let tags = ["link-en0", "link-en7", "link-en9"]
+        var total = 0
         for _ in 0..<300 {
             let count = 1 + rng.int(3)
             let present = Array(tags.prefix(count))
@@ -108,6 +109,7 @@ import Testing
                         #expect(health.contains { $0.key != alert.tag && $0.value }, "a drop has a line to fall back to")
                     }
                     announced[alert.tag, default: []].append(alert.healthy)
+                    total += 1
                 }
             }
             for (_, sequence) in announced {
@@ -116,5 +118,6 @@ import Testing
                 }
             }
         }
+        #expect(total > 100, "the timelines do produce alerts, so the checks above are not vacuous")
     }
 }

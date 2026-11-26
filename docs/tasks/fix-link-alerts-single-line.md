@@ -1,6 +1,6 @@
 ---
 type: fix
-status: doing       # todo | doing | blocked | awaiting-author | done
+status: awaiting-author  # todo | doing | blocked | awaiting-author | done
 weight: light
 created: 2026-11-26
 baseline: 1fc6918
@@ -46,4 +46,22 @@ baseline: 1fc6918
 
 ## 证据
 
+RED(swift): d66e74f aSingleLinkNeverAlertsHoweverLongItIsDown  # D1
+RED(swift): d66e74f aFlapShorterThanTheHoldStaysQuiet  # D2
+RED(swift): d66e74f aLinkDownPastTheHoldNamesTheLinesTrafficMovesTo  # D2
+RED(swift): d66e74f aRecoveryIsAnnouncedOnlyAfterItsDropWas  # D3
+RED(swift): d66e74f aLinkMissingFromTheListKeepsItsLastNameAndNeverShowsItsTag  # D4
+RED(swift): d66e74f randomTimelinesOnlyAnnounceLastingChangesWithAFallback  # D5
+
+开卡时占位实现照搬原 `LinkNotifier` 的规则，6 个测试全红（单线路、3 秒抖动都发；文案写「其他线路」；名字是 `link-en0`；性质测试 61426 处不成立）。
+冻结后加严一处：性质测试要求 300 条时间线一共产生 100 条以上通知，免得检查空转。
+
+图标：同一 bundle ID 在 LaunchServices 里登记了 27 份（各处构建产物），作者同意后 2026-11-26 注销了 `/Applications` 以外的 26 份并重启 `usernoted`；
+防止再累积的脚本改动在 `docs/tasks/chore-forget-build-registrations.md`。图标是否显示由 D7 作者确认。
+GATE: d66e74fef9b9+dirty ok tree:3df04e28fd05 build=0 vet=0 test=0[628p/0f] fmt=0 swift-test=0[217p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-26)
+
 ## 交接
+
+- 做了什么：通知规则抽成 `LinkAlerts`（单线路不发、10 s 防抖、写出改走的线路、恢复跟着宣布过的掉线、名字不退化），`LinkNotifier` 只负责发；登记 INV-21；清掉 26 份旧的 LaunchServices 登记。
+- 卡在哪：D7 作者手测。
+- 下一步：作者在新发布版上按 D7 试一次后改 done。

@@ -2,21 +2,24 @@ import Foundation
 import ParalluxKit
 import UserNotifications
 
-/// Posts 「线路掉线 / 恢复」 notifications from health changes in linkStats.
+/// Posts 「线路不可用 / 已恢复」 notifications. Which health changes deserve
+/// one, and what they say, is LinkAlerts' call (fix-link-alerts-single-line).
 @MainActor
 final class LinkNotifier {
-    private var last: [String: Bool] = [:]
+    private var alerts = LinkAlerts()
     private var authorized = false
 
-    func update(groups: [LinkGroupStat], links: [LinkInterface], enabled: Bool) {
+    func update(groups: [LinkGroupStat], links: [LinkInterface], enabled: Bool, now: Date = Date()) {
         // Merged over every aggregate, so group order cannot flip it.
-        let current = LinkView.merge(groups).mapValues(\.healthy)
-        defer { last = current }
-        guard enabled, !last.isEmpty else { return }
-        for (tag, healthy) in current where last[tag] != nil && last[tag] != healthy {
-            let name = links.first { ProfileComposer.linkTag($0.name) == tag }.map { $0.kind == .relay ? "中继线路 \($0.title)" : "\($0.kind.title)（\($0.name)）" } ?? tag
-            post(title: healthy ? "线路已恢复" : "线路不可用", body: healthy ? "\(name)重新参与聚合。" : "\(name)暂时不可用，新连接改走其他线路。")
-        }
+        let health = LinkView.merge(groups).mapValues(\.healthy)
+        let names = Dictionary(links.map { link in
+            (ProfileComposer.linkTag(link.name), link.kind == .relay ? "中继线路 \(link.title)" : "\(link.kind.title)（\(link.name)）")
+        }, uniquingKeysWith: { first, _ in first })
+        // Stepped even when notifications are off, so turning them on does
+        // not announce a change that happened while they were off.
+        let due = alerts.step(health: health, names: names, now: now)
+        guard enabled else { return }
+        for alert in due { post(title: alert.title, body: alert.body) }
     }
 
     private func post(title: String, body: String) {
