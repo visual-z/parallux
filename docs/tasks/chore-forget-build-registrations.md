@@ -1,6 +1,6 @@
 ---
 type: chore
-status: doing       # todo | doing | blocked | awaiting-author | done
+status: done        # todo | doing | blocked | awaiting-author | done
 weight: light
 created: 2026-11-26
 baseline: d66e74f
@@ -33,4 +33,12 @@ LaunchServices 里同一个 bundle ID `io.github.visual-z.parallux` 登记了 27
 
 RED: none 构建脚本的清理步骤，判据是系统状态检查，产品行为代码不在此卡
 
+改脚本之前先让检查红过一次：`build-signed.sh` 之后 LaunchServices 里有 `.build/xcode-signed/…/Parallux.app` 及其内嵌的 Updater.app、widget，D1 检查退出 1。
+改后：D1 `build-apple.sh && build-signed.sh` 后检查退出 0；D2 `PARALLUX_NOTARY_PROFILE=horizyn-releases scripts/release.sh 0.1.3` 之后检查退出 0。
+GATE: 78bc7fb3dd40+dirty ok tree:6e9f4c1187e4 build=0 vet=0 test=0[628p/0f] fmt=0 swift-test=0[217p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-26)
+
 ## 交接
+
+- 做了什么：`env.sh` 的 `forget_build` 注销构建产物（含内嵌 bundle），三个构建脚本收尾时调用；D1、D2 已在本机核对。
+- 卡在哪：无。
+- 下一步：无。
