@@ -42,76 +42,6 @@ public enum TunnelXPC {
     /// capped at LinkProbe.timeout, plus slack for XPC. Derived, not measured.
     public static let probeTimeout: TimeInterval = LinkProbe.timeout + 2
 
-    /// Asks the extension to probe every link; see TunnelXPCProtocol.probeLinks.
-    public static func probeLinks(over connection: NSXPCConnection, timeout: TimeInterval = probeTimeout) throws -> [LinkProbeResult] {
-        connection.remoteObjectInterface = makeInterface()
-        connection.resume()
-        let done = DispatchSemaphore(value: 0)
-        let box = ReplyBox()
-        let proxy = connection.remoteObjectProxyWithErrorHandler { error in
-            box.set(.failure(.remote(error.localizedDescription)))
-            done.signal()
-        } as? TunnelXPCProtocol
-        guard let proxy else { throw DialError.remote("the connection does not export TunnelXPCProtocol") }
-        proxy.probeLinks { data, error in
-            if let error {
-                box.set(.failure(.remote(error.localizedDescription)))
-            } else {
-                box.set(.success(data ?? Data()))
-            }
-            done.signal()
-        }
-        guard done.wait(timeout: .now() + timeout) == .success, let result = box.get() else {
-            throw DialError.timedOut
-        }
-        return try JSONDecoder().decode([LinkProbeResult].self, from: result.get())
-    }
-
-    /// Reads per-link counters from the extension; "[]" when it does not answer in time.
-    public static func linkStats(over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout) -> String {
-        connection.remoteObjectInterface = makeInterface()
-        connection.resume()
-        let done = DispatchSemaphore(value: 0)
-        let box = ReplyBox()
-        let proxy = connection.remoteObjectProxyWithErrorHandler { _ in done.signal() } as? TunnelXPCProtocol
-        proxy?.linkStats { json in
-            box.set(.success(Data(json.utf8)))
-            done.signal()
-        }
-        guard proxy != nil, done.wait(timeout: .now() + timeout) == .success, case let .success(data)? = box.get() else { return "[]" }
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    /// Fetches queued core notifications; empty when the extension does not answer in time.
-    public static func drainNotifications(over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout) -> [CoreNotification] {
-        connection.remoteObjectInterface = makeInterface()
-        connection.resume()
-        let done = DispatchSemaphore(value: 0)
-        let box = ReplyBox()
-        let proxy = connection.remoteObjectProxyWithErrorHandler { _ in done.signal() } as? TunnelXPCProtocol
-        proxy?.drainNotifications { data in
-            box.set(.success(data))
-            done.signal()
-        }
-        guard proxy != nil, done.wait(timeout: .now() + timeout) == .success, case let .success(data)? = box.get() else { return [] }
-        return NotificationQueue.decode(data)
-    }
-
-    /// Asks the extension to explain a target's route; "" when it does not answer in time.
-    public static func explainRoute(_ target: String, over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout) -> String {
-        connection.remoteObjectInterface = makeInterface()
-        connection.resume()
-        let done = DispatchSemaphore(value: 0)
-        let box = ReplyBox()
-        let proxy = connection.remoteObjectProxyWithErrorHandler { _ in done.signal() } as? TunnelXPCProtocol
-        proxy?.explainRoute(target) { json in
-            box.set(.success(Data(json.utf8)))
-            done.signal()
-        }
-        guard proxy != nil, done.wait(timeout: .now() + timeout) == .success, case let .success(data)? = box.get() else { return "" }
-        return String(decoding: data, as: UTF8.self)
-    }
-
     /// Runs the probes concurrently; used by the extension's XPC handler.
     public static func runProbes(interfaces: [String] = LinkProbe.candidateInterfaces()) -> [LinkProbeResult] {
         let results = ResultsBox(count: interfaces.count)
@@ -119,13 +49,6 @@ public enum TunnelXPC {
             results.set(index, LinkProbe.probe(interface: interfaces[index]))
         }
         return results.values
-    }
-
-    private final class ReplyBox: @unchecked Sendable {
-        private let lock = NSLock()
-        private var value: Result<Data, DialError>?
-        func set(_ new: Result<Data, DialError>) { lock.withLock { if value == nil { value = new } } }
-        func get() -> Result<Data, DialError>? { lock.withLock { value } }
     }
 
     private final class ResultsBox: @unchecked Sendable {
@@ -146,63 +69,5 @@ public enum TunnelXPC {
             ofReply: true
         )
         return interface
-    }
-
-    /// Asks the extension behind `connection` for a command-server socket and
-    /// returns a descriptor the caller owns. Never waits longer than `timeout`.
-    public static func dialCommandSocket(over connection: NSXPCConnection, timeout: TimeInterval = dialTimeout) throws -> Int32 {
-        connection.remoteObjectInterface = makeInterface()
-        connection.resume()
-        let outcome = Outcome()
-        let proxy = connection.remoteObjectProxyWithErrorHandler { error in
-            outcome.finish(.failure(.remote(error.localizedDescription)))
-        } as? TunnelXPCProtocol
-        guard let proxy else {
-            throw DialError.remote("the connection does not export TunnelXPCProtocol")
-        }
-        proxy.connectToCommandServer { handle, error in
-            if let error {
-                outcome.finish(.failure(.remote(error.localizedDescription)))
-            } else if let handle {
-                // dup: the handle closes its descriptor when XPC releases it,
-                // and libbox takes ownership of the one we return.
-                let fd = dup(handle.fileDescriptor)
-                outcome.finish(fd >= 0 ? .success(fd) : .failure(.noHandle))
-            } else {
-                outcome.finish(.failure(.noHandle))
-            }
-        }
-        guard let result = outcome.wait(timeout: timeout) else {
-            throw DialError.timedOut
-        }
-        return try result.get()
-    }
-
-    /// First answer wins; a late reply after a timeout closes its descriptor
-    /// instead of leaking it.
-    private final class Outcome: @unchecked Sendable {
-        private let lock = NSLock()
-        private let done = DispatchSemaphore(value: 0)
-        private var result: Result<Int32, DialError>?
-        private var abandoned = false
-
-        func finish(_ value: Result<Int32, DialError>) {
-            lock.lock()
-            defer { lock.unlock() }
-            if result != nil || abandoned {
-                if case let .success(fd) = value { close(fd) }
-                return
-            }
-            result = value
-            done.signal()
-        }
-
-        func wait(timeout: TimeInterval) -> Result<Int32, DialError>? {
-            _ = done.wait(timeout: .now() + timeout)
-            lock.lock()
-            defer { lock.unlock() }
-            if result == nil { abandoned = true }
-            return result
-        }
     }
 }

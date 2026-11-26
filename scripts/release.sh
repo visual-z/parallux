@@ -149,6 +149,9 @@ build_number="$(date -u +%Y%m%d%H%M%S)"
 # development (decision 15) and for Developer ID (decision 26).
 mode=developer-id
 if ! has_developer_id; then
+  if [ "$dry_run" = 0 ]; then
+    missing "a Developer ID Application certificate in the login keychain (Xcode › Settings › Accounts › Manage Certificates)"
+  fi
   echo "NOTE  no Developer ID Application certificate: --dry-run exports a development build instead;"
   echo "      check-release.sh will fail on signing, which is expected for this fallback."
   mode=development
@@ -170,6 +173,16 @@ if ! xcodebuild -project apple/Parallux.xcodeproj -scheme Parallux -configuratio
   archive >>"$log" 2>&1; then
   grep -E "error:" "$log" | head -20 >&2 || tail -30 "$log" >&2
   exit 1
+fi
+
+# The Icon Composer asset compiles into Assets.car plus an AppIcon.icns that
+# stops at 256 px; the notification banner asks for a larger flat rendition and
+# draws a blank tile without one. Replace it inside the archive — export
+# re-signs the app, so the shipped signature covers the new file
+# (docs/archive/tasks/chore-notification-app-icon.md).
+archived_app="$archive/Products/Applications/Parallux.app"
+if [ -d "$archived_app" ]; then
+  scripts/make-appicon-icns.sh "$archived_app" "$archived_app/Contents/Resources/AppIcon.icns" >/dev/null
 fi
 
 echo "==> export ($mode)"

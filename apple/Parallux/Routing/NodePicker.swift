@@ -62,14 +62,14 @@ struct NodePicker: View {
     @State private var region: String?
     @State private var expanded: String?
 
-    private var groupsByTag: [String: OutboundGroupModel] {
-        Dictionary(app.session.groups.map { ($0.tag, $0) }, uniquingKeysWith: { first, _ in first })
-    }
-
     var body: some View {
         let session = app.session
-        let subgroups = group.items.filter { groupsByTag[$0.tag] != nil }
-        let nodes = group.items.filter { groupsByTag[$0.tag] == nil }
+        // One snapshot for the whole body. Looking a tag up again inside the
+        // ForEach closure read the live group list, which a disconnect empties
+        // while SwiftUI still renders the previous items
+        // (fix-node-picker-subgroups).
+        let split = group.split(among: session.groups)
+        let nodes = split.nodes
         let regions = Self.regions(nodes)
         let shown = nodes.filter { region == nil || NodeTraits.infer($0.tag).region == region }
             .sorted { a, b in
@@ -97,10 +97,11 @@ struct NodePicker: View {
                 }
             }
             LatencyHistogram(delays: nodes.map(\.delay))
-            if !subgroups.isEmpty {
+            if !split.subgroups.isEmpty {
                 Text("代理组").font(.caption).foregroundStyle(.secondary)
-                ForEach(subgroups) { item in
-                    let sub = groupsByTag[item.tag]!
+                ForEach(split.subgroups) { row in
+                    let item = row.item
+                    let sub = row.group
                     let current = sub.items.first { $0.tag == sub.selected }
                     NodeRow(title: item.tag, detail: sub.selected,
                             delay: current?.delay ?? 0, selected: item.tag == group.selected, chevron: expanded == item.tag ? .down : .right)

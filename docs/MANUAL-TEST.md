@@ -88,3 +88,15 @@ log stream --predicate 'subsystem BEGINSWITH "io.github.visual-z.parallux"'
 | 6.1 | 配 notarytool 凭据、Sparkle 密钥、更新源；同意创建 Developer ID 描述文件 | — | `feat-release` |
 | 6.2 | `scripts/release.sh 0.1.0` | 公证并装订的 DMG 与 appcast；`check-release.sh` 通过 | `feat-release` |
 | 6.3 | 装 0.1.0，再发 0.1.1，检查更新 | Sparkle 替换 App，扩展随后替换 | `feat-release` |
+
+## 7. 公开之后在私有工作副本里做的修复（2026-11-21 至 11-26）
+
+这几张卡也在 `docs/archive/tasks/` 下（见那里的「第二批」）。用 0.1.3 或更新的发布版测。
+
+| # | 操作 | 期望 | 卡 |
+|---|---|---|---|
+| 7.1 | 装旧版本，等它「检查更新」到新版本并安装 | Sparkle 下载、替换并重启 App；扩展随后替换，`systemextensionsctl list` 是新构建号且 `[activated enabled]`；能连接 | `fix-release-profile-selection` D4、`release-sysext-needs-notarization` D3 |
+| 7.2 | 隧道连着、主窗口开着放一晚 | `~/Library/Logs/DiagnosticReports` 里没有新的 Parallux 崩溃（尤其是 `TunnelXPC`） | `fix-tunnel-xpc-interface-race` D5 |
+| 7.3 | 隧道连着，`log stream --predicate 'process == "Parallux" AND eventMessage CONTAINS "parallux.tunnel"'` 看 30 秒 | `activating connection` 不随轮询出现；扩展不可达期间也不是每半秒一次 | `fix-tunnel-xpc-connection-churn` D5 |
+| 7.4 | 已连接时打开路由页，选中一个有子代理组的出口，拔掉网线 | App 不崩溃，选择器照常显示 | `fix-node-picker-subgroups` D4 |
+| 7.5 | 触发一次线路掉线/恢复的通知 | 横幅左侧是 Parallux 图标，不是空白 | `chore-notification-app-icon` D4 |

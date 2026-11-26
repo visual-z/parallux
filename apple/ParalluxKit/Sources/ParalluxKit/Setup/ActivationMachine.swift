@@ -106,24 +106,25 @@ public enum SetupStep: String, CaseIterable, Identifiable, Sendable {
 
 /// OSSystemExtensionError codes in the words of SFM and macOS.
 public enum SystemExtensionErrorText {
-    /// OSSystemExtensionError.Code raw values; wording from SFM's strings and
-    /// System Settings where they exist, otherwise the system's own meaning.
+    /// `OSSystemExtensionErrorCode` from SystemExtensions.framework/SystemExtensions.h,
+    /// one case per value: the numbers are not contiguous in meaning (3 is the
+    /// bundle location, 8 is the signature), so the table must be read from the
+    /// header rather than guessed. Wording from SFM's strings where they exist.
     public static func text(code: Int, fallback: String) -> String {
         switch code {
         case 1: "未知错误"
         case 2: "缺少授权"
-        case 3: "不支持的系统扩展"
+        case 3: "请将 Parallux 移到「应用程序」文件夹"
         case 4: "未找到系统扩展"
-        case 5: "未知的系统扩展类别"
-        case 6: "代码签名无效"
-        case 7: "缺少 Info.plist 键"
-        case 8: "请将 Parallux 移到「应用程序」文件夹"
-        case 9: "系统扩展无效"
-        case 10: "系统扩展版本不允许降级"
+        case 5: "系统扩展缺少标识符"
+        case 6: "系统扩展标识符重复"
+        case 7: "未知的系统扩展类别"
+        case 8: "系统扩展的代码签名无效"
+        case 9: "系统扩展没有通过系统校验"
+        case 10: "被系统策略禁止"
         case 11: "请求已取消"
-        case 12: "系统扩展版本无效"
+        case 12: "请求被更新的请求取代"
         case 13: "需要在系统设置中授权"
-        case 14: "系统扩展已存在"
         default: fallback
         }
     }

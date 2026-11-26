@@ -32,6 +32,12 @@ if ! xcodebuild -project apple/Parallux.xcodeproj -scheme Parallux -configuratio
   exit 1
 fi
 app=.build/xcode-signed/Build/Products/Debug/Parallux.app
+# xcodebuild keeps the mode of an unchanged file, so an artifact built once
+# under a tight umask stays 0700 for every later build from this tree. Normalise
+# before signing checks: sysextd expects the extension's binary to be executable
+# by all (docs/archive/tasks/fix-sysext-error-text.md). File modes are not sealed by the
+# signature, so this does not disturb it.
+chmod -R a+rX "$app"
 sysext="$app/Contents/Library/SystemExtensions/io.github.visual-z.parallux.tunnel.systemextension"
 helper_label="io.github.visual-z.parallux.helper"
 helper="$app/Contents/Library/HelperTools/$helper_label"
@@ -57,6 +63,14 @@ for bundle in "$app" "$sysext" "$helper" "$widget"; do
     exit 1
   fi
 done
+codesign --verify --deep --strict "$app"
+# The Icon Composer asset compiles to an AppIcon.icns that stops at 256 px, and
+# the notification banner draws a blank tile without a larger rendition
+# (docs/archive/tasks/chore-notification-app-icon.md). Replace it in place and re-seal
+# this bundle only — the nested extension keeps its own signature.
+scripts/make-appicon-icns.sh "$app" "$app/Contents/Resources/AppIcon.icns"
+identity="$(codesign -dv --verbose=4 "$app" 2>&1 | sed -n 's/^Authority=//p' | head -1)"
+codesign --force --preserve-metadata=entitlements,flags,requirements --sign "$identity" "$app"
 codesign --verify --deep --strict "$app"
 # Both bundles must carry the stamped number, and the Mach service with it.
 for plist in "$app/Contents/Info.plist" "$sysext/Contents/Info.plist" "$widget/Contents/Info.plist"; do
@@ -88,6 +102,9 @@ echo "signed $app (build $build_number, $mach)"
 if [ "${1:-}" = "--install" ]; then
   osascript -e 'tell application "Parallux" to quit' >/dev/null 2>&1 || true
   rm -rf /Applications/Parallux.app
-  cp -R "$app" /Applications/
+  # ditto, not cp: cp applies the umask and strips the group/other executable
+  # bits, and sysextd refuses an extension whose binary is not 0755
+  # ("all executable bits are expected to be set", docs/archive/tasks/fix-sysext-error-text.md).
+  ditto "$app" /Applications/Parallux.app
   echo "installed /Applications/Parallux.app"
 fi

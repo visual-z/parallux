@@ -7,39 +7,44 @@ import ParalluxKit
 final class CommandXPCDialer: NSObject, LibboxXPCDialerProtocol, @unchecked Sendable {
     static let shared = CommandXPCDialer()
 
+    /// The app's only connection to the extension's Mach service. The status,
+    /// notification and command callers all go through it, so one connection
+    /// serves them all instead of one per call (fix-tunnel-xpc-connection-churn).
+    static let link: TunnelXPCLink? = {
+        guard let service = MachService.name(in: .main) else { return nil }
+        return TunnelXPCLink(open: { NSXPCLinkTransport(service: service) })
+    }()
+
+    private static var missingAppGroup: NSError {
+        NSError(domain: "Parallux.XPC", code: 1, userInfo: [
+            NSLocalizedDescriptionKey: "未签名的构建没有 App Group，无法连接网络扩展",
+        ])
+    }
+
     func dialXPC(_ ret0_: UnsafeMutablePointer<Int32>?) throws {
-        let connection = try Self.connection()
-        defer { connection.invalidate() }
-        ret0_?.pointee = try TunnelXPC.dialCommandSocket(over: connection)
+        guard let link = Self.link else { throw Self.missingAppGroup }
+        ret0_?.pointee = try link.dialCommandSocket()
     }
 
     /// Probes every link from inside the extension.
     static func probeLinks() throws -> [LinkProbeResult] {
-        let connection = try connection()
-        defer { connection.invalidate() }
-        return try TunnelXPC.probeLinks(over: connection)
+        guard let link else { throw missingAppGroup }
+        return try link.probeLinks()
+    }
+
+    /// Which rule of the running configuration `target` matches; nil when the extension is unreachable.
+    static func explainRoute(_ target: String) -> RouteExplanation? {
+        guard let link else { return nil }
+        return RouteExplanation.decode(link.explainRoute(target))
     }
 
     /// Per-link counters; "[]" when the extension is unreachable.
-    /// Which rule of the running configuration `target` matches; nil when the extension is unreachable.
-    static func explainRoute(_ target: String) -> RouteExplanation? {
-        guard let connection = try? connection() else { return nil }
-        defer { connection.invalidate() }
-        return RouteExplanation.decode(TunnelXPC.explainRoute(target, over: connection))
-    }
-
     static func linkStats() -> String {
-        guard let connection = try? connection() else { return "[]" }
-        defer { connection.invalidate() }
-        return TunnelXPC.linkStats(over: connection)
+        link?.linkStats() ?? "[]"
     }
 
-    private static func connection() throws -> NSXPCConnection {
-        guard let service = MachService.name(in: .main) else {
-            throw NSError(domain: "Parallux.XPC", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "未签名的构建没有 App Group，无法连接网络扩展",
-            ])
-        }
-        return NSXPCConnection(machServiceName: service)
+    /// Queued core notifications; empty when the extension is unreachable.
+    static func notifications() -> [CoreNotification] {
+        link?.notifications() ?? []
     }
 }
