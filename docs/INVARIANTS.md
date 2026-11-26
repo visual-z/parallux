@@ -23,9 +23,10 @@
 | INV-13 | 菜单栏开启代理只填入原图包围的空白，异常只减去原有墨色。两者都在错相标志内部表达 | 两种原生比例下比较各组轮廓内外的像素集合 | `turningOnTheProxyFillsOnlyAnEnclosedPartOfTheMark`、`aFaultOnlyRemovesInkFromTheHealthyMark` |
 | INV-14 | 目标在局域网时，拨号顺序等于完整选线顺序去掉中继线路（其余线路相对顺序不变）；其他目标的拨号顺序就是完整选线顺序 | property | `TestLocalDialOrderDropsOnlyRelaysAndKeepsTheRest` |
 | INV-15 | 概览卡片的分行覆盖每张卡片恰好一次且顺序不变；同一行里的卡片都不窄于最小宽度；只有第一行可以比其余行短 | property | `gridRowsCoverEveryCardOnceAndNeverSqueezeOne` |
-| INV-16 | 代理组选择器的每一行都带着它所指的那个组，且来自同一次组快照；快照为空时全部条目落到节点，行与节点按原顺序拼起来恰好是全部条目 | property | `randomSnapshotsPartitionTheItemsIntoRowsAndNodes` |
-| INV-17 | 到扩展的 Mach 服务全 App 只有一条连接：复用直到系统作废，轮询失败后按 250 ms 起、4 s 封顶的窗口退避 | property | `theLinkOpensOneConnectionHoweverManyPollsArrive`、`aFailingExtensionCoolsThePollsDownInsteadOfDialingEveryTick`、`thePollCooldownGrowsAndStopsAtItsCap` |
-| INV-18 | 隧道 XPC 连接的配置（接口、处理器）只在 `NSXPCLinkTransport.init` 里、resume 之前设一次；之后任何调用、任何并发都只发消息，连接上的接口始终是 resume 时那一个 | 样例 + 并发压力（8 线程 × 500 次） | `aKeptConnectionKeepsTheInterfaceItWasResumedWithAcrossEveryCall`、`concurrentCallsOverOneKeptConnectionAllGetTheirReply` |
+| INV-16 | 保存的聚合方式是叠加时，一定选中了一台在列表里的聚合服务器；列表不空时选中的服务器一定在列表里，列表空时没有选中的服务器 | 代码断言（`checkInvariants`，每次修改后）+ property | `anyChoiceSequenceKeepsBondBehindAServer` |
+| INV-17 | 代理组选择器的每一行都带着它所指的那个组，且来自同一次组快照；快照为空时全部条目落到节点，行与节点按原顺序拼起来恰好是全部条目 | property | `randomSnapshotsPartitionTheItemsIntoRowsAndNodes` |
+| INV-18 | 到扩展的 Mach 服务全 App 只有一条连接：复用直到系统作废，轮询失败后按 250 ms 起、4 s 封顶的窗口退避 | property | `theLinkOpensOneConnectionHoweverManyPollsArrive`、`aFailingExtensionCoolsThePollsDownInsteadOfDialingEveryTick`、`thePollCooldownGrowsAndStopsAtItsCap` |
+| INV-19 | 隧道 XPC 连接的配置（接口、处理器）只在 `NSXPCLinkTransport.init` 里、resume 之前设一次；之后任何调用、任何并发都只发消息，连接上的接口始终是 resume 时那一个 | 样例 + 并发压力（8 线程 × 500 次） | `aKeptConnectionKeepsTheInterfaceItWasResumedWithAcrossEveryCall`、`concurrentCallsOverOneKeptConnectionAllGetTheirReply` |
 
 ## 写法提示
 

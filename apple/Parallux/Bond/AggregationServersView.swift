@@ -8,6 +8,8 @@ struct AggregationServersView: View {
     @State private var adding = false
     @State private var link = ""
     @State private var error: String?
+    /// The last server, waiting for the user to confirm its deletion.
+    @State private var deletingLast: AggregationServer?
 
     /// Run on the VPS; prints the import link when it is done (decision 18).
     static let installCommand = "sudo sh install.sh --binary ./parallux-server"
@@ -19,6 +21,8 @@ struct AggregationServersView: View {
         let servers = app.servers
         // Design v0.2, aggregation server page: the list card, then how to add one.
         DesignPage {
+            // Why the window opened here: 叠加 was chosen and there is no server.
+            if app.bondAwaitsServer { DesignWarning(text: AggregationNotice.needsServer).padding(.bottom, 10) }
             if servers.servers.isEmpty {
                 DesignList(items: ["无服务器"], id: { $0 }) { Text($0).foregroundStyle(.secondary) }
             } else {
@@ -48,6 +52,12 @@ struct AggregationServersView: View {
             Button("导入") { add() }
             Button("取消", role: .cancel) {}
         }
+        // Deleting the last server ends 叠加; say so before it happens.
+        .confirmationDialog("删除聚合服务器", isPresented: Binding(get: { deletingLast != nil }, set: { if !$0 { deletingLast = nil } }),
+                            presenting: deletingLast) { server in
+            Button("删除", role: .destructive) { Task { await app.removeAggregationServer(server.id) } }
+            Button("取消", role: .cancel) {}
+        } message: { _ in Text(AggregationNotice.lastServer) }
         .alert("错误", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("完成") { error = nil }
         } message: { Text(error ?? "") }
@@ -69,29 +79,27 @@ struct AggregationServersView: View {
             tag: unreachable ? "不可用" : inUse ? "在线" : "待命", tone: unreachable ? .bad : inUse ? .good : .plain,
             latency: latency.map { "\($0) ms" } ?? "", latencyColor: DelayGrade(milliseconds: Int32(latency ?? 0)).color,
             inUse: inUse,
-            enable: {
-                app.linkSettings.value.bondServerID = server.id
-                Task { await app.applyLinkChanges() }
-            },
+            enable: { Task { await app.useAggregationServer(server.id) } },
             delete: {
-                if inUse { app.linkSettings.value.bondServerID = nil }
-                app.servers.remove(server.id)
-                Task { await app.applyLinkChanges() }
+                if app.servers.servers.count == 1, app.linkSettings.value.mode.requiresAggregationServer {
+                    deletingLast = server
+                } else {
+                    Task { await app.removeAggregationServer(server.id) }
+                }
             }
         )
     }
 
     private func add() {
-        do {
-            let server = try app.servers.add(link: link)
-            if app.linkSettings.value.bondServerID == nil {
-                app.linkSettings.value.bondServerID = server.id
-                Task { await app.applyLinkChanges() }
+        let link = link
+        Task {
+            do {
+                try await app.addAggregationServer(link: link)
+            } catch let failure as AggregationServerLink.Failure {
+                error = Self.describe(failure)
+            } catch {
+                self.error = error.localizedDescription
             }
-        } catch let failure as AggregationServerLink.Failure {
-            error = Self.describe(failure)
-        } catch {
-            self.error = error.localizedDescription
         }
     }
 

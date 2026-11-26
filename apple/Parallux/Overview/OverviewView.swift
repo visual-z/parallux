@@ -67,6 +67,8 @@ struct OverviewView: View {
                     .pickerStyle(.segmented)
                     .disabled(app.enabledLinks.count < 2 || !app.controlsLocalCore)
                     .help("聚合方式")
+                    // A refused choice (叠加, no server) rebuilds the control from what is saved.
+                    .id(app.refusedModeChoices)
                 }
             }
             .onAppear { session.retainConnections() }

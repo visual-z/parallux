@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         popover.behavior = .transient
+        app.showMainWindow = { [weak self] in self?.showMainWindow() }
         app.start()
         SystemServices.start(app)
         UpdaterModel.shared.start()
@@ -123,7 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let aggregation = NSMenu()
         let canAggregate = app.enabledLinks.count >= 2
         for mode in AggregationMode.allCases {
-            let item = ActionItem(mode.title) { [app] in Task { await app.setMode(mode) } }
+            let item = ActionItem(mode.menuTitle(hasServer: app.hasAggregationServer)) { [app] in Task { await app.setMode(mode) } }
             item.state = mode == app.linkSettings.value.mode ? .on : .off
             item.isEnabled = canAggregate
             aggregation.addItem(item)

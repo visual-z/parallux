@@ -68,6 +68,10 @@ log stream --predicate 'subsystem BEGINSWITH "io.github.visual-z.parallux"'
 | 4.6 | 节点机器上起一个只听 127.0.0.1 的服务（`python3 -m http.server --bind 127.0.0.1 8099`）；Mac 上叠加开着，访问 `http://<节点公网地址>:8099` | 打不开。注意这一步服务端做什么都会通过，真正的证据是自动测试（`TestTheServerNeverDialsLoopbackOrPrivateDestinationsForAClient`）；走一遍只是确认没有意外 | `feat-node-hosted-aggregation` D12 |
 | 4.7 | 之前按 4.1 装过的服务器：重跑一次安装命令 | 打印的链接和原来的一样（密钥沿用），`/etc/parallux-server/config.json` 没有了，服务在跑 | `feat-node-hosted-aggregation` D12 |
 | 4.8 | 看清本机投递的边界：节点机器上 `python3 -m http.server 8099`（听所有网卡），云安全组**不**放行 8099；Mac 上叠加开着，访问 `http://<节点公网地址>:8099`，再关掉叠加访问一次 | 叠加开着时**打得开**，关掉打不开。这是预期的：经聚合服务器到本机的连接不过安全组（`docs/research/aggregation-server-link.md` 的「安全」一节） | `feat-node-hosted-aggregation` D16 |
+| 4.9 | 删掉所有聚合服务器（或用一份没有添加过服务器的安装）。两条线路都启用，分别在面板、概览工具栏、设置 › 聚合、菜单栏图标的右键菜单里点「叠加」 | 每一处都打开主窗口的聚合服务器页，页面顶部有一行「尚未添加聚合服务器。添加之后自动切换到叠加。」；聚合方式停在原来那一项，分段控件没有停在「叠加」上；右键菜单里写的是「叠加…」 | `fix-bond-needs-server` D11 |
+| 4.10 | 接着 4.9，在聚合服务器页粘贴链接添加一台服务器 | 聚合方式自动变成叠加，那行提示消失，右键菜单里变回「叠加」；概览标题写「叠加」 | `fix-bond-needs-server` D11 |
+| 4.11 | 聚合方式是叠加、只有一台服务器时删除它；再试一次有两台服务器时删除正在用的那台 | 只有一台时先问「删除后没有聚合服务器，聚合方式改为分流。」，确认后方式变成分流；有两台时不问，另一台变成「在线」，方式仍是叠加 | `fix-bond-needs-server` D11 |
+| 4.12 | 没有聚合服务器时，在「快捷指令」里运行「设置聚合方式」并选叠加 | 报错「请先添加聚合服务器」，聚合方式不变，不弹出主窗口 | `fix-bond-needs-server` D11 |
 
 ## 5. M5 全量
 

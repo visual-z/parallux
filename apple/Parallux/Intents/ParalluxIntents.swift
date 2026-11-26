@@ -67,7 +67,13 @@ struct SetAggregationModeIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        try await runningApp().setMode(mode.mode)
+        let app = try runningApp()
+        // Asked from the app, 叠加 without a server opens the page that adds
+        // one; a shortcut has nowhere to send the user, so it fails and says why.
+        if mode.mode.requiresAggregationServer, !app.hasAggregationServer {
+            throw IntentFailure(message: AggregationNotice.addServerFirst)
+        }
+        await app.setMode(mode.mode)
         return .result()
     }
 }

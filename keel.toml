@@ -93,6 +93,16 @@ name = "app 不引用扩展源码"
 paths = ["apple/Parallux/**/*.swift", "apple/ParalluxKit/**/*.swift"]
 forbid = ['PacketTunnelProvider']
 
+# 聚合方式, the aggregation server in use and the server list change only
+# through AppModel, which calls LinkSettings' choose / serversChanged /
+# useServer (ModeChoice.swift). A control that writes the fields itself can
+# save 叠加 without a server again (INV-16, PLAN decision 27).
+[[boundary.rule]]
+name = "聚合方式与聚合服务器只经 AppModel 修改"
+paths = ["apple/Parallux/**/*.swift"]
+except = ["apple/Parallux/AppModel.swift"]
+forbid = ['linkSettings\.value\.(mode|bondServerID)\s*=[^=]', '\bservers\.(add|remove)\(']
+
 [red]
 runner = "go-json"   # go test -json: structured events, no text parsing
 # {args}: RED: <commit> -run '^TestName$' ./core/...

@@ -137,6 +137,8 @@ private struct PanelHome: View {
         ))
         .accessibilityLabel("聚合方式")
         .disabled(app.enabledLinks.count < 2 || !app.controlsLocalCore)
+        // A refused choice (叠加, no server) rebuilds the control from what is saved.
+        .id(app.refusedModeChoices)
         if let notice = app.aggregationNotice {
             Text(notice).font(.caption).foregroundStyle(.secondary).padding(.top, 4)
         }
@@ -148,10 +150,9 @@ private struct PanelHome: View {
                     ForEach(app.servers.servers) { server in
                         Toggle(server.name, isOn: Binding(
                             get: { app.linkSettings.value.bondServerID == server.id },
-                            set: { on in
-                                app.linkSettings.value.bondServerID = on ? server.id : nil
-                                Task { await app.applyLinkChanges() }
-                            }
+                            // One server is always in use: picking another moves
+                            // the mark, picking the marked one changes nothing.
+                            set: { on in if on { Task { await app.useAggregationServer(server.id) } } }
                         ))
                     }
                     if !app.servers.servers.isEmpty { Divider() }

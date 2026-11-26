@@ -20,6 +20,6 @@
 
 - **提交原样保留，换了身份信息。** 18 个提交的内容与说明按上面同样的三条规则替换过，提交邮箱换成 noreply，接到本仓库里对应的提交上，再用一个合并提交并进 `main`。所以这些提交号和卡里写的提交号对不上。
 - **7 张卡放在 `tasks/` 下**：`fix-node-picker-subgroups`、`fix-tunnel-xpc-connection-churn`、`chore-notification-app-icon`、`fix-release-profile-selection`、`fix-sysext-error-text`、`release-sysext-needs-notarization`、`fix-tunnel-xpc-interface-race`。原因和第一批一样：证据指向替换前的提交号，过不了 `keel lint`。手测步骤在 `docs/MANUAL-TEST.md` 第 7 节。
-- **不变量改了编号。** 两边各自新登记了 `INV-15`。本仓库原有的（概览卡片分行）保留 15；这批卡里写的 INV-15、INV-16、INV-17，在 `docs/INVARIANTS.md` 里是 INV-16、INV-17、INV-18。
+- **不变量改了编号。** 两边各自新登记了 `INV-15`。本仓库原有的（概览卡片分行）保留 15；这批卡里写的 INV-15、INV-16、INV-17，在 `docs/INVARIANTS.md` 里是 INV-17、INV-18、INV-19（INV-16 已给同期另一张卡 `fix-bond-needs-server`）。
 
 手测通过之后怎么记：不要回头改这里的卡。为那一组手测开一张新卡（`keel new`），在新卡里写明确认了哪些存档卡的哪几条。

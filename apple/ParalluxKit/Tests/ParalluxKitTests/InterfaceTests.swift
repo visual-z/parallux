@@ -46,7 +46,7 @@ import Testing
         #expect(fresh == AppSettings())
         #expect(fresh.keepInMenuBarAfterClose)
         #expect(!fresh.showRateInMenuBar)
-        #expect(fresh.defaultAggregationMode == .bond)
+        #expect(fresh.defaultAggregationMode == .balance)
         var changed = fresh
         changed.showRateInMenuBar = true
         changed.tunnel.includeAllNetworks = true

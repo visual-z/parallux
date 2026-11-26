@@ -32,6 +32,21 @@ final class AppModel {
 
     /// "东京 VPS · 12 ms" for the panel and menu.
     var bondServerSummary: String? { servers.summary(linkSettings.value.bondServerID) }
+
+    /// The ids on the aggregation server list, as the mode rules take them.
+    private var serverIDs: [UUID] { servers.servers.map(\.id) }
+    var hasAggregationServer: Bool { !servers.servers.isEmpty }
+    /// 叠加 was asked for while there was no aggregation server; adding one
+    /// finishes the switch. Not saved: it is something asked for in this run.
+    private(set) var bondAwaitsServer = false
+    /// How many mode choices were refused. The mode controls take it as their
+    /// identity: a segmented control goes on showing the segment that was
+    /// clicked until its view is redrawn, and a refused choice changes nothing
+    /// else that would redraw it. Assumed from how the controls update, not
+    /// seen in the installed app.
+    private(set) var refusedModeChoices = 0
+    /// Brings the main window forward; set by AppDelegate, which owns it.
+    @ObservationIgnored var showMainWindow: () -> Void = {}
     private(set) var lastError: String?
     /// The profile content the running tunnel was started with, before composing.
     @ObservationIgnored private var runningContent: String?
@@ -46,6 +61,8 @@ final class AppModel {
     var controlsLocalCore: Bool { !remote.isRemote }
 
     func start() {
+        // Settings saved by a build that let 叠加 be chosen without a server.
+        linkSettings.value.serversChanged(serverIDs)
         #if DEBUG
         if UserDefaults.standard.bool(forKey: "ParalluxPreview") { session.loadPreview() }
         #endif
@@ -203,11 +220,13 @@ final class AppModel {
                                physicalLinks: enabledLinks.filter { $0.kind != .relay }.count)
     }
 
-    /// The aggregation mode actually in effect: needs 聚合 on and two links, and 叠加 needs a server.
+    /// The aggregation mode actually in effect: needs 聚合 on and two links.
     var effectiveMode: AggregationMode? {
         guard linkSettings.value.switches.aggregation, enabledLinks.count >= 2 else { return nil }
         let mode = linkSettings.value.mode
-        // 叠加 carries direct traffic too; only a missing server makes it 主备.
+        // 叠加 cannot be chosen without a server (setMode). What can still
+        // leave it without a transport is found only while running: one
+        // physical link left, or the server's key gone from the Keychain.
         if mode == .bond, bondProvider(linkSettings.value) == nil { return .failover }
         return mode
     }
@@ -245,8 +264,44 @@ final class AppModel {
         }
     }
 
-    func setMode(_ mode: AggregationMode) async {
-        linkSettings.value.mode = mode
+    /// The one way the mode changes (the panel, the overview, settings, the
+    /// menu and Shortcuts all come here). 叠加 with no aggregation server is
+    /// refused and the main window shows where to add one.
+    @discardableResult
+    func setMode(_ mode: AggregationMode) async -> LinkSettings.ModeChange {
+        let change = linkSettings.value.choose(mode, servers: serverIDs)
+        bondAwaitsServer = change == .needsServer
+        guard change == .applied else {
+            refusedModeChoices += 1
+            pendingSidebar = .aggregationServer
+            showMainWindow()
+            return change
+        }
+        await applyLinkChanges()
+        return change
+    }
+
+    /// Adds the server a link describes. The first one becomes the server in
+    /// use, and finishes a switch to 叠加 that was waiting for it.
+    @discardableResult
+    func addAggregationServer(link: String) async throws -> AggregationServer {
+        let server = try servers.add(link: link)
+        linkSettings.value.serversChanged(serverIDs, awaitingBond: bondAwaitsServer)
+        bondAwaitsServer = false
+        await applyLinkChanges()
+        return server
+    }
+
+    /// Removes a server. Another one takes over if it was in use; with none
+    /// left, 叠加 becomes 分流 (the page asks before that happens).
+    func removeAggregationServer(_ id: UUID) async {
+        servers.remove(id)
+        linkSettings.value.serversChanged(serverIDs)
+        await applyLinkChanges()
+    }
+
+    func useAggregationServer(_ id: UUID) async {
+        linkSettings.value.useServer(id, servers: serverIDs)
         await applyLinkChanges()
     }
 

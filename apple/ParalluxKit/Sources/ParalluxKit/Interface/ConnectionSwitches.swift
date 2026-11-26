@@ -42,8 +42,17 @@ public struct ConnectionSwitches: Codable, Equatable, Sendable, Hashable {
 }
 
 /// The note under the aggregation picker when the chosen mode is not the one
-/// in effect.
+/// in effect. Since PLAN decision 27 a mode that cannot run cannot be chosen,
+/// so this only speaks for what happens while running: a physical link lost,
+/// or the server's key unreadable.
 public enum AggregationNotice {
+    /// On the aggregation server page, after 叠加 was asked for with no server.
+    public static let needsServer = "尚未添加聚合服务器。添加之后自动切换到叠加。"
+    /// Shortcuts cannot open that page, so the action fails with this.
+    public static let addServerFirst = "请先添加聚合服务器"
+    /// Before the last server is deleted while 叠加 is the mode.
+    public static let lastServer = "删除后没有聚合服务器，聚合方式改为分流。"
+
     /// `physicalLinks`: how many enabled links are physical. 叠加 needs two
     /// of them whatever the relay links add; callers
     /// that have no relay links may leave it out.
