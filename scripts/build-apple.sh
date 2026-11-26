@@ -19,4 +19,5 @@ if ! xcodebuild -project apple/Parallux.xcodeproj -scheme Parallux -configuratio
   grep -E "error:|Undefined symbols|ld: " "$log" | head -40 >&2 || tail -40 "$log" >&2
   exit 1
 fi
+forget_build .build/xcode/Build/Products
 echo "built .build/xcode/Build/Products/Debug/Parallux.app; log: $log"

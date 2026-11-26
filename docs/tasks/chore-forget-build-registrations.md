@@ -1,6 +1,6 @@
 ---
 type: chore
-status: todo        # todo | doing | blocked | awaiting-author | done
+status: doing       # todo | doing | blocked | awaiting-author | done
 weight: light
 created: 2026-11-26
 baseline: d66e74f

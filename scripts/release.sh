@@ -254,6 +254,7 @@ fi
 
 ln -sfn "$version" .build/release/latest
 ln -sfn "export/Parallux.app" "$out/Parallux.app"
+forget_build "$out" .build/xcode-release
 echo "release $version ($mode, build $build_number): $out"
 [ "$dry_run" = 1 ] && echo "dry run: notarization and appcast skipped; nothing was uploaded"
 exit 0

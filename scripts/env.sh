@@ -14,3 +14,23 @@ export ROOT
 # the extension, and a DMG cut from that tree ships the same way
 # (docs/archive/tasks/fix-sysext-error-text.md).
 umask 022
+
+# Every copy of Parallux.app that LaunchServices knows about competes for the
+# bundle ID, and Notification Center may draw a stale copy's icon: on the
+# author's Mac 27 build products were registered and banners showed a blank
+# tile although /Applications had the full-size icon
+# (docs/tasks/chore-forget-build-registrations.md). Build products are not
+# meant to be opened in place, so each script forgets what it built, nested
+# bundles (Sparkle's Updater.app, the widget) included. Files stay; only the
+# registration goes.
+lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+forget_build() {
+  local root bundle
+  for root in "$@"; do
+    [ -d "$root" ] || continue
+    while IFS= read -r bundle; do
+      "$lsregister" -u "$bundle" >/dev/null 2>&1 || true
+    done < <(find "$root" \( -name '*.app' -o -name '*.appex' \) -type d -prune -print 2>/dev/null; \
+             find "$root" -path '*.app/*' \( -name '*.app' -o -name '*.appex' \) -type d 2>/dev/null)
+  done
+}

@@ -108,3 +108,5 @@ if [ "${1:-}" = "--install" ]; then
   ditto "$app" /Applications/Parallux.app
   echo "installed /Applications/Parallux.app"
 fi
+# After --install too: /Applications holds the copy the system should know.
+forget_build .build/xcode-signed/Build/Products
