@@ -19,6 +19,7 @@
 | INV-9 | 流向图交给 GPU 的每片流带网格面积等于厚度 × 宽度，顶点都在绘图范围内，顶点总数不超过上限 | property | `flowMeshCoversEachBandExactly` |
 | INV-15 | 代理组选择器的每一行都带着它所指的那个组，且来自同一次组快照；快照为空时全部条目落到节点，行与节点按原顺序拼起来恰好是全部条目 | property | `randomSnapshotsPartitionTheItemsIntoRowsAndNodes` |
 | INV-16 | 到扩展的 Mach 服务全 App 只有一条连接：复用直到系统作废，轮询失败后按 250 ms 起、4 s 封顶的窗口退避 | property | `theLinkOpensOneConnectionHoweverManyPollsArrive`、`aFailingExtensionCoolsThePollsDownInsteadOfDialingEveryTick`、`thePollCooldownGrowsAndStopsAtItsCap` |
+| INV-17 | 隧道 XPC 连接的配置（接口、处理器）只在 `NSXPCLinkTransport.init` 里、resume 之前设一次；之后任何调用、任何并发都只发消息，连接上的接口始终是 resume 时那一个 | 样例 + 并发压力（8 线程 × 500 次） | `aKeptConnectionKeepsTheInterfaceItWasResumedWithAcrossEveryCall`、`concurrentCallsOverOneKeptConnectionAllGetTheirReply` |
 
 ## 写法提示
 

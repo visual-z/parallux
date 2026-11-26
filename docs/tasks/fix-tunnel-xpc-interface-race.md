@@ -1,6 +1,6 @@
 ---
 type: fix
-status: doing       # todo | doing | blocked | awaiting-author | done
+status: awaiting-author  # todo | doing | blocked | awaiting-author | done
 weight: light
 created: 2026-11-26
 baseline: 382b0eaf9dcf
@@ -45,4 +45,23 @@ baseline: 382b0eaf9dcf
 
 ## 证据
 
+RED(swift): 3647ac4 aKeptConnectionKeepsTheInterfaceItWasResumedWithAcrossEveryCall  # D1
+
+D2 没有可被 verify-red 承认的红：修前它让测试进程被信号 11 杀死（3647ac4 上 `scripts/swift-test.sh <junit> concurrentCallsOverOneKeptConnection` exit=1，`unexpected signal code 11`），keel 不把被信号杀死算作红。
+修后 `scripts/swift-test.sh <junit> TunnelXPCTests` 连跑 10 次 10/10 通过。
+
+D3 按冻结时的写法不成立：`grep -rn "remoteObjectInterface =" apple --include='*.swift'`（排除 Tests）有 2 处，
+另一处是 `HelperXPC.call`——每次调用新建连接、resume 前配置、用完即 invalidate，没有共享，不是本缺陷。
+隧道这一侧（`apple/ParalluxKit/Sources/ParalluxKit/Tunnel`、`apple/Parallux`、`apple/PacketTunnel`）恰好 1 处，在 `NSXPCLinkTransport.init`。
+修订提议见 `## 修订`，等作者确认。
+GATE: 3647ac4d745d+dirty ok tree:4ba55b6e45ec build=0 vet=0 test=0[625p/0f] fmt=0 swift-test=0[184p/0f] apple-build=0 server-build=0 boundaries=0 docs=0 cards=0 freeze=0 guard=0 (2026-11-26)
+
+## 修订
+
+- D3 提议改为：「隧道 XPC 一侧（`apple/ParalluxKit/Sources/ParalluxKit/Tunnel`、`apple/Parallux`、`apple/PacketTunnel`）只有 1 处给 `remoteObjectInterface` 赋值，在 `NSXPCLinkTransport.init`；其余赋值都在新建、尚未 resume 的连接上」。原因：冻结时没看到 `HelperXPC` 的每次调用一条连接，它不共享连接，不在本缺陷范围。待作者确认。
+
 ## 交接
+
+- 做了什么：删掉 `TunnelXPC` 里「接一条裸连接、每次调用重设接口」的静态请求函数（每次调用一条连接那一版的遗留）；`NSXPCLinkTransport` 在 init 里配置并 resume 一次，五种请求走同一个 `request` 帮手；登记 INV-17。
+- 卡在哪：D3 原文把不相干的 `HelperXPC` 也算进去，修订待作者确认；D5 要作者装新构建跑一晚看崩溃报告。
+- 下一步：作者确认 D3 修订与 D5 后改 done。

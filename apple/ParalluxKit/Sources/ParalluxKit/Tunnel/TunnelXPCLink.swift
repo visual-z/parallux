@@ -160,8 +160,16 @@ public enum TunnelXPCPollRetry {
     }
 }
 
-/// The real connection: one `NSXPCConnection`, resumed once, dead once the
-/// system invalidates it (the extension was replaced or quit).
+/// The real connection: one `NSXPCConnection`, configured and resumed once,
+/// dead once the system invalidates it (the extension was replaced or quit).
+///
+/// This is the only code that touches an `NSXPCConnection`'s configuration,
+/// and it does so only in `init`, before anyone else can see the connection.
+/// The link hands one transport to every poller at once, and
+/// `NSXPCConnection` promises nothing about changing its configuration while
+/// other threads send over it: re-setting `remoteObjectInterface` on each
+/// call freed the interface another call's proxy was still reading
+/// (fix-tunnel-xpc-interface-race).
 public final class NSXPCLinkTransport: TunnelXPCTransport, @unchecked Sendable {
     public convenience init(service: String) {
         self.init(connection: NSXPCConnection(machServiceName: service))
@@ -192,22 +200,104 @@ public final class NSXPCLinkTransport: TunnelXPCTransport, @unchecked Sendable {
     }
 
     public func dialCommandSocket(timeout: TimeInterval) throws -> Int32 {
-        try TunnelXPC.dialCommandSocket(over: connection, timeout: timeout, resume: false)
+        // A descriptor that arrives after the caller gave up is closed, not leaked.
+        try request(timeout: timeout, discard: { close($0) }) { proxy, finish in
+            proxy.connectToCommandServer { handle, error in
+                if let error {
+                    finish(.failure(.remote(error.localizedDescription)))
+                } else if let handle {
+                    // dup: the handle closes its descriptor when XPC releases it,
+                    // and libbox takes ownership of the one we return.
+                    let fd = dup(handle.fileDescriptor)
+                    finish(fd >= 0 ? .success(fd) : .failure(.noHandle))
+                } else {
+                    finish(.failure(.noHandle))
+                }
+            }
+        }
     }
 
     public func linkStats(timeout: TimeInterval) throws -> String {
-        try TunnelXPC.fetchLinkStats(over: connection, timeout: timeout, resume: false)
+        try request(timeout: timeout) { proxy, finish in
+            proxy.linkStats { finish(.success($0)) }
+        }
     }
 
     public func drainNotifications(timeout: TimeInterval) throws -> [CoreNotification] {
-        try TunnelXPC.fetchNotifications(over: connection, timeout: timeout, resume: false)
+        let data: Data = try request(timeout: timeout) { proxy, finish in
+            proxy.drainNotifications { finish(.success($0)) }
+        }
+        return NotificationQueue.decode(data)
     }
 
     public func explainRoute(_ target: String, timeout: TimeInterval) throws -> String {
-        try TunnelXPC.fetchRouteExplanation(target, over: connection, timeout: timeout, resume: false)
+        try request(timeout: timeout) { proxy, finish in
+            proxy.explainRoute(target) { finish(.success($0)) }
+        }
     }
 
     public func probeLinks(timeout: TimeInterval) throws -> [LinkProbeResult] {
-        try TunnelXPC.probeLinks(over: connection, timeout: timeout, resume: false)
+        let data: Data = try request(timeout: timeout) { proxy, finish in
+            proxy.probeLinks { data, error in
+                if let error {
+                    finish(.failure(.remote(error.localizedDescription)))
+                } else {
+                    finish(.success(data ?? Data()))
+                }
+            }
+        }
+        return try JSONDecoder().decode([LinkProbeResult].self, from: data)
+    }
+
+    /// Sends one message and blocks at most `timeout` for its answer. The
+    /// connection's error handler and the reply race; the first one wins.
+    private func request<Value>(
+        timeout: TimeInterval,
+        discard: @escaping (Value) -> Void = { _ in },
+        _ send: (any TunnelXPCProtocol, @escaping (Result<Value, TunnelXPC.DialError>) -> Void) -> Void
+    ) throws -> Value {
+        let reply = Reply<Value>(discard: discard)
+        let proxy = connection.remoteObjectProxyWithErrorHandler { error in
+            reply.finish(.failure(.remote(error.localizedDescription)))
+        } as? TunnelXPCProtocol
+        guard let proxy else {
+            throw TunnelXPC.DialError.remote("the connection does not export TunnelXPCProtocol")
+        }
+        send(proxy, reply.finish)
+        guard let result = reply.wait(timeout: timeout) else {
+            throw TunnelXPC.DialError.timedOut
+        }
+        return try result.get()
+    }
+
+    /// First answer wins; an answer after the caller stopped waiting goes to
+    /// `discard` so it can release what it owns.
+    private final class Reply<Value>: @unchecked Sendable {
+        init(discard: @escaping (Value) -> Void) { self.discard = discard }
+
+        private let discard: (Value) -> Void
+        private let lock = NSLock()
+        private let done = DispatchSemaphore(value: 0)
+        private var result: Result<Value, TunnelXPC.DialError>?
+        private var abandoned = false
+
+        func finish(_ value: Result<Value, TunnelXPC.DialError>) {
+            lock.lock()
+            defer { lock.unlock() }
+            guard result == nil, !abandoned else {
+                if case let .success(late) = value { discard(late) }
+                return
+            }
+            result = value
+            done.signal()
+        }
+
+        func wait(timeout: TimeInterval) -> Result<Value, TunnelXPC.DialError>? {
+            _ = done.wait(timeout: .now() + timeout)
+            lock.lock()
+            defer { lock.unlock() }
+            if result == nil { abandoned = true }
+            return result
+        }
     }
 }

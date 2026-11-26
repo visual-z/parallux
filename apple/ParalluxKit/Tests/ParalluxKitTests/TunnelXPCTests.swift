@@ -62,9 +62,10 @@ private final class Counter: @unchecked Sendable {
         #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds) == 0)
         let server = SocketServer(served: FileHandle(fileDescriptor: fds[0], closeOnDealloc: true))
         let (listener, connection) = connect(to: server)
-        defer { connection.invalidate(); listener.invalidate() }
+        let transport = NSXPCLinkTransport(connection: connection)
+        defer { transport.invalidate(); listener.invalidate() }
 
-        let fd = try TunnelXPC.dialCommandSocket(over: connection, timeout: 2)
+        let fd = try transport.dialCommandSocket(timeout: 2)
         defer { close(fd) }
         let payload = Array("started-service".utf8)
         #expect(write(fds[1], payload, payload.count) == payload.count)
@@ -77,11 +78,12 @@ private final class Counter: @unchecked Sendable {
     @Test func dialingAServiceThatNeverRepliesTimesOut() {
         let server = SocketServer(served: nil, replies: false)
         let (listener, connection) = connect(to: server)
-        defer { connection.invalidate(); listener.invalidate() }
+        let transport = NSXPCLinkTransport(connection: connection)
+        defer { transport.invalidate(); listener.invalidate() }
 
         let started = Date()
         #expect(throws: TunnelXPC.DialError.timedOut) {
-            try TunnelXPC.dialCommandSocket(over: connection, timeout: 0.3)
+            try transport.dialCommandSocket(timeout: 0.3)
         }
         #expect(Date().timeIntervalSince(started) < 2)
     }
@@ -89,43 +91,48 @@ private final class Counter: @unchecked Sendable {
     @Test func aReplyWithoutAHandleIsAnErrorNotADescriptor() {
         let server = SocketServer(served: nil)
         let (listener, connection) = connect(to: server)
-        defer { connection.invalidate(); listener.invalidate() }
+        let transport = NSXPCLinkTransport(connection: connection)
+        defer { transport.invalidate(); listener.invalidate() }
         #expect(throws: TunnelXPC.DialError.noHandle) {
-            try TunnelXPC.dialCommandSocket(over: connection, timeout: 2)
+            try transport.dialCommandSocket(timeout: 2)
         }
     }
 
     @Test func probeResultsComeBackOverXPCIntact() throws {
         let server = SocketServer(served: nil)
         let (listener, connection) = connect(to: server)
-        defer { connection.invalidate(); listener.invalidate() }
-        let results = try TunnelXPC.probeLinks(over: connection, timeout: 3)
+        let transport = NSXPCLinkTransport(connection: connection)
+        defer { transport.invalidate(); listener.invalidate() }
+        let results = try transport.probeLinks(timeout: 3)
         #expect(results.map(\.interface) == ["nope0"])
         #expect(results.first?.errno == ENXIO)
     }
 
-    @Test func coreNotificationsComeBackOverXPC() {
+    @Test func coreNotificationsComeBackOverXPC() throws {
         let server = SocketServer(served: nil)
         let (listener, connection) = connect(to: server)
-        defer { connection.invalidate(); listener.invalidate() }
-        #expect(TunnelXPC.drainNotifications(over: connection, timeout: 2).map(\.identifier) == ["core-1"])
+        let transport = NSXPCLinkTransport(connection: connection)
+        defer { transport.invalidate(); listener.invalidate() }
+        #expect(try transport.drainNotifications(timeout: 2).map(\.identifier) == ["core-1"])
     }
 
     @Test func routeExplanationsComeBackOverXPC() throws {
         let server = SocketServer(served: nil)
         let (listener, connection) = connect(to: server)
-        defer { connection.invalidate(); listener.invalidate() }
-        let step = try #require(RouteExplanation.decode(TunnelXPC.explainRoute("youtube.com", over: connection, timeout: 2)))
+        let transport = NSXPCLinkTransport(connection: connection)
+        defer { transport.invalidate(); listener.invalidate() }
+        let step = try #require(RouteExplanation.decode(try transport.explainRoute("youtube.com", timeout: 2)))
         #expect(step.ruleIndex == 2)
         #expect(step.outbound == "proxy")
         #expect(RouteExplanation.decode("") == nil)
     }
 
-    @Test func linkStatsComeBackOverXPC() {
+    @Test func linkStatsComeBackOverXPC() throws {
         let server = SocketServer(served: nil)
         let (listener, connection) = connect(to: server)
-        defer { connection.invalidate(); listener.invalidate() }
-        #expect(LinkGroupStat.decode(TunnelXPC.linkStats(over: connection, timeout: 2)).map(\.tag) == ["direct"])
+        let transport = NSXPCLinkTransport(connection: connection)
+        defer { transport.invalidate(); listener.invalidate() }
+        #expect(LinkGroupStat.decode(try transport.linkStats(timeout: 2)).map(\.tag) == ["direct"])
     }
 
     /// The app keeps one resumed connection and calls it from several pollers;
