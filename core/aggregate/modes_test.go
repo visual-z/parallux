@@ -135,3 +135,52 @@ func TestTheAddedModeRulesRouteByTheSelectedMode(t *testing.T) {
 		}
 	}
 }
+
+// The app switches modes while the router reads the current one for every
+// connection and the reference manager re-reads it on each switch. Both
+// must see a whole mode name, never a torn one (fix-clashmode-mode-race):
+// under -race this fails while Manager.mode is read without a lock.
+func TestSwitchingTheModeWhileItIsReadIsRaceFree(t *testing.T) {
+	config := `{
+	  "log": {"disabled": true},
+	  "experimental": {"cache_file": {"enabled": true, "path": "` + filepath.Join(t.TempDir(), "cache.db") + `"}},
+	  "outbounds": [{"type": "direct", "tag": "a"}, {"type": "direct", "tag": "b"}],
+	  "route": {"rules": [{"clash_mode": "Global", "outbound": "b"}], "final": "a"}
+	}`
+	ctx := include.Context(context.Background())
+	options, err := json.UnmarshalExtendedContext[option.Options](ctx, []byte(config))
+	if err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+	instance, err := box.New(box.Options{Options: options, Context: ctx, PlatformLogWriter: discardLog{}})
+	if err != nil {
+		t.Fatalf("new box: %v", err)
+	}
+	if err := instance.Start(); err != nil {
+		t.Fatalf("start box: %v", err)
+	}
+	t.Cleanup(func() { instance.Close() })
+	manager := service.PtrFromContext[clashmode.Manager](ctx)
+	if manager == nil {
+		t.Fatal("the box has no mode manager")
+	}
+
+	const rounds = 200
+	modes := []string{"Rule", "Global"}
+	done := make(chan []string)
+	go func() {
+		seen := make([]string, 0, rounds)
+		for range rounds {
+			seen = append(seen, manager.Mode())
+		}
+		done <- seen
+	}()
+	for i := range rounds {
+		manager.SetMode(modes[i%2])
+	}
+	for _, mode := range <-done {
+		if !slices.Contains(modes, mode) {
+			t.Fatalf("read the mode %q, which is neither Rule nor Global", mode)
+		}
+	}
+}
