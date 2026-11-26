@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parallux · 第二轮图标提案</title>
+<style>
+  * { box-sizing:border-box }
+  :root { color-scheme:light; font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","PingFang SC",sans-serif; color:#262421; background:#f4f2ed; -webkit-font-smoothing:antialiased }
+  body { margin:0 }
+  main { max-width:1256px; margin:auto; padding:0 32px 40px }
+  .board { padding:30px 0 24px }
+  header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-bottom:20px; border-bottom:1px solid #c9c5bd }
+  h1,h2,h3,p { margin:0 }
+  h1 { display:flex; align-items:baseline; flex-wrap:wrap; gap:15px; font-size:clamp(32px,4vw,48px); line-height:1; font-weight:650; letter-spacing:-.04em }
+  h1 small { color:#5d5950; font-size:15px; font-weight:500; letter-spacing:0 }
+  fieldset { display:flex; border:1px solid #c7c2b8; border-radius:20px; padding:3px; margin:0; white-space:nowrap }
+  .sr { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap }
+  .choice { cursor:pointer; padding:5px 12px; border-radius:16px; line-height:1.15; font-size:12px; color:#5d5952 }
+  input:checked + .choice { background:#34312e; color:white }
+  input:focus-visible + .choice { outline:2px solid #af371f; outline-offset:2px }
+  .options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; margin-top:11px }
+  article { min-width:0; padding:0 25px }
+  article:first-child { padding-left:0 }
+  article:last-child { padding-right:0 }
+  article + article { border-left:1px solid #dcd8d0 }
+  .art { display:flex; justify-content:center; align-items:center; height:clamp(195px,23vw,258px) }
+  .hero { width:min(78%,236px); aspect-ratio:1; overflow:visible }
+  .tile { fill:url(#porcelain); stroke:#fff; stroke-width:.55; filter:url(#base-shadow) }
+  .material { filter:url(#edge) }
+  .outer-stroke { stroke:var(--front,url(#front)) } .inner-stroke { stroke:var(--back,url(#back)) }
+  .front-fill { fill:var(--front,url(#front)) } .back-fill { fill:var(--back,url(#back)) }
+  main:has(#ink:checked) .app { --front:#25241f; --back:#25241f }
+  main:has(#ink:checked) .app .tile { opacity:0 }
+  main:has(#ink:checked) .app .material { filter:none }
+  .title { display:flex; align-items:baseline; gap:10px; margin:6px 0 8px }
+  .letter { font-size:17px; font-weight:670; color:#a73928; letter-spacing:.01em }
+  h2 { font-size:25px; font-weight:640; letter-spacing:-.045em; line-height:1.15 }
+  .caption { font-size:13.5px; line-height:1.65; color:#5a564e; min-height:44px }
+  .scale-row { display:flex; align-items:center; gap:9px; height:52px; color:#656158; margin-top:4px }
+  .scale-row small,.menu-note { font-size:11px; letter-spacing:.02em }
+  .scale-row small { margin-right:5px }
+  .scale-row .app { flex:none }
+  .examples { border-top:1px solid #d1cdc4; margin-top:8px; padding-top:14px }
+  .menu-note { color:#625e57; margin-bottom:13px }
+  .state-row { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); align-items:center; justify-items:center }
+  .labels { margin-bottom:7px; font-size:11px; font-weight:520; color:#514e47; white-space:nowrap }
+  .bar { height:34px; border-radius:8px }
+  .light { background:#e7e4de; color:#242423 }
+  .dark { background:#363635; color:#f7f6f3; margin-top:4px }
+  .bar svg { display:block; width:18px; height:18px }
+  .extra { margin-top:9px; border-top:1px solid #c9c5bd }
+  details { padding:13px 0; border-bottom:1px solid #d5d1ca }
+  summary { cursor:pointer; width:fit-content; font-size:14px; font-weight:590 }
+  .notes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:24px; margin:17px 0 4px }
+  .notes p,.sources { font-size:13px; color:#555148; line-height:1.75 }
+  .notes b { color:#2c2924; display:block; margin-bottom:3px }
+  .sources { margin:12px 0 0; padding-left:20px }
+  a { color:#863427; text-underline-offset:3px }
+  .sprite { width:0; height:0; position:absolute; overflow:hidden }
+  @media (max-width:790px) {
+    main { padding:0 18px 32px } article { padding:0 12px }
+    .caption { min-height:49px } h2 { font-size:22px }
+    .labels { font-size:10px }
+  }
+  @media (max-width:620px) {
+    main { max-width:450px; padding:0 20px 32px }
+    header { align-items:flex-start } h1 { gap:7px }
+    h1 small { width:100%; font-size:13px } fieldset { margin-top:3px }
+    .options,.notes { grid-template-columns:1fr }
+    article,article:first-child,article:last-child { border-left:0; padding:0 0 20px }
+    article + article { border-top:1px solid #c9c5bd }
+    .art { height:212px } .hero { width:195px }
+    .caption { min-height:0 } .scale-row { margin:2px 0 }
+    .labels { font-size:12px }
+  }
+</style>
+</head>
+<body>
+<svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <defs>
+    <!-- The two paints and the enclosure are shared so colour cannot favour a silhouette. -->
+    <linearGradient id="front" gradientUnits="userSpaceOnUse" x1="33" y1="15" x2="65" y2="82">
+      <stop stop-color="#ff6248"/><stop offset=".42" stop-color="#f24932"/><stop offset="1" stop-color="#d83727"/>
+    </linearGradient>
+    <linearGradient id="back" gradientUnits="userSpaceOnUse" x1="28" y1="22" x2="70" y2="76">
+      <stop stop-color="#d9432f"/><stop offset=".72" stop-color="#b33129"/><stop offset="1" stop-color="#a32b25"/>
+    </linearGradient>
+    <linearGradient id="porcelain" x1=".2" y1="0" x2=".8" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#fffefa"/><stop offset=".58" stop-color="#fcf9f2"/><stop offset="1" stop-color="#eee9df"/>
+    </linearGradient>
+    <filter id="base-shadow" x="-.25" y="-.25" width="1.5" height="1.65" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="1.8" stdDeviation="1.9" flood-color="#322614" flood-opacity=".17"/>
+    </filter>
+    <filter id="edge" x="-.18" y="-.18" width="1.36" height="1.4" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy=".55" stdDeviation=".43" flood-color="#7e2a18" flood-opacity=".20"/>
+    </filter>
+    <path id="enclosure" d="M31 5H69C78.6 5 84 5.9 89 11C94.1 16 95 21.4 95 31V69C95 78.6 94.1 84 89 89C84 94.1 78.6 95 69 95H31C21.4 95 16 94.1 11 89C5.9 84 5 78.6 5 69V31C5 21.4 5.9 16 11 11C16 5.9 21.4 5 31 5Z"/>
+    <!-- A · Two nested return paths with square-cut terminals. -->
+    <g id="rails" fill="none" stroke-width="8.2" stroke-linejoin="round">
+      <path class="outer-stroke" d="M25 79V24H52.5C66.6 24 76.5 32.0 76.5 44.4S66.6 65 52.5 65H48"/>
+      <path class="inner-stroke" d="M38.8 75V37.6H52.4C58.9 37.6 62.8 39.9 62.8 44.5S58.9 51.5 52.4 51.5H48"/>
+    </g>
+    <!-- B · The same diagonal crosses the stem, the counter and the top edge. -->
+    <path id="p-body" fill-rule="evenodd" d="M21 21Q21 19 23 19H54C70.3 19 80.4 28.4 80.4 42.4S70 65.8 54 65.8H40V76.8L23.4 83.1Q21 84 21 81.5ZM40 34.2V50.8H53.3C60.2 50.8 64.3 47.6 64.3 42.5S60.2 34.2 53.3 34.2Z"/>
+    <clipPath id="cut-north"><path d="M0 0H84L0 84Z"/></clipPath>
+    <clipPath id="cut-south"><path d="M100 0V100H0V93L93 0Z"/></clipPath>
+    <g id="cut">
+      <use href="#p-body" class="back-fill" clip-path="url(#cut-south)"/>
+      <use href="#p-body" class="front-fill" clip-path="url(#cut-north)"/>
+    </g>
+    <!-- C · Congruent half-discs slide along their shared diameter. -->
+    <path id="half" d="M-24.8 0Q-26.3 0 -26.15 -1.7C-25.2 -15.8 -13.5 -26.3 0 -26.3S25.2 -15.8 26.15 -1.7Q26.3 0 24.8 0Z"/>
+    <g id="phase" transform="rotate(-35 50 50)">
+      <g transform="translate(43.3 46.6)"><use href="#half" class="front-fill"/></g>
+      <g transform="translate(56.7 53.4) rotate(180)"><use href="#half" class="back-fill"/></g>
+    </g>
+
+    <!-- Menu bar drawings have their own 18-unit grid and a single inherited ink. -->
+    <g id="alarm"><path fill="currentColor" d="M15.25 2.65c.8 0 1.45.64 1.4 1.49l-.38 6.02c-.03.69-.44 1.12-1.02 1.12s-.99-.43-1.02-1.12l-.38-6.02c-.05-.85.6-1.49 1.4-1.49Z"/><circle fill="currentColor" cx="15.25" cy="14.1" r="1.37"/></g>
+    <path id="rail-outer" d="M2.6 15.9V2.5H9.4C13.2 2.5 15.7 4.4 15.7 7.4S13.2 12.4 9.6 12.4H8.3"/>
+    <path id="rail-inner" d="M6.15 15.2V6H9.5C11.2 6 12.2 6.5 12.2 7.5S11.1 8.9 9.6 8.9H8.4"/>
+    <g id="rails-disconnected" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round">
+      <path d="M2.9 15.6V3H7.2M12.8 3.4C14.8 4.1 15.7 5.7 15.7 7.6c0 2.7-2 4.5-5.5 4.5H9"/>
+    </g>
+    <g id="rails-balance" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"><use href="#rail-outer"/><use href="#rail-inner"/></g>
+    <path id="united-p" fill="currentColor" fill-rule="evenodd" d="M2.3 2.2H9.7c3.9 0 6.5 2.1 6.5 5.3s-2.6 5.3-6.5 5.3H6v3.4H2.3ZM6 5.4v4.2h3.5c1.9 0 3-.8 3-2.1s-1.1-2.1-3-2.1Z"/>
+    <g id="rails-bond"><use href="#united-p"/></g>
+    <g id="rails-failover" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linejoin="round"><use href="#rail-outer"/><path d="M6.3 16v-4.1"/></g>
+    <g id="rails-degraded"><path fill="none" stroke="currentColor" stroke-width="2.15" stroke-linejoin="round" d="M2.5 15.8V3h4.8c2 0 3.6.8 4.3 2.2M10.8 9.2c-.6 1.4-1.9 2.3-4.6 2.3H5.1"/><use href="#alarm"/></g>
+
+    <path id="cut-cap" d="M2 2h8.4c1.2 0 2.2.15 3 .45l-3.3 3.3H6.15v3.95L2 13.85Z"/>
+    <path id="cut-foot" d="m2 15.6 4.15-4.15v2l3.1-3.1h.7c1.65 0 2.65-.77 2.65-2.12 0-.34-.06-.67-.2-.94l2.8-2.8c.91.98 1.4 2.22 1.4 3.7 0 3.4-2.52 5.57-6.38 5.57H6.15v1.51L2 17Z"/>
+    <g id="cut-disconnected" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="square" stroke-linejoin="round">
+      <path d="M2.6 9.9V2.7h7.5M14.2 6.1c2.25 2.7.7 6.25-3.2 6.25H7.7l-4.2 3.7"/>
+    </g>
+    <g id="cut-balance" fill="currentColor"><use href="#cut-cap"/><use href="#cut-foot"/></g>
+    <g id="cut-bond"><path fill="currentColor" fill-rule="evenodd" d="M2.05 2H9.8c4.2 0 6.8 2.25 6.8 5.6s-2.6 5.6-6.8 5.6H6.1v2.1l-4.05 1.74ZM6.1 5.55v4.1h3.55c1.88 0 2.94-.75 2.94-2.05s-1.06-2.05-2.94-2.05Z"/></g>
+    <g id="cut-failover" fill="currentColor"><use href="#cut-cap"/><path d="m6.5 15.5 6-6 1.55 1.55-6 6Z"/></g>
+    <g id="cut-degraded" fill="currentColor"><path d="M1.7 2.1h7.4c1.3 0 2.3.3 3 .7l-2.75 2.75H5.1v4.25l-3.4 3.4Zm0 13.7 3.4-3.4v.7l2.5-2.5h2.8l-.9 2.5H5.1v2.3L1.7 17Z"/><use href="#alarm"/></g>
+
+    <path id="cap18" d="M-6.5 0a6.5 6.5 0 0 1 13 0Z"/>
+    <g id="phase-disconnected" transform="rotate(-35 9 9)" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">
+      <path d="M1.3 7.5a5.9 5.9 0 0 1 11.8 0Z"/><path d="M5 10.8a5.9 5.9 0 0 0 11.8 0Z"/>
+    </g>
+    <g id="phase-balance" transform="rotate(-35 9 9)" fill="currentColor"><use href="#cap18" transform="translate(7.45 7.95)"/><use href="#cap18" transform="translate(10.6 10.15) rotate(180)"/></g>
+    <g id="phase-bond" transform="rotate(-35 9 9)" fill="currentColor"><path d="M2 8.3a7 7 0 0 1 14 0h-4.8v1.4H16a7 7 0 0 1-14 0h4.8V8.3Z"/></g>
+    <g id="phase-failover" transform="rotate(-35 9 9)" fill="currentColor"><use href="#cap18" transform="translate(7.5 8)"/><rect x="5.3" y="10.7" width="11" height="2.2" rx="1.1"/></g>
+    <g id="phase-degraded" fill="currentColor"><path d="M1 10.5C.9 5.1 5.6 2.1 10.9 3.3L1 10.5Zm1.2 2.2 9-6.4c.7 4.4-2.9 8-6.5 7.9Z"/><use href="#alarm"/></g>
+  </defs>
+</svg>
+<main aria-labelledby="title">
+  <section id="board" class="board">
+    <header>
+      <h1 id="title">Parallux <small>第二轮图标提案</small></h1>
+      <fieldset><legend class="sr">应用图标外观</legend>
+        <input class="sr" type="radio" name="appearance" id="finish" checked><label class="choice" for="finish">效果图</label>
+        <input class="sr" type="radio" name="appearance" id="ink"><label class="choice" for="ink">单色轮廓</label>
+      </fieldset>
+    </header>
+    <div class="options" id="options"></div>
+  </section>
+  <section class="extra" aria-label="设计说明">
+    <details><summary>图形怎么拆进 Icon Composer</summary>
+      <div class="notes">
+        <p><b>A · 双轨 P</b>暖白底上放外轨和内轨两片。两道弯的间距直接画进轮廓，各自的末端保留平切口。</p>
+        <p><b>B · 光隙 P</b>以字母内孔为中心沿同一斜线切开。上、下两片分别导入，穿过字干和字肩的空隙由底色露出。</p>
+        <p><b>C · 错相</b>复制同一枚半圆，转过半圈，沿直径错开。两片各自成层，可单独调节前后明暗。</p>
+      </div>
+    </details>
+    <details><summary>菜单栏五态怎么看</summary>
+      <div class="notes">
+        <p><b>A · 看轨迹</b>未连接时上沿断开。分流时两条轨迹各走各的，叠加时合成一枚粗 P。主备只保留短备用轨，线路异常时右侧出现叹号。</p>
+        <p><b>B · 看斜缝</b>未连接只留下两个断开的轮廓。分流时两块实色之间留一道斜缝，叠加时接成完整的 P。主备缩短备用片，线路异常时右侧出现叹号。</p>
+        <p><b>C · 看半圆</b>未连接是两个空心半圆。分流时两片错开，叠加时对齐并在中央相连。主备用一条短线表示待命的一半，线路异常时右侧出现叹号。</p>
+      </div>
+    </details>
+    <details><summary>设计参考</summary>
+      <ul class="sources">
+        <li>Apple News 的 N 在色块的斜切边之间成立；快捷指令用两个相似形状的错位交叠表达层次。<a href="https://support.apple.com/en-za/guide/mac-help/mchl110b00b7/mac">Apple · Mac 内置应用图标</a></li>
+        <li>Apple 用播客示范如何安排人物、圆环与留白，也以照片的花瓣说明怎样控制重叠面积。<a href="https://developer.apple.com/videos/play/wwdc2025/220/">Apple · WWDC25 图标设计演示</a></li>
+        <li>Michael Flarup 的 Finder 概念图让一条蓝白交界同时画出侧脸，阴影只落在那条分界附近。<a href="https://x.com/flarup/status/1932798949749936200">Michael Flarup 在 X 的原帖</a></li>
+        <li>Parakeet 展示了 SwitchGlass、Front and Center 的明暗版本，并说明如何调节错位与边缘对比，保住小尺寸轮廓。<a href="https://parakeet.co/blog/app-icons-for-atp/">Parakeet · App Icons for ATP</a></li>
+      </ul>
+    </details>
+  </section>
+</main>
+<script>
+  const concepts = [
+    { id:'rails', letter:'A', title:'双轨 P', caption:'两条轨迹绕过同一个弯。顺着它们往下看，P 的竖笔也是两条进线。' },
+    { id:'cut', letter:'B', title:'光隙 P', caption:'一条斜缝穿过 P 的内孔，两块朱红之间露出一条完整的白色线路。' },
+    { id:'phase', letter:'C', title:'错相', caption:'两枚相同的半圆沿直径滑开。目光会补全那个圆，也会察觉两片的错位。' }
+  ];
+  const states = [
+    ['disconnected','未连接'], ['balance','分流'], ['bond','叠加'], ['failover','主备'], ['degraded','线路异常']
+  ];
+  function appIcon(id, className, size, accessibleName) {
+    return `<svg class="app ${className}" width="${size}" height="${size}" viewBox="0 0 100 100" role="img" aria-label="${accessibleName}"><use class="tile" href="#enclosure"/><g class="material"><use href="#${id}"/></g></svg>`;
+  }
+  function menuRow(id, theme) {
+    const icons = states.map(([state, label]) =>
+      `<svg viewBox="0 0 18 18" role="img" aria-label="${label}"><use href="#${id}-${state}"/></svg>`
+    ).join('');
+    return `<div class="state-row bar ${theme}" role="group" aria-label="${theme === 'light' ? '浅色' : '深色'}菜单栏">${icons}</div>`;
+  }
+  const labels = states.map(([,label]) => `<span>${label}</span>`).join('');
+  document.querySelector('#options').innerHTML = concepts.map(({id, letter, title, caption}) => `
+    <article aria-labelledby="title-${id}">
+      <div class="art">${appIcon(id,'hero',236,title+' 效果图')}</div>
+      <div class="title"><span class="letter">${letter}</span><h2 id="title-${id}">${title}</h2></div>
+      <p class="caption">${caption}</p>
+      <div class="scale-row"><small>小尺寸</small>${appIcon(id,'mini',40,title+' 40 pt')}<small>40</small>${appIcon(id,'mini',24,title+' 24 pt')}<small>24 pt</small></div>
+      <div class="examples"><p class="menu-note">菜单栏 · 18 pt</p><div class="state-row labels" aria-hidden="true">${labels}</div>
+        ${menuRow(id,'light')}${menuRow(id,'dark')}
+      </div>
+    </article>`).join('');
+</script>
+</body>
+</html>

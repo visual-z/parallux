@@ -1,0 +1,64 @@
+{
+  "dns": {
+    "servers": [
+      {
+        "tag": "local",
+        "type": "local"
+      }
+    ]
+  },
+  "inbounds": [
+    {
+      "address": [
+        "172.19.0.1/30",
+        "fdfe:dcba:9876::1/126"
+      ],
+      "auto_route": true,
+      "strict_route": true,
+      "tag": "tun-in",
+      "type": "tun"
+    }
+  ],
+  "log": {
+    "level": "debug"
+  },
+  "outbounds": [
+    {
+      "bind_interface": "en0",
+      "tag": "probe-en0",
+      "type": "direct"
+    },
+    {
+      "bind_interface": "en7",
+      "tag": "probe-en7",
+      "type": "direct"
+    },
+    {
+      "interval": "10m",
+      "outbounds": [
+        "probe-en0",
+        "probe-en7"
+      ],
+      "tag": "probe",
+      "type": "urltest",
+      "url": "http://cp.cloudflare.com/generate_204"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "final": "direct",
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "action": "hijack-dns",
+        "protocol": "dns"
+      }
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template for the helper's launchd plist. Not used verbatim: the app target's
+  "Embed helper launchd plist" build phase expands the $(…) variables with the
+  build's settings and writes it to Contents/Library/LaunchDaemons/, where
+  SMAppService.daemon(plistName:) looks for it. Keys follow SFM's
+  HelperService/LaunchDaemons plist (GPLv3).
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>$(PARALLUX_HELPER_LABEL)</string>
+	<key>BundleProgram</key>
+	<string>Contents/Library/HelperTools/$(PARALLUX_HELPER_LABEL)</string>
+	<key>MachServices</key>
+	<dict>
+		<key>$(PARALLUX_HELPER_MACH_SERVICE)</key>
+		<true/>
+	</dict>
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>$(BUNDLE_ID)</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+</dict>
+</plist>
