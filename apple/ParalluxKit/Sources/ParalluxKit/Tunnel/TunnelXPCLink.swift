@@ -236,6 +236,13 @@ public final class NSXPCLinkTransport: TunnelXPCTransport, @unchecked Sendable {
         }
     }
 
+    /// Freeze-point stub (refactor-xpc-polls-suspend): an async face over the
+    /// blocking call, so the card's tests measure today's behaviour.
+    public func explainRoute(_ target: String, timeout: TimeInterval) async throws -> String {
+        let blocking: (String, TimeInterval) throws -> String = explainRoute
+        return try blocking(target, timeout)
+    }
+
     public func probeLinks(timeout: TimeInterval) throws -> [LinkProbeResult] {
         let data: Data = try request(timeout: timeout) { proxy, finish in
             proxy.probeLinks { data, error in

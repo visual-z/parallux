@@ -24,6 +24,7 @@ private final class SocketServer: NSObject, NSXPCListenerDelegate, TunnelXPCProt
     }
 
     func explainRoute(_ target: String, reply: @escaping (String) -> Void) {
+        guard replies else { return }
         reply(#"{"target":"\#(target)","rule_index":2,"outbound":"proxy"}"#)
     }
 
@@ -171,6 +172,55 @@ private final class Counter: @unchecked Sendable {
             }
         }
         #expect(answered.value == threads * callsPerThread)
+    }
+
+    /// A silent extension must cost each caller one timeout, all at once: a
+    /// call that blocks a thread of the cooperative pool while it waits makes
+    /// the rest queue behind it, one pool-width at a time
+    /// (refactor-xpc-polls-suspend).
+    @Test func aSilentExtensionTimesOutEveryCallTogetherInsteadOfInWaves() async {
+        let server = SocketServer(served: nil, replies: false)
+        let (listener, connection) = connect(to: server)
+        let transport = NSXPCLinkTransport(connection: connection)
+        defer { transport.invalidate(); listener.invalidate() }
+        // Four times the pool's width: blocking calls would take four waves.
+        let calls = 4 * ProcessInfo.processInfo.activeProcessorCount
+        let started = ContinuousClock.now
+
+        let timedOut = await withTaskGroup(of: Bool.self) { group in
+            for _ in 0..<calls {
+                group.addTask {
+                    do {
+                        _ = try await transport.explainRoute("youtube.com", timeout: 0.25)
+                        return false
+                    } catch TunnelXPC.DialError.timedOut {
+                        return true
+                    } catch {
+                        return false
+                    }
+                }
+            }
+            return await group.reduce(0) { $0 + ($1 ? 1 : 0) }
+        }
+
+        #expect(timedOut == calls)
+        #expect(ContinuousClock.now - started < .milliseconds(750))
+    }
+
+    @Test func cancellingACallReturnsAtOnce() async {
+        let server = SocketServer(served: nil, replies: false)
+        let (listener, connection) = connect(to: server)
+        let transport = NSXPCLinkTransport(connection: connection)
+        defer { transport.invalidate(); listener.invalidate() }
+        let started = ContinuousClock.now
+
+        let call = Task { try await transport.explainRoute("youtube.com", timeout: 5) }
+        try? await Task.sleep(for: .milliseconds(50))
+        call.cancel()
+        let result = await call.result
+
+        #expect(ContinuousClock.now - started < .seconds(1))
+        #expect(throws: CancellationError.self) { try result.get() }
     }
 
     @Test func connectingToAMissingSocketReportsTheCall() {
